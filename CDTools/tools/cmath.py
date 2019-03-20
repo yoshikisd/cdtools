@@ -168,7 +168,7 @@ def cdiv(a,b):
         torch.Tensor : A tensor storing the elementwise complex quotient
 
     """
-    return cmult(a, cconj(b)) / cabssq(b)
+    return cmult(a, cconj(b)) / t.unsqueeze(cabssq(b),-1)
 
 
     

@@ -16,7 +16,7 @@ setuptools.setup(
         "numpy",
         "scipy",
         "matplotlib",
-        "pytorch",
+        #"pytorch",
         "h5py"],
     packages=setuptools.find_packages(),
     classifiers=[
