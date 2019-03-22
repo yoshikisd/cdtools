@@ -15,7 +15,7 @@ __all__ = ['amplitude_mse', 'intensity_mse', 'poisson_ml']
 def amplitude_mse(intensities, sim_intensities, mask=None):
     """ Returns the mean squared error of a simulated dataset's amplitudes
 
-    Calculates the summed mean squared error between a given set of 
+    Calculates the mean squared error between a given set of 
     measured diffraction intensities and a simulated set.
 
     This function calculates the mean squared error between their
@@ -45,10 +45,11 @@ def amplitude_mse(intensities, sim_intensities, mask=None):
 
     if mask is None:
         return t.sum((t.sqrt(sim_intensities) -
-                      t.sqrt(intensities))**2)
+                      t.sqrt(intensities))**2) / intensities.view(-1).shape[0]
     else:
+        masked_intensities = intensities.masked_select(mask)
         return t.sum((t.sqrt(sim_intensities.masked_select(mask)) -
-                      t.sqrt(intensities.masked_select(mask)))**2)
+                      t.sqrt(masked_intensities))**2) / masked_intensities.shape[0]
 
 
     
@@ -74,10 +75,13 @@ def intensity_mse(intensities, sim_intensities, mask=None):
 
     """
     if mask is None:
-        return t.sum((sim_intensities - intensities)**2)
+        return t.sum((sim_intensities - intensities)**2) \
+            / intensities.view(-1).shape[0]
     else:
+        masked_intensities = intensities.masked_select(mask)
         return t.sum((sim_intensities.masked_select(mask) -
-                      intensities.masked_select(mask))**2)
+                      masked_intensities)**2) \
+                      / masked_intensities.shape[0]
 
 
     
@@ -105,8 +109,10 @@ def poisson_ml(intensities, sim_intensities, mask=None):
     """
     if mask is None:
         t.sum(simulated_intensities -
-              intensities * t.log(simulated_intensities))
+              intensities * t.log(simulated_intensities)) \
+                          / intensities.view(-1).shape[0]
     else:
-        return t.sum(simulated_intensities.masked_select(mask) -
-                     intensities.masked_select(mask) *
-                     t.log(simulated_intensities.masked_select(mask)))
+        masked_intensities = intensities.masked_select(mask)
+        masked_sims = simulated_intensities.masked_select(mask)
+        return t.sum(masked_sims - masked_intensities *
+                     t.log(masked_sims)) / masked_intensities.shape[0]
