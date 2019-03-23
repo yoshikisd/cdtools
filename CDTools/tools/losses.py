@@ -9,7 +9,7 @@ from __future__ import division, print_function, absolute_import
 import torch as t
 
 
-__all__ = ['amplitude_mse', 'intensity_mse', 'poisson_ml']
+__all__ = ['amplitude_mse', 'intensity_mse', 'poisson_nll']
 
 
 def amplitude_mse(intensities, sim_intensities, mask=None):
@@ -85,14 +85,18 @@ def intensity_mse(intensities, sim_intensities, mask=None):
 
 
     
-def poisson_ml(intensities, sim_intensities, mask=None):
-    """ Returns the Poisson maximum likelihood metric for a simulated dataset's intensities
+def poisson_nll(intensities, sim_intensities, mask=None):
+    """ Returns the Poisson negative log likelihood for a simulated dataset's intensities
 
     Calculates the overall Poisson maximum likelihood metric using
     diffraction intensities - the measured set of detector intensities -
     and a simulated set of intensities. This loss would be appropriate
     for detectors in a single-photon counting mode, with their output
     scaled to number of photons
+
+    Note that this calculation ignores the log(intensities!) term in the
+    full expression for Poisson negative log likelihood. This term doesn't
+    change the calculated gradients so isn't worth taking the time to compute
 
     It can accept intensity and simulated intensity tensors of any shape
     as long as their shapes match, and the provided mask array can be
@@ -108,11 +112,12 @@ def poisson_ml(intensities, sim_intensities, mask=None):
 
     """
     if mask is None:
-        t.sum(simulated_intensities -
-              intensities * t.log(simulated_intensities)) \
-                          / intensities.view(-1).shape[0]
+        return t.sum(sim_intensities -
+                     intensities * t.log(sim_intensities)) \
+                     / intensities.view(-1).shape[0]
+    
     else:
         masked_intensities = intensities.masked_select(mask)
-        masked_sims = simulated_intensities.masked_select(mask)
+        masked_sims = sim_intensities.masked_select(mask)
         return t.sum(masked_sims - masked_intensities *
                      t.log(masked_sims)) / masked_intensities.shape[0]
