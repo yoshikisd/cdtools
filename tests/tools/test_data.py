@@ -282,31 +282,11 @@ def ptycho_cxi_3():
     
     return f, expected
 
-
-@pytest.fixture(scope='module')
-def real_ptycho_CSX(datadir):
-    """Loads a real ptychography file from CSX @ NSLS-II along with a
-    dictionary describing what is expected to be loaded from it.
-    """
-    #file_obj = h5py.File(datadir/'example_CSX_Bragg.cxi','r')
-    #expected = {}
-    #return file_obj, expected
-    pass
-
-
-@pytest.fixture(scope='module')
-def real_ptycho_HXN(datadir):
-    """Loads a real ptychography file from HXN @ NSLS-II along with a
-    dictionary describing what is expected to be loaded from it.
-    """
-    pass
-
-@pytest.fixture(scope='module')
-def real_ptycho_COSMIC(datadir):
-    """Loads a real ptychography file from COSMIC @ ALS along with a
-    dictionary describing what is expected to be loaded from it.
-    """
-    pass
+#
+# As specific issues start to crop up with loading CXI files from different
+# beamlines, put a fixture here that replicates the issue so that we can
+# ensure compatibility with many beamlines
+#
 
 
 @pytest.fixture(scope='module')
