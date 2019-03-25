@@ -7,6 +7,7 @@ import h5py
 import pytest
 import os
 import datetime
+import numbers
 from pathlib import Path
 
 
@@ -54,10 +55,10 @@ def ptycho_cxi_1():
     e1f = f.create_group('entry_1')
     expected['entry metadata'] = {}
     e1e = expected['entry metadata']
-    e1e['start_time'] = datetime.datetime.now().isoformat()
-    e1f['start_time'] = np.string_(e1e['start_time'])
-    e1e['end_time'] = datetime.datetime.now().isoformat()
-    e1f['end_time'] = np.string_(e1e['end_time'])
+    e1e['start_time'] = datetime.datetime.now()
+    e1f['start_time'] = np.string_(e1e['start_time'].isoformat())
+    e1e['end_time'] = datetime.datetime.now()
+    e1f['end_time'] = np.string_(e1e['end_time'].isoformat())
     e1e['experiment_identifier'] = 'Fake Experiment 1'
     e1f['experiment_identifier'] = np.string_(e1e['experiment_identifier'])
     e1e['experiment_description'] = 'A fully defined ptychography experiment to test the data loading'
@@ -134,7 +135,9 @@ def ptycho_cxi_1():
     d1f['translation'] = h5py.SoftLink('/entry_1/sample_1/geometry_1/translation')
     expected['translations'] = -translations.transpose()
     
-    return f, expected
+    yield f, expected
+
+    f.close()
 
 
 @pytest.fixture(scope='module')
@@ -208,7 +211,9 @@ def ptycho_cxi_2():
     g1f.create_dataset('translation',data=translations)
     expected['translations'] = -translations.transpose()
     
-    return f, expected
+    yield f, expected
+
+    f.close()
 
 
 @pytest.fixture(scope='module')
@@ -236,10 +241,10 @@ def ptycho_cxi_3():
     e1f = f.create_group('entry_1')
     expected['entry metadata'] = {}
     e1e = expected['entry metadata']
-    e1e['start_time'] = datetime.datetime.now().isoformat()
-    e1f['start_time'] = np.string_(e1e['start_time'])
-    e1e['end_time'] = datetime.datetime.now().isoformat()
-    e1f['end_time'] = np.string_(e1e['end_time'])
+    e1e['start_time'] = datetime.datetime.now()
+    e1f['start_time'] = np.string_(e1e['start_time'].isoformat())
+    e1e['end_time'] = datetime.datetime.now()
+    e1f['end_time'] = np.string_(e1e['end_time'].isoformat())
 
     # Set up the sample info
     expected['sample info'] = None
@@ -280,9 +285,11 @@ def ptycho_cxi_3():
     data1f.create_dataset('translation',data=translations)
     expected['translations'] = -translations.transpose()
     
-    return f, expected
+    yield f, expected
 
-#
+    f.close()
+
+
 # As specific issues start to crop up with loading CXI files from different
 # beamlines, put a fixture here that replicates the issue so that we can
 # ensure compatibility with many beamlines
@@ -373,3 +380,156 @@ def test_get_ptycho_translations(test_ptycho_cxis):
 #
 
 
+def test_create_cxi(tmp_path):
+    data.create_cxi(tmp_path / 'test_create.cxi')
+    with h5py.File(tmp_path / 'test_create.cxi') as f:
+        assert f['cxi_version'][()] == 160
+        assert 'entry_1' in f
+
+        
+def test_add_entry_info(tmp_path):
+    entry_info = {'experiment_identifier':'test of cxi file writing tools',
+                  'title': 'my cool experiment',
+                  'start_time': datetime.datetime.now(),
+                  'end_time': datetime.datetime.now()}
+
+    with data.create_cxi(tmp_path / 'test_add_entry_info.cxi') as f:
+        data.add_entry_info(f, entry_info)
+
+    with h5py.File(tmp_path / 'test_add_entry_info.cxi') as f:
+        read_entry_info = data.get_entry_info(f)
+
+    for key in entry_info:
+        if isinstance(entry_info[key], np.ndarray):
+            assert np.allclose(entry_info[key], read_entry_info[key])
+        else:
+            assert entry_info[key] == read_entry_info[key]
+
+
+def test_add_sample_info(tmp_path):
+    sample_info = {'name':'A nice fake sample',
+                   'concentration': 10,
+                   'mass': 5.3,
+                   'temperature': 76,
+                   'description': 'A very nice sample',
+                   'unit_cell': np.array([1,1,1,90.,90.,90.])}
+
+    with data.create_cxi(tmp_path / 'test_add_sample_info.cxi') as f:
+        data.add_sample_info(f, sample_info)
+
+    with h5py.File(tmp_path / 'test_add_sample_info.cxi') as f:
+        read_sample_info = data.get_sample_info(f)    
+
+    for key in sample_info:
+        if isinstance(sample_info[key], np.ndarray):
+            assert np.allclose(sample_info[key], read_sample_info[key])
+        elif isinstance(sample_info[key], numbers.Number):
+            assert np.isclose(sample_info[key], read_sample_info[key])
+        else:
+            assert sample_info[key] == read_sample_info[key]
+                      
+
+def test_add_source(tmp_path):
+    wavelength = 1e-9
+    energy = 1.9864459e-25 / wavelength
+
+    with data.create_cxi(tmp_path / 'test_add_source.cxi') as f:
+        data.add_source(f, wavelength)
+
+    with h5py.File(tmp_path / 'test_add_source.cxi') as f:
+        # Check this directly since we want to make sure it saved
+        # the wavelength and energy
+        read_wavelength = f['entry_1/instrument_1/source_1/wavelength'][()]
+        read_energy = f['entry_1/instrument_1/source_1/energy'][()]
+
+    assert np.isclose( wavelength, read_wavelength)
+    assert np.isclose( energy, read_energy)
+
+    
+def test_add_detector(tmp_path):
+    distance = 0.34
+    basis = np.array([[0,-30e-6,0],
+                      [-20e-6,0,0]]).astype(np.float32).transpose()
+    corner = np.array((2550e-6,3825e-6,0.3)).astype(np.float32)
+    
+    with data.create_cxi(tmp_path / 'test_add_detector.cxi') as f:
+        data.add_detector(f, distance, basis, corner=corner)
+
+    with h5py.File(tmp_path / 'test_add_detector.cxi') as f:
+        # Check this directly since we want to make sure it saved
+        # the pixel sizes
+        d1 = f['entry_1/instrument_1/detector_1']
+        read_basis = np.array(d1['basis_vectors'])
+        read_x_pix = np.float32(d1['x_pixel_size'])
+        read_y_pix = np.float32(d1['y_pixel_size'])
+        read_distance = np.float32(d1['distance'])
+        read_corner = np.array(d1['corner_position'])
+
+    assert np.isclose(distance, read_distance)
+    assert np.allclose(basis, read_basis)
+    assert np.isclose(np.linalg.norm(basis[:,1]), read_x_pix)
+    assert np.isclose(np.linalg.norm(basis[:,0]), read_y_pix)
+    assert np.allclose(corner,read_corner)
+   
+
+def test_add_mask(tmp_path):
+    mask = (np.random.rand(350,600) > 0.1).astype(np.uint8)
+
+    with data.create_cxi(tmp_path / 'test_add_mask.cxi') as f:
+        data.add_mask(f, mask)
+
+    with h5py.File(tmp_path / 'test_add_mask.cxi') as f:
+        read_mask = data.get_mask(f)
+
+    assert np.all(mask == read_mask)
+    
+
+def test_add_data(tmp_path):
+    # First test from numpy, with axes
+    fake_data = np.random.rand(100,256,256)
+    axes = ['translation','y','x']
+
+    with data.create_cxi(tmp_path / 'test_add_data.cxi') as f:
+        data.add_data(f, fake_data, axes)
+
+    with h5py.File(tmp_path / 'test_add_data.cxi') as f:
+        # Check this directly since we want to make sure it saved
+        # it in all the places it should have
+        read_data_1 = np.array(f['entry_1/data_1/data'])
+        read_data_2 = np.array(f['entry_1/instrument_1/detector_1/data'])
+        read_axes = str(f['entry_1/instrument_1/detector_1/data'].attrs['axes'].decode())
+    
+
+    assert np.allclose(fake_data, read_data_1)
+    assert np.allclose(fake_data, read_data_2)
+    assert 'translation:y:x' == read_axes
+
+    # Then test from torch, without axes
+    fake_data = t.from_numpy(fake_data)
+    
+    with data.create_cxi(tmp_path / 'test_add_data_torch.cxi') as f:
+        data.add_data(f, fake_data)
+
+    with h5py.File(tmp_path / 'test_add_data_torch.cxi') as f:    
+        read_data, axes = data.get_data(f)
+
+    assert np.allclose(fake_data.numpy(),read_data)
+
+
+def test_add_ptycho_translations(tmp_path):
+    
+    translations = np.random.rand(3,100)
+
+    with data.create_cxi(tmp_path / 'test_add_ptycho_translations.cxi') as f:
+        data.add_ptycho_translations(f, translations)
+    
+    with h5py.File(tmp_path / 'test_add_ptycho_translations.cxi') as f:
+        # Check this directly since we want to make sure it saved
+        # it in all the places it should have
+        read_translations_1 = np.array(f['entry_1/data_1/translation'])
+        read_translations_2 = np.array(f['entry_1/instrument_1/detector_1/translation'])
+        read_translations_3 = np.array(f['entry_1/sample_1/geometry_1/translation'])
+
+    assert np.allclose(-translations.transpose(), read_translations_1)
+    assert np.allclose(-translations.transpose(), read_translations_2)
+    assert np.allclose(-translations.transpose(), read_translations_3)
