@@ -1,7 +1,6 @@
 from __future__ import division, print_function, absolute_import
 import h5py
 import numpy as np
-import math
 import os
 from PyQt5 import QtWidgets
 from matplotlib import pyplot as plt
