@@ -98,7 +98,7 @@ def cabs(a):
 
 
 def cphase(a):
-    """Returns the phase of a complex torch tensor
+    """Returns the complex conjugate of a complex torch tensor
 
     Pytorch uses tensors with a final dimension of 2 to represent
     complex numbers. This calculates the elementwise complex phase
@@ -112,8 +112,8 @@ def cphase(a):
 
     """
     return t.atan2(a[...,1],a[...,0])
-
-
+    
+    
 def cconj(a):
     """Returns the complex conjugate of a complex torch tensor
 
@@ -147,7 +147,7 @@ def cmult(a,b):
         torch.Tensor : A tensor storing the elementwise product
 
     """
-
+    
     real = a[...,0] * b[...,0] - a[...,1] * b[...,1]
     imag = a[...,0] * b[...,1] + a[...,1] * b[...,0]
     return t.stack((real,imag),dim=-1)
@@ -171,7 +171,7 @@ def cdiv(a,b):
     return cmult(a, cconj(b)) / t.unsqueeze(cabssq(b),-1)
 
 
-
+    
 #
 # Not entirely sure if these belong here, but heck with it.
 # We just need the ability to do fftshifts
@@ -180,23 +180,23 @@ def cdiv(a,b):
 
 def fftshift(array,dims=None):
     """Drop-in torch replacement for scipy.fftpack.fftshift
-
+    
     This maps a tensor, assumed to be the output of a fast Fourier
     transform, into a tensor whose zero-frequency element is at the
     center of the tensor instead of the start. It will by default shift
     every dimension in the tensor but the last (which is assumed to
     represent the complex number and be of dimension 2), but can shift
     any arbitrary set of dimensions.
-
+    
     Args:
         array (torch.Tensor) : An array of data to be fftshifted
         dims (iterable) : A list of all dimensions to shift
 
     Returns:
         torch.Tensor : fftshifted tensor
-
+    
     """
-
+    
     if dims is None:
         dims=list(range(array.dim()))[:-1]
     for dim in dims:
@@ -211,7 +211,7 @@ def fftshift(array,dims=None):
 
 def ifftshift(array,dims=None):
     """Drop-in torch replacement for scipy.fftpack.iftshift
-
+    
     This maps a tensor, assumed to be the shifted output of a fast
     Fourier transform, into a tensor whose zero-frequency element is
     back at the start of the tensor instead of the center. It is the
@@ -219,23 +219,25 @@ def ifftshift(array,dims=None):
     every dimension in the tensor but the last (which is assumed to
     represent the complex number and be of dimension 2), but can shift
     any arbitrary set of dimensions.
-
+    
     Args:
         array (torch.Tensor) : An array of data to be ifftshifted
         dims (iterable) : A list of all dimensions to shift
 
     Returns:
         torch.Tensor : ifftshifted tensor
-
+    
     """
-
+    
     if dims is None:
         dims=list(range(array.dim()))[:-1]
     for dim in dims:
         length = array.size()[dim]
         cut_to = length // 2
         cut_len = length - cut_to
-
+        
         array = t.cat((array.narrow(dim,cut_to,cut_len),
                        array.narrow(dim,0,cut_to)), dim)
     return array
+
+
