@@ -143,6 +143,10 @@ def get_sample_info(cxi_file):
     # TODO: I should add the sample geometry as a valid metadata that can
     # be copied over
     
+    # Check if the metadata is empty
+    if metadata == {}:
+        metadata = None
+    
     return metadata
 
 
@@ -315,12 +319,10 @@ def get_data(cxi_file):
 def get_ptycho_translations(cxi_file):
     """Gets an array of x,y,z translations, if such an array has been defined in the file
 
-    It applies two operations to the translations. First, it negates them,
-    because the CXI file format is designed to specify translations of the
-    samples and the CDTools code specifies translations of the optics.
-    Second, it transposes the array so that the first axis is translation
-    ID and the second axis is the (x,y,z) components of the translation
-
+    It negates the translations, because the CXI file format is designed
+    to specify translations of the samples and the CDTools code specifies
+    translations of the optics.
+    
     Args:
         cxi_file (h5py.File) : a file object to be read
     
@@ -338,7 +340,7 @@ def get_ptycho_translations(cxi_file):
     else:
         raise KeyError('Translations are not defined within cxi file')
 
-    translations = -np.array(cxi_file[pull_from]).astype(np.float32).transpose()
+    translations = -np.array(cxi_file[pull_from]).astype(np.float32)
     return translations
     
 
@@ -537,7 +539,7 @@ def add_ptycho_translations(cxi_file, translations):
     
     It will add the translations to the file, negating them to conform to
     the standard in cxi files that the translations refer to the object's
-    translation, and also transposing them to match the cxi file specification.
+    translation.
     
     It will generally store them in 3 places:
 
@@ -575,7 +577,7 @@ def add_ptycho_translations(cxi_file, translations):
 
     # accounting for the different definition between cxi files and
     # CDTools
-    translations = -translations.transpose()
+    translations = -translations
     
     g1.create_dataset('translation', data=translations)
     data1['translation'] = h5py.SoftLink('/entry_1/sample_1/geometry_1/translation')
