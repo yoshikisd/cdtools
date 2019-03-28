@@ -7,18 +7,23 @@ import torch as t
 from scipy.fftpack import fftshift, ifftshift
 
 def test_modulus():
-    # Create a complex array with modulus 12 and phase pi/4
-    np_result = np.sqrt(6) * (1 + 1j) * np.ones((10,10))
+    # Create a complex array with random modulus and known phase
+    np_result = np.sqrt(6) * (1 + 1j) * np.random.rand(10,10)
+    projection_intensity =  t.from_numpy(np.abs(np_result)**2).to(t.float32)
+    original_wavefront = cmath.complex_to_torch((1+1j) * np.random.rand(10,10)).to(t.float32)
     # Test without masks
-    assert np.allclose(cmath.torch_to_complex(projectors.modulus(t.ones((10,10,2)), 12*t.ones((10,10)))), np_result)
+    torch_result = projectors.modulus(original_wavefront,projection_intensity)
+    assert np.allclose(cmath.torch_to_complex(torch_result),np_result)
     
     # Test with mask
     mask = t.ones((10,10,2), dtype = t.uint8)
     mask[5]*=0
-    np_result[5] = 1+1j
-    print(mask)
-    print(cmath.torch_to_complex(projectors.modulus(t.ones((10,10,2)), 12*t.ones((10,10)), mask = mask)))
-    assert np.allclose(cmath.torch_to_complex(projectors.modulus(t.ones((10,10,2)), 12*t.ones((10,10)), mask = mask)), np_result)
+    np_result[5] = cmath.torch_to_complex(original_wavefront[5])
+    torch_result = projectors.modulus(original_wavefront,projection_intensity, mask=mask)
+    print(np_result[5])
+    print(cmath.torch_to_complex(torch_result)[5])
+    assert np.allclose(cmath.torch_to_complex(torch_result),np_result)
+
 
 
 def test_support():

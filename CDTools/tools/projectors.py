@@ -32,9 +32,9 @@ def modulus(wavefront, intensities, mask = None):
     projected = wavefront * (amplitudes / wavefront_mag)[...,None]
     # Replace amplitude of wavefront with measured amplitude
     if mask is not None:
-        selection = (mask == 0)
+        selection = mask == 0
         # Apply the mask to replace unmasked pixels in the original wavefront
-        projected[selection] = wavefront[selection]
+        projected = projected.masked_scatter(selection, wavefront.masked_select(selection))
 
     return projected
 
