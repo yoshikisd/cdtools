@@ -28,15 +28,19 @@ def modulus(wavefront, intensities, mask = None):
     amplitudes = intensities**.5
     # Normalize wavefront so the complex elements have modulus one
     abs = cabs(wavefront)
+    if mask is not None:
+        # Record the original wavefront without amplitude replacements
+        original_wavefront = wavefront.clone()
+    # Replace amplitude of wavefront with measured amplitude
     wavefront[...,0]/=abs
     wavefront[...,1]/=abs
+    wavefront[...,0]*=amplitudes
+    wavefront[...,1]*=amplitudes
     if mask is None:
-        # Replace amplitude of wavefront with measured amplitude
-        wavefront[...,0]*=amplitudes
-        wavefront[...,1]*=amplitudes
         return wavefront
     else:
-        return wavefront[mask != 0]
+        # Apply the mask to replace unmasked pixels in the original wavefront
+        return original_wavefront.masked_scatter_(mask, wavefront)
 
 
 def support(wavefront, support):
