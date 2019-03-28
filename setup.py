@@ -16,6 +16,7 @@ setuptools.setup(
         "numpy",
         "scipy",
         "matplotlib",
+        "dateutil",
         #"pytorch",
         "h5py"],
     packages=setuptools.find_packages(),
