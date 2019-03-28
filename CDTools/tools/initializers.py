@@ -4,26 +4,32 @@ import torch as t
 
 all = ['gaussian']
 
+from CDTools.tools import cmath
+
 
 def gaussian(shape, amplitude, sigma, center = None):
     """Returns an array with a centered gaussian
 
     Takes in the shape, amplitude, and standard deviation of a gaussian
-    and returns an array with values corresponding to a two-dimensional gaussian function
-        z = amplitude*exp(-(x-center[0])**2/sigma[0]**2+(y-center[1])**2/sigma[1]**2)
+    and returns a torch tensor with values corresponding to a two-dimensional
+    gaussian function
+
     Note that [0, 0] is taken to be at the upper left corner of the array.
     Default is centered at ((shape[0]-1)/2, (shape[1]-1)/2)) because x and y are zero-indexed.
 
     Args:
-        shape (array_like) : A 1x2 array-like object specifying the dimensions of the output array in the form (y shape, x shape)
+        shape (array_like) : A 1x2 array-like object specifying the dimensions of the output array in the form (i shape, j shape)
         amplitude (float or int): The amplitude the gaussian to simulate
-        sigma (array_like): A 1x2 array-like object specifying the x- and y- standard deviation of the gaussian in the form (y stdev, y stdev)
-        center (array_like) : Optional 1x2 array-like object specifying the location of the center of the gaussian (y center, x center)
+        sigma (array_like): A 1x2 array-like object specifying the i- and j- standard deviation of the gaussian in the form (i stdev, j stdev)
+        center (array_like) : Optional 1x2 array-like object specifying the location of the center of the gaussian (i center, j center)
 
     Returns:
-        numpy.array : The real-valued gaussian array
+        torch.Tensor : The real-valued gaussian array
     """
     if center is None:
         center = ((shape[0]-1)/2, (shape[1]-1)/2)
-    y, x = np.mgrid[:shape[0], :shape[1]]
-    return amplitude*np.exp(-((x-center[1])/sigma[1])**2-((y-center[0])/sigma[0])**2)
+        
+    i, j = np.mgrid[:shape[0], :shape[1]]
+    result = amplitude*np.exp(-( (i-center[0])**2 / (2 * sigma[0]**2) )
+                              -( (j-center[1])**2 / (2 * sigma[1]**2) ))
+    return cmath.complex_to_torch(result)

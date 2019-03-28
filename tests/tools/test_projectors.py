@@ -4,7 +4,7 @@ from CDTools.tools import cmath
 from CDTools.tools import projectors
 import numpy as np
 import torch as t
-from scipy.fftpack import fftshift, ifftshift
+
 
 def test_modulus():
     # Create a complex array with random modulus and known phase
