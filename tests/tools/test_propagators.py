@@ -10,6 +10,7 @@ import pytest
 import scipy.misc
 from scipy.fftpack import fftshift, ifftshift
 
+
 @pytest.fixture(scope='module')
 def exit_waves_1():
     # Import scipy test image and add a random phase
@@ -42,7 +43,3 @@ def test_inverse_far_field(exit_waves_1):
 def test_near_field(exit_waves_1):
     pass
 
-
-
-def test_get_exit_waves(exit_waves_1):
-    pass

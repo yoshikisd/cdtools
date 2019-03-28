@@ -2,7 +2,7 @@ from __future__ import division, print_function, absolute_import
 from CDTools.tools.cmath import *
 import torch as t
 
-__all__ = ['far_field', 'near_field', 'inverse_far_field', 'inverse_near_field', 'get_exit_waves']
+__all__ = ['far_field', 'near_field', 'inverse_far_field', 'inverse_near_field']
 
 
 def far_field(wavefront):
@@ -114,48 +114,3 @@ def inverse_near_field(wavefront, angular_spectrum_propagator):
 
 
 
-
-def get_exit_waves(probe, object, translations):
-    """Returns a stack of exit waves accounting for subpixel shifts
-
-    This function returns a collection of exit waves, with the first
-    dimension as the translation index and the final dimensions
-    corresponding to the detector. The exit waves are calculated by
-    shifting the object with each translation in turn, using linear
-    interpolation.
-    Args:
-        probe (torch.Tensor) : An MxM probe function for the exit waves
-        object (torch.Tensor) : The object function to be probed
-        translations (torch.Tensor) : The Nx2 array of translations to simulate
-    Returns:
-        torch.Tensor : An NxMxM tensor of the calculated exit waves
-    """
-
-    # Separate the translations into a part that chooses the window
-    # And a part that defines the windowing function
-    integer_translations = t.floor(translations)
-    subpixel_translations = translations - integer_translations
-    integer_translations = integer_translations.to(dtype=t.int32)
-
-    selections = []
-    for tr, sp in zip(integer_translations,
-                      subpixel_translations):
-
-        sel00 = object[tr[0]:tr[0]+probe.shape[0],
-                    tr[1]:tr[1]+probe.shape[1]]
-
-        sel01 = object[tr[0]:tr[0]+probe.shape[0],
-                    tr[1]+1:tr[1]+1+probe.shape[1]]
-
-        sel10 = object[tr[0]+1:tr[0]+1+probe.shape[0],
-                    tr[1]:tr[1]+probe.shape[1]]
-
-        sel11 = object[tr[0]+1:tr[0]+1+probe.shape[0],
-                    tr[1]+1:tr[1]+1+probe.shape[1]]
-
-        selections.append(sel00 * (1-sp[0])*(1-sp[1]) + \
-                          sel01 * (1-sp[0])*sp[1] + \
-                          sel10 * sp[0]*(1-sp[1]) + \
-                          sel11 * sp[0]*sp[1])
-
-    return t.stack([cmult(probe,selection) for selection in selections])
