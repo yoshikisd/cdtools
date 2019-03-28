@@ -11,6 +11,7 @@ import scipy.misc
 from scipy.fftpack import fftshift, ifftshift
 
 
+
 @pytest.fixture(scope='module')
 def exit_waves_1():
     # Import scipy test image and add a random phase
