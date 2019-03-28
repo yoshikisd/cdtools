@@ -21,35 +21,31 @@ def modulus(wavefront, intensities, mask = None):
         wavefront (torch.Tensor) : The JxNxMx2 stack of complex propagated wavefronts
         intensities (torch.Tensor): The measured diffraction pattern(s) stored as an JxNxM stack of real tensors
         mask (torch.Tensor) : Mask for the intensities array with shape JxNxM, where bad detector pixels are set to 0 and usable pixels set to 1
+    
     Returns:
         torch.Tensor : The JxNxMx2 propagated wavefield with corrected intensities
     """
     # Calculate amplitudes from intensities
-    amplitudes = intensities**.5
+    amplitudes = t.sqrt(intensities)
     # Normalize wavefront so the complex elements have modulus one
-    abs = cabs(wavefront)
-    if mask is not None:
-        # Record the original wavefront without amplitude replacements
-        original_wavefront = wavefront.clone()
+    wavefront_mag = cabs(wavefront)
+    projected = wavefront * (amplitudes / wavefront_mag)[...,None]
     # Replace amplitude of wavefront with measured amplitude
-    wavefront[...,0]/=abs
-    wavefront[...,1]/=abs
-    wavefront[...,0]*=amplitudes
-    wavefront[...,1]*=amplitudes
-    if mask is None:
-        return wavefront
-    else:
+    if mask is not None:
+        selection = (mask == 0)
         # Apply the mask to replace unmasked pixels in the original wavefront
-        return original_wavefront.masked_scatter_(mask, wavefront)
+        projected[selection] = wavefront[selection]
+
+    return projected
 
 
 def support(wavefront, support):
     """Implements the support constraint in torch
 
-    This accepts a torch tensor representing the propagated simulated wavefront(s),
+    This accepts a torch tensor representing (a) simulated wavefield(s),
     where the last dimension represents the real and imaginary components of
     the propagated wavefield(s). It projects the support of the imaged object
-    onto the simulated wavefront via a mask.
+    onto the simulated wavefront via a support mask.
 
     It assumes that the wavefront is stored in an array
     [i,j] where i corresponds to the y-axis and j corresponds to the
@@ -58,10 +54,10 @@ def support(wavefront, support):
 
     Args:
         wavefront (torch.Tensor) : The JxNxMx2 stack of complex propagated wavefronts
-        mask (torch.Tensor) : Mask for the intensities array with shape JxNxM, where bad detector pixels are set to 0 and usable pixels set to 1
+        support (torch.Tensor) : An NxM support, with 1s within the support and 0s outside 
+    
     Returns:
-        torch.Tensor : The JxNxMx2 wavefield with the mask applied
+        torch.Tensor : The JxNxMx2 wavefield with the support mask applied
     """
-    wavefront[...,0] *= support
-    wavefront[...,1] *= support
-    return wavefront
+    return wavefront * support.to(wavefront.dtype)[...,None]
+
