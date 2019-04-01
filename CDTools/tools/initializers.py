@@ -9,7 +9,7 @@ from scipy.fftpack import next_fast_len
 import numpy as np
 
 
-def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, opt_for_fft=True):
+def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, opt_for_fft=True, padding=0):
     """Returns an exit wave basis and a detector slice for the given detector geometry
     
     It takes in the parameters for a given detector - the basis defining
@@ -26,6 +26,7 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
         distance (float) : The sample-detector distance, in m
         center (torch.Tensor) : If defined, the location of the zero frequency pixel
         opt_for_fft (bool) : Default is true, whether to increase detector size to improve fft performance
+        padding (int) : Default is 0, an extra border to allow for subpixel shifting later
     
     Returns:
         torch.Tensor : The exit wave basis
@@ -42,7 +43,7 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
     # This is a bit opaque but was worth doing accurately
     min_left = center * 2
     min_right = (det_shape - center) * 2 - 1
-    full_shape = t.max(min_left,min_right).to(t.int32)
+    full_shape = t.max(min_left,min_right).to(t.int32) + 2 * padding
     if opt_for_fft:
         full_shape = t.Tensor([next_fast_len(dim) for dim in full_shape]).to(t.int32)
     # Then, generate a slice that pops the actual detector from the full
