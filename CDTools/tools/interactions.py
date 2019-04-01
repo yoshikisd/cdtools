@@ -26,11 +26,19 @@ def ptycho_2D_round(probe, obj, translations):
     Returns:
         torch.Tensor : An NxMxL tensor of the calculated exit waves
     """
+    single_translation = False
+    if translations.dim() == 1:
+        translations = translations[None,:]
+        single_translation = True
+        
     integer_translations = t.round(translations).to(dtype=t.int32)
     selections = [obj[tr[0]:tr[0]+probe.shape[0],
                       tr[1]:tr[1]+probe.shape[1]]
                   for tr in integer_translations]
-    return t.stack([cmult(probe,selection) for selection in selections])
+    if single_translation:
+        return [cmult(probe,selection) for selection in selections][0]
+    else:
+        return t.stack([cmult(probe,selection) for selection in selections])
 
 
 
@@ -55,7 +63,11 @@ def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
     Returns:
         torch.Tensor : An NxMxL tensor of the calculated exit waves
     """
-
+    single_translation = False
+    if translations.dim() == 1:
+        translations = translations[None,:]
+        single_translation = True
+        
     # Separate the translations into a part that chooses the window
     # And a part that defines the windowing function
     integer_translations = t.floor(translations)
@@ -112,7 +124,10 @@ def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
 
             exit_waves.append(cmult(probe,selection))
 
-    return t.stack(exit_waves)
+    if single_translation:
+        return exit_waves[0]
+    else:
+        return t.stack(exit_waves)
 
 
 

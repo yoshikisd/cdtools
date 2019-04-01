@@ -177,8 +177,8 @@ class Ptycho_2D_Dataset(CDataset):
     def __len__(self):
         return self.patterns.shape[0]
 
-    def __getitem__(self,index):
-        return index, self.translations[index], self.patterns[index]
+    def __getitem__(self, index):
+        return (index, self.translations[index]), self.patterns[index]
 
 
     def to(self, *args, **kwargs):

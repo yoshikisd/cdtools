@@ -20,7 +20,7 @@ def intensity(wavefield, detector_slice=None):
     will only include that slice from the simulated wavefront.
     
     Args:
-        wavefield (torch.Tensor) : A complex MxNx2 wavefield
+        wavefield (torch.Tensor) : A JxMxNx2 stack of complex wavefields
         detector_slice (slice) : Optional, a slice or tuple of slices defining a section of the simulation to return
 
     Returns:
@@ -29,7 +29,10 @@ def intensity(wavefield, detector_slice=None):
     if detector_slice is None:
         return cmath.cabssq(wavefield)
     else:
-        return cmath.cabssq(wavefield[detector_slice])
+        if wavefield.dim() == 3:
+            return cmath.cabssq(wavefield[detector_slice])
+        else:
+            return cmath.cabssq(wavefield[(np.s_[:],) + detector_slice])
 
 
 def incoherent_sum(wavefields, detector_slice=None):
@@ -38,9 +41,14 @@ def incoherent_sum(wavefields, detector_slice=None):
     The intensity is defined as the sum of the magnitudes squared of
     the wavefields. If a detector slice is given, the returned array
     will only include that slice from the simulated wavefronts.
+
+    The first index is the index of the diffraction pattern to measure,
+    the second index is the set of incoherently adding patterns, and
+    the next two indices index the wavefield. The final index is the complex
+    index.
     
     Args:
-        wavefields (torch.Tensor) : A JxMxNx2 stack of complex wavefields
+        wavefields (torch.Tensor) : A JxLxMxNx2 stack of complex wavefields
         detector_slice (slice) : Optional, a slice or tuple of slices defining a section of the simulation to return
 
     Returns:
@@ -50,7 +58,10 @@ def incoherent_sum(wavefields, detector_slice=None):
     if detector_slice is None:
         return t.sum(cmath.cabssq(wavefields),dim=-3)
     else:
-        return t.sum(cmath.cabssq(wavefields[(np.s_[:],)+detector_slice]),dim=-3)
+        if wavefields.dim() == 4:
+            return t.sum(cmath.cabssq(wavefields[(np.s_[:],)+detector_slice]),dim=-3)
+        else:
+            return t.sum(cmath.cabssq(wavefields[(np.s_[:],np.s_[:])+detector_slice]),dim=-3)
                  
 
 
@@ -63,7 +74,7 @@ def quadratic_background(wavefield, background, detector_slice=None, measurement
     background model.
 
     Args:
-        wavefield (torch.Tensor) : A complex MxNx2 wavefield
+        wavefield (torch.Tensor) : A JxMxNx2 stack of complex wavefields
         background (torch.Tensor) : An tensor storing the square root of the detector background
         detector_slice (slice) : Optional, a slice or tuple of slices defining a section of the simulation to return
         measurement (function) : Optional, the measurement function to use. The default is measurements.intensity
@@ -76,3 +87,4 @@ def quadratic_background(wavefield, background, detector_slice=None, measurement
     else:
         return measurement(wavefield, detector_slice) \
             + background[detector_slice]**2
+

@@ -237,7 +237,7 @@ def test_Ptycho_2D_Dataset_ops(ptycho_cxi_1):
     dataset = Ptycho_2D_Dataset.from_cxi(cxi)
 
     assert len(dataset) == expected['data'].shape[0]
-    idx, translation, pattern = dataset[3]
+    (idx, translation), pattern = dataset[3]
     assert idx == 3
     assert t.allclose(translation, t.tensor(expected['translations'][3,:]))
     assert t.allclose(pattern, t.tensor(expected['data'][3,:,:]))

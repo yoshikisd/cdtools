@@ -116,7 +116,6 @@ def near_field(wavefront, angular_spectrum_propagator):
     Returns:
         torch.Tensor : The propagated wavefront 
     """
-
     return t.ifft(cmult(angular_spectrum_propagator,t.fft(wavefront,2)), 2)
 
 
