@@ -28,6 +28,36 @@ def single_pixel_probe(scope='module'):
     return probe
 
 
+def test_translations_to_pixel():
+    # First, try the case where everything is ones and simple
+    basis = t.Tensor([[0,-1,0],[-1,0,0]]).t()
+    translations = t.rand((10,3))
+    output = interactions.translations_to_pixel(basis, translations)
+    assert t.allclose(output, -translations[:,:2].flip(1))
+    
+    # Next, try a case with a single translation
+    translation = t.rand((3))
+    output = interactions.translations_to_pixel(basis, translation)
+    assert t.allclose(output, -translation[:2].flip(0))
+    
+    # Then, try a case with no surface normal but with a real conversion
+    basis = t.Tensor([[0,-2,0],[-1,0,0.1]]).t()
+    translations = t.rand((10,3))
+    output = interactions.translations_to_pixel(basis, translations)
+    basis_vectors_inv = t.pinverse(basis)
+    translations[:,2] = 0 # manually project off z component
+    assert t.allclose(output, t.mm(translations,basis_vectors_inv.t()))
+    
+    # Finally, try a case with a known surface normal (reflection)
+    basis = t.Tensor([[0,-1,0],[0,0,1]]).t()
+    surface_normal = t.Tensor([np.sqrt(2),0,-np.sqrt(2)])
+    translations = t.rand((10,3))
+    output = interactions.translations_to_pixel(basis, translations,
+                                                surface_normal=surface_normal)
+    exp_translations = t.stack((-translations[:,1],translations[:,0]),dim=1)
+    assert t.allclose(output, exp_translations)
+    
+
 def test_ptycho_2D_round(random_probe, random_obj):
     # Test a stack of images
     translations = np.random.rand(10,2) * 500

@@ -9,6 +9,50 @@ import torch as t
 # area.
 #
 
+def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0,0,1])):
+    """Takes real space translations and outputs them in pixel space
+    
+    This works for any 2D ptychography geometry. It takes in
+    A set of translations in (x,y) space and outputs the same translations
+    in internal pixel units perpendicular to the detector. 
+    
+    It uses information on the wavefield basis and, if defined, the
+    sample normal, to perform the conversion.
+    
+    The assumed geometry is incoming radiation with a wavevector parallel
+    to the +z axis, [0,0,1]. The default sample orientation has a surface
+    normal parallel to this direction
+
+    Args:
+        basis (torch.Tensor) : The real space basis the wavefields are defined in
+        translations (torch.Tensor) : A Jx3 stack of real-space translations
+        surface_normal (torch.Tensor) : Optional, the sample's surface normal
+    """
+    
+    projection_1 = t.Tensor([[1,0,0],
+                             [0,1,0],
+                             [0,0,0]])
+    projection_2 = t.inverse(t.Tensor([[1,0,0],
+                                       [0,1,0],
+                                       -surface_normal/
+                                       surface_normal[2]]))
+    basis_vectors_inv = t.pinverse(basis)
+    projection = t.mm(basis_vectors_inv,
+                      t.mm(projection_2,projection_1))
+    projection = projection.t()
+
+    single_translation = False
+    if len(translations.shape) == 1:
+        translations = translations[None,:]
+        single_translation = True
+
+    pixel_translations = t.mm(translations, projection)
+
+    if single_translation:
+        return pixel_translations[0]
+    else:
+        return pixel_translations
+    
 
 def ptycho_2D_round(probe, obj, translations):
     """Returns a stack of exit waves without accounting for subpixel shifts
