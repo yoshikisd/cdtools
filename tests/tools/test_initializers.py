@@ -52,6 +52,27 @@ def test_exit_wave_geometry():
     assert t.ones(full_shape)[det_slice].shape ==  shape
 
 
+
+def test_calc_object_setup():
+    # First just try a simple case
+    probe_shape = t.Size([120,57])
+    translations = t.rand((30,2)) * 300
+    t_max = t.max(translations, dim=0)[0]
+    t_min = t.min(translations, dim=0)[0]
+    obj_shape, min_translation = initializers.calc_object_setup(probe_shape, translations)
+    exp_shape = t.ceil(t_max - t_min).to(t.int32) + t.Tensor(list(probe_shape)).to(t.int32)
+    assert t.allclose(min_translation, t_min)
+
+    assert obj_shape == t.Size(exp_shape)
+    
+    # Then add some padding
+    padding = 5
+    obj_shape, min_translation = initializers.calc_object_setup(probe_shape, translations, padding=padding)
+    assert t.allclose(min_translation, t_min - padding)
+    assert obj_shape == t.Size(exp_shape + 2 * padding)
+        
+
+    
 def test_gaussian():
     # Generate gaussian as a numpy array (square array)
     shape = [10, 10]

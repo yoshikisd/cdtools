@@ -2,7 +2,7 @@ from __future__ import division, print_function, absolute_import
 import numpy as np
 import torch as t
 
-__all__ = ['exit_wave_geometry', 'gaussian']
+__all__ = ['exit_wave_geometry', 'calc_object_setup', 'gaussian']
 
 from CDTools.tools import cmath
 from scipy.fftpack import next_fast_len
@@ -68,7 +68,39 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
     
     return real_space_basis, full_shape, det_slice
                       
-        
+
+def calc_object_setup(probe_shape, translations, padding=0):
+    """Returns an object shape and minimum pixel translation
+
+    Based on the given pixel-space translations, it will calculate the
+    required size for an object array and calculate the pixel translation
+    that corresponds to a shift by (0,0) of the probe. 
+    
+    Optionally a small extra border can be defined via the padding
+    attribute. If this is done, the calculated pixel translation will
+    correspond to (padding,padding)
+    
+    Args:
+        probe_shape (t.Size) : The size of the probe array
+        translations (t.Tensor) : Jx2 stack of pixel-valued (i,j) translations
+        padding (int) : Optional, the size of an extra border to include
+    """
+    # First we look at the translations to find the minimum translation
+    # and the range of translations
+    min_translation = t.min(translations, dim=0)[0]
+    translation_range = t.max(translations, dim=0)[0] - min_translation
+
+    # Calculate the required shape
+    translation_range = t.ceil(translation_range).numpy().astype(np.int32)
+    shape = translation_range + np.array(probe_shape) + 2 * padding
+    shape = t.Size(shape)
+
+    # And the minimum translation
+    min_translation = min_translation - padding
+
+    return shape, min_translation
+    
+    
 
 def gaussian(shape, amplitude, sigma, center = None):
     """Returns an array with a centered gaussian
