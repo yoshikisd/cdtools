@@ -107,6 +107,11 @@ class CDataset(torchdata.Dataset):
         else:
             self.mask = None
 
+        if t.cuda.is_available():
+            self.get_as(device='cuda:0')
+        else:
+            self.get_as(device='cpu')
+
             
     def to(self,*args,**kwargs):
         # The mask should always stay a uint8, but it should switch devices
@@ -119,7 +124,33 @@ class CDataset(torchdata.Dataset):
         if self.mask is not None:
             self.mask = self.mask.to(*args,**mask_kwargs)          
 
+
+    def get_as(self, *args, **kwargs):
+        self.get_as_args = (args, kwargs)
+
+
+    def __getitem__(self, index):
+        # Deals with loading to appropriate device/dtype, if
+        # specified via a call to get_as
+        inputs, outputs = self._load(index)
+        if hasattr(self, 'get_as_args'):
+            outputs = outputs.to(*self.get_as_args[0],**self.get_as_args[1])
+            moved_inputs = []
+            for inp in inputs:
+                try:
+                    moved_inputs.append(inp.to(*self.get_as_args[0],**self.get_as_args[1]) )
+                except:
+                    moved_inputs.append(inp)
+        else:
+            moved_inputs = inputs
+        return moved_inputs, outputs
+
     
+    def _load(self, index):
+        # Internal function to load data
+        raise NotImplementedError()
+        
+            
     @classmethod
     def from_cxi(cls, cxi_file):
         entry_info = cdtdata.get_entry_info(cxi_file)
@@ -177,7 +208,7 @@ class Ptycho_2D_Dataset(CDataset):
     def __len__(self):
         return self.patterns.shape[0]
 
-    def __getitem__(self, index):
+    def _load(self, index):
         return (index, self.translations[index]), self.patterns[index]
 
 

@@ -27,6 +27,7 @@ def test_CDataset_init():
     mask = np.ones((256,256))
     dataset = CDataset(entry_info, sample_info,
                        wavelength, detector_geometry, mask)
+    
     assert t.all(t.eq(dataset.mask,t.tensor(mask)))
     assert dataset.entry_info == entry_info
     assert dataset.sample_info == sample_info
@@ -231,13 +232,35 @@ def test_Ptycho_2D_Dataset_to(ptycho_cxi_1):
         assert dataset.patterns.device == t.device('cuda:0')
         assert dataset.translations.device == t.device('cuda:0')
 
-    
+
+        
 def test_Ptycho_2D_Dataset_ops(ptycho_cxi_1):
     cxi, expected = ptycho_cxi_1
     dataset = Ptycho_2D_Dataset.from_cxi(cxi)
+    dataset.get_as('cpu')
 
     assert len(dataset) == expected['data'].shape[0]
     (idx, translation), pattern = dataset[3]
     assert idx == 3
     assert t.allclose(translation, t.tensor(expected['translations'][3,:]))
     assert t.allclose(pattern, t.tensor(expected['data'][3,:,:]))
+
+
+def test_Ptycho_2D_Dataset_get_as(ptycho_cxi_1):
+    cxi, expected = ptycho_cxi_1
+    dataset = Ptycho_2D_Dataset.from_cxi(cxi)
+    if t.cuda.is_available():
+        dataset.get_as('cuda:0')
+        assert len(dataset) == expected['data'].shape[0]
+
+        (idx, translation), pattern = dataset[3]
+        assert str(translation.device) == 'cuda:0'
+        assert str(pattern.device) == 'cuda:0'
+        
+        assert idx == 3
+        assert t.allclose(translation.to(device='cpu'),
+                          t.tensor(expected['translations'][3,:]))
+        assert t.allclose(pattern.to(device='cpu'),
+                          t.tensor(expected['data'][3,:,:]))
+        
+    
