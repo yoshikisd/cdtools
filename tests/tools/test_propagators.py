@@ -21,14 +21,14 @@ def exit_waves_1():
     obj = cmath.complex_to_torch(obj)
 
     # Construct wavefront from image
-    probe = initializers.gaussian([64, 64], 1e3, [5, 5])
+    probe = initializers.gaussian([64, 64], [5, 5], amplitude=1e3)
     return cmath.cmult(probe,obj)
 
     
 
 def test_far_field(exit_waves_1):
     # Far field diffraction patterns calculated by numpy with zero frequency in center
-    np_result = np.fft.fftshift(np.fft.fft2(cmath.torch_to_complex(exit_waves_1)))
+    np_result = np.fft.fftshift(np.fft.fft2(cmath.torch_to_complex(exit_waves_1),norm='ortho'))
 
     assert(np.allclose(np_result, cmath.torch_to_complex(propagators.far_field(exit_waves_1))))
 
@@ -37,7 +37,7 @@ def test_far_field(exit_waves_1):
 def test_inverse_far_field(exit_waves_1):
     # We want the inverse far field to map back to the exit waves with no intensity corrections
     # Far field result for exit waves calculated with numpy
-    far_field_np_result = cmath.complex_to_torch(np.fft.fftshift(np.fft.fft2(cmath.torch_to_complex(exit_waves_1))))
+    far_field_np_result = cmath.complex_to_torch(np.fft.fftshift(np.fft.fft2(cmath.torch_to_complex(exit_waves_1),norm='ortho')))
 
     assert(np.allclose(exit_waves_1, propagators.inverse_far_field(far_field_np_result)))
 

@@ -67,7 +67,7 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
     full_shape = t.Size([dim for dim in full_shape])
     
     return real_space_basis, full_shape, det_slice
-                      
+
 
 def calc_object_setup(probe_shape, translations, padding=0):
     """Returns an object shape and minimum pixel translation
@@ -102,29 +102,101 @@ def calc_object_setup(probe_shape, translations, padding=0):
     
     
 
-def gaussian(shape, amplitude, sigma, center = None):
-    """Returns an array with a centered gaussian
+def gaussian(shape, sigma, amplitude=1, center = None, curvature=[0,0]):
+    """Returns an array with a centered Gaussian
 
     Takes in the shape, amplitude, and standard deviation of a gaussian
-    and returns a torch tensor with values corresponding to a two-dimensional
-    gaussian function
+    and returns a complex torch tensor (trailing dimension is 2) with
+    values corresponding to a two-dimensional gaussian function
 
     Note that [0, 0] is taken to be at the upper left corner of the array.
     Default is centered at ((shape[0]-1)/2, (shape[1]-1)/2)) because x and y are zero-indexed.
+    By default, the phase is uniformly 0, however a curvature can be
+    specified to simulate a probe that has been propagated a known distance
+    from it's focal point. The curvature is implemented by adding a quadratic
+    phase phi = exp(i*curvature/2 r^2) to the Gaussian
 
     Args:
         shape (array_like) : A 1x2 array-like object specifying the dimensions of the output array in the form (i shape, j shape)
         amplitude (float or int): The amplitude the gaussian to simulate
         sigma (array_like): A 1x2 array-like object specifying the i- and j- standard deviation of the gaussian in the form (i stdev, j stdev)
         center (array_like) : Optional 1x2 array-like object specifying the location of the center of the gaussian (i center, j center)
+        curvature (array_like) : Optional complex part to add to the gaussian coefficient
 
     Returns:
-        torch.Tensor : The real-valued gaussian array
+        torch.Tensor : The complex-style tensor storing the Gaussian
     """
     if center is None:
         center = ((shape[0]-1)/2, (shape[1]-1)/2)
         
     i, j = np.mgrid[:shape[0], :shape[1]]
-    result = amplitude*np.exp(-( (i-center[0])**2 / (2 * sigma[0]**2) )
-                              -( (j-center[1])**2 / (2 * sigma[1]**2) ))
-    return cmath.complex_to_torch(result)
+    isq = (i - center[0])**2
+    jsq = (j - center[1])**2
+    result = np.exp((1j*curvature[0] / 2 - 1 / (2 * sigma[0]**2)) * isq + \
+        (1j*curvature[1] / 2 - 1 / (2 * sigma[1]**2)) * jsq)
+    return cmath.complex_to_torch(amplitude*result)
+
+
+def gaussian_initialization(dataset, basis, shape, sigma, propagation_distance=0):
+    """Initializes a gaussian probe based on experimental parameters
+
+    This function generates a gaussian probe initialization which has a
+    total fluence matching the order of magnitude of the intensity in
+    the observed dataset, provided the object function is of order 1.
+    
+    The initialization is done using parameters defined in physical units,
+    such as sigma (in meters) and the propagation distance (in meters).
+    The internal conversion to pixel space is done with a provided probe
+    basis and probe shape.
+    
+    Sigma can be provided either as a scalar for a uniform beam, or as 
+    an iterable of length 2 with [sigma_i, sigma_j] being the components
+    of sigma in the directions parallel to the i and j basis vectors of
+    the probe basis
+    
+    Args:
+        dataset (Ptycho_2D_Dataset) : The dataset whose intensity we want to match
+        basis (array_like) : The real space basis for exit waves in our experiment
+        shape (array_like): The shape of the simulated real space arrays
+        sigma (array_like): The standard deviation of the probe at it's focus
+        propagation_distance (float) : Optional, a distance to propagate the gaussian from it's focus
+    
+    Returns:
+        torch.Tensor : The complex-style tensor storing the Gaussian
+    """
+    # First, we want to generate the parameters (sigma and curvature) for the
+    # propagated gaussian. Ignore the purely z-dependent phases
+    wavelength = dataset.wavelength
+    z = propagation_distance # for shorthand
+    sigma = np.array(sigma)
+    curvature = np.array(curvature) 
+    k = 2 * np.pi / wavelength
+    zr = k * sigma**2
+    sigmaz = sigma * np.sqrt(1 + (z / zr)**2)
+    curvature = k * z / (z**2 + zr**2)
+
+    # So both sigmaz and curvature can be either scalars or tensors here
+    # We make them consistent
+    if len(sigmaz.shape) == 0:
+        sigmaz = np.array([sigmaz, sigmaz])
+    if len(curvature.shape) == 0:
+        curvature = np.array([curvature, curvature])
+    
+    # The conversion must then be done to pixel space
+    sigma_pix = sigmaz / np.array([np.linalg.norm(basis[:,0]),
+                                   np.linalg.norm(basis[:,1])])
+    curvature_pix = sigmaz * np.array([np.linalg.norm(basis[:,0]),
+                                       np.linalg.norm(basis[:,1])])**2
+    
+    # Then we can generate the gaussian array
+    probe = gaussian(shape, sigma=sigma_pix, curvature=curvature_pix)
+        
+    # Finally, we should calculate the average pattern intensity from the
+    # dataset and normalize the gaussian probe. This should be done by
+    avg_intensity = 1
+    #probe_intensity = 
+    
+
+
+
+    

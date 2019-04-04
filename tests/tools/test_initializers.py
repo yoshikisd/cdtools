@@ -81,15 +81,30 @@ def test_gaussian():
     y, x = np.mgrid[:shape[0], :shape[1]]
     np_result = 10*np.exp(-0.5*((x-center[1])/sigma[1])**2
                           -0.5*((y-center[0])/sigma[0])**2)
-    init_result = cmath.torch_to_complex(initializers.gaussian([10, 10], 10, [2.5, 2.5]))
+    init_result = cmath.torch_to_complex(initializers.gaussian([10, 10], [2.5, 2.5], amplitude=10))
     assert np.allclose(init_result, np_result)
 
     # Generate gaussian as a numpy array (rectangular array)
     shape = [10, 5]
-    sigma = [2.5, 2.5]
+    sigma = [2.5, 3]
     center = ((shape[0]-1)/2, (shape[1]-1)/2)
     y, x = np.mgrid[:shape[0], :shape[1]]
-    np_result = 10*np.exp(-0.5*((x-center[1])/sigma[1])**2
+    np_result = np.exp(-0.5*((x-center[1])/sigma[1])**2
                           -0.5*((y-center[0])/sigma[0])**2)
-    init_result = cmath.torch_to_complex(initializers.gaussian([10, 5], 10, [2.5, 2.5]))
+    init_result = cmath.torch_to_complex(initializers.gaussian(shape, sigma))
     assert np.allclose(init_result, np_result)
+                                    
+    # Generate gaussian with curvature
+    shape = [20, 30]
+    sigma = [2.5, 5]
+    curvature = [1,0.6]
+    center = ((shape[0]-1)/2 + 3, (shape[1]-1)/2 - 1.4)
+    y, x = np.mgrid[:shape[0], :shape[1]]
+    np_result = (10+0j)*np.exp(-0.5*((x-center[1])/sigma[1])**2
+                               -0.5*((y-center[0])/sigma[0])**2)
+    np_result *= np.exp(0.5j*curvature[1]*(x-center[1])**2
+                        +0.5j*curvature[0]*(y-center[0])**2)
+    init_result = cmath.torch_to_complex(initializers.gaussian(shape, sigma,
+                        center=center, curvature=curvature, amplitude=10))
+    assert np.allclose(init_result, np_result)
+    
