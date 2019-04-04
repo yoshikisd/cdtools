@@ -2,7 +2,8 @@ from __future__ import division, print_function, absolute_import
 import numpy as np
 import torch as t
 
-__all__ = ['exit_wave_geometry', 'calc_object_setup', 'gaussian']
+__all__ = ['exit_wave_geometry', 'calc_object_setup', 'gaussian',
+           'gaussian_probe']
 
 from CDTools.tools import cmath
 from scipy.fftpack import next_fast_len
@@ -10,7 +11,7 @@ import numpy as np
 
 
 def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, opt_for_fft=True, padding=0):
-    """Returns an exit wave basis and a detector slice for the given detector geometry
+    """Returns an exit wave basis and shape, as well as a detector slice for the given detector geometry
     
     It takes in the parameters for a given detector - the basis defining
     the pixel pitch and the shape, as well as the wavelength and propagation
@@ -137,7 +138,8 @@ def gaussian(shape, sigma, amplitude=1, center = None, curvature=[0,0]):
     return cmath.complex_to_torch(amplitude*result)
 
 
-def gaussian_initialization(dataset, basis, shape, sigma, propagation_distance=0):
+
+def gaussian_probe(dataset, basis, shape, sigma, propagation_distance=0):
     """Initializes a gaussian probe based on experimental parameters
 
     This function generates a gaussian probe initialization which has a
@@ -169,32 +171,26 @@ def gaussian_initialization(dataset, basis, shape, sigma, propagation_distance=0
     wavelength = dataset.wavelength
     z = propagation_distance # for shorthand
     sigma = np.array(sigma)
-    curvature = np.array(curvature) 
     k = 2 * np.pi / wavelength
     zr = k * sigma**2
     sigmaz = sigma * np.sqrt(1 + (z / zr)**2)
-    curvature = k * z / (z**2 + zr**2)
+    curvature = -k * z / (z**2 + zr**2)
 
-    # So both sigmaz and curvature can be either scalars or tensors here
-    # We make them consistent
-    if len(sigmaz.shape) == 0:
-        sigmaz = np.array([sigmaz, sigmaz])
-    if len(curvature.shape) == 0:
-        curvature = np.array([curvature, curvature])
-    
     # The conversion must then be done to pixel space
     sigma_pix = sigmaz / np.array([np.linalg.norm(basis[:,0]),
                                    np.linalg.norm(basis[:,1])])
-    curvature_pix = sigmaz * np.array([np.linalg.norm(basis[:,0]),
-                                       np.linalg.norm(basis[:,1])])**2
-    
+    curvature_pix = curvature * np.array([np.linalg.norm(basis[:,0]),
+                                          np.linalg.norm(basis[:,1])])**2
+
     # Then we can generate the gaussian array
     probe = gaussian(shape, sigma=sigma_pix, curvature=curvature_pix)
         
     # Finally, we should calculate the average pattern intensity from the
     # dataset and normalize the gaussian probe. This should be done by
-    avg_intensity = 1
-    #probe_intensity = 
+    avg_intensities = [t.sum(dataset[idx][1]) for idx in range(len(dataset))]
+    avg_intensity = t.mean(t.Tensor(avg_intensities))
+    probe_intensity = t.sum(cmath.cabssq(probe))
+    return avg_intensity / probe_intensity * probe
     
 
 

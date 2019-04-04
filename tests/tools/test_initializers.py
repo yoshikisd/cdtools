@@ -2,6 +2,7 @@ from __future__ import division, print_function, absolute_import
 
 from CDTools.tools import initializers
 from CDTools.tools import cmath
+from CDTools.datasets import Ptycho_2D_Dataset
 import numpy as np
 import torch as t
 
@@ -107,4 +108,66 @@ def test_gaussian():
     init_result = cmath.torch_to_complex(initializers.gaussian(shape, sigma,
                         center=center, curvature=curvature, amplitude=10))
     assert np.allclose(init_result, np_result)
+    
+
+def test_gaussian_probe(ptycho_cxi_1):
+    
+    dataset = Ptycho_2D_Dataset.from_cxi(ptycho_cxi_1[0])
+
+    det_basis = t.Tensor(dataset.detector_geometry['basis'])
+    det_shape = t.Size(dataset.patterns.shape[-2:])
+    wavelength = dataset.wavelength
+    distance = dataset.detector_geometry['distance']
+    
+    basis, shape, s = initializers.exit_wave_geometry(det_basis,
+                                                      det_shape,
+                                                      wavelength,
+                                                      distance)
+    # Basis is around 60nm in the i(y) direction, 85nm in the j(x) direction
+    # Full window is therefore about 15 um in i(y) and 20 um in the j(x) dir
+
+    # Come up with a roughly matching set of probe parameters
+    sigma = 5e-7
+
+    # Build a stage explicitly with numpy to compare against
+    x = (np.arange(256) - 127.5) * (-basis[0,1]).numpy()
+    y = (np.arange(256) - 127.5) * (-basis[1,0]).numpy()
+    Xs,Ys = np.meshgrid(x,y)
+    Rs = np.sqrt(Xs**2+Ys**2)
+
+    
+
+    # Now we first test the non-propagated probe
+    np_probe = np.exp(-1/(2*sigma**2) * Rs**2)
+
+    normalization = 0
+    for params, im in dataset:
+        normalization += np.sum(im.cpu().numpy())
+    normalization /= len(dataset)
+
+    normalization_1 = normalization /  np.sum(np.abs(np_probe)**2)
+    
+    probe = initializers.gaussian_probe(dataset, basis, shape, sigma)
+    probe = cmath.torch_to_complex(probe)
+    assert np.allclose(probe, normalization_1*np_probe)
+
+    # And then a propagated probe
+    z = 1e-4 #nm
+    k = 2 * np.pi / wavelength
+    w0 = np.sqrt(2)*sigma
+    zr = np.pi * w0**2 / wavelength
+    wz = w0 * np.sqrt(1 + (z / zr)**2)
+    Rz =  z * (1 + (zr / z)**2)
+    np_probe  =  np.exp(-Rs**2 / wz**2) * np.exp(-1j * k * Rs**2 / (2 * Rz))
+
+    normalization_2 = normalization /  np.sum(np.abs(np_probe)**2)
+    
+    probe = initializers.gaussian_probe(dataset, basis, shape, sigma,
+                                        propagation_distance=z)
+    probe = cmath.torch_to_complex(probe)
+    
+    assert np.allclose(probe, normalization_2*np_probe)
+
+  
+    
     
