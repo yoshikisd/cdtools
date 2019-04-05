@@ -6,6 +6,7 @@ __all__ = ['exit_wave_geometry', 'calc_object_setup', 'gaussian',
            'gaussian_probe']
 
 from CDTools.tools import cmath
+from CDTools.tools.propagators import inverse_far_field
 from scipy.fftpack import next_fast_len
 import numpy as np
 
@@ -151,6 +152,8 @@ def gaussian_probe(dataset, basis, shape, sigma, propagation_distance=0):
     The internal conversion to pixel space is done with a provided probe
     basis and probe shape.
     
+    TODO: Should be updated to accept a mask
+    
     Sigma can be provided either as a scalar for a uniform beam, or as 
     an iterable of length 2 with [sigma_i, sigma_j] being the components
     of sigma in the directions parallel to the i and j basis vectors of
@@ -193,6 +196,46 @@ def gaussian_probe(dataset, basis, shape, sigma, propagation_distance=0):
     return avg_intensity / probe_intensity * probe
     
 
+def SHARP_style_probe(dataset, shape, det_slice):
+    """Generates a SHARP style probe guess from a dataset
 
+    What we call the "SHARP" style probe guess is to take a mean of all
+    the diffraction patterns and use that as an initial guess of the
+    Fourier space distribution of the probe. We set all the phases to
+    zero, which would for many simple beams (like a zone plate) generate
+    a first guess of the probe that is very close to the focal spot of
+    the probe beam.
+
+    If the probe is simulated in higher resolution than the detector,
+    a common occurence, these undefined pixels are set to zero for the
+    purposes of defining the guess
+
+    We make a small tweak to this procedure to lower the central pixel of
+    the probe generated this way, which can often overwhelm the rest of the
+    probe if there is significant noise on the detector
+    
+    
+    
+    """
+    intensities = np.zeros(shape)
+    for params, im in dataset:
+        intensities[det_slice] += im.cpu().numpy()
+    intensities /= len(dataset)
+        
+    probe_fft = cmath.complex_to_torch(np.sqrt(intensities))
+
+    probe_guess = cmath.torch_to_complex(inverse_far_field(probe_fft))
+
+    # Now we remove the central pixel
+    
+    center = np.array(probe_guess.shape) // 2
+    
+    probe_guess[center[0], center[1]]=np.mean([
+        probe_guess[center[0]-1, center[1]],
+        probe_guess[center[0]+1, center[1]],
+        probe_guess[center[0], center[1]-1],
+        probe_guess[center[0], center[1]+1]])
+
+    return cmath.complex_to_torch(probe_guess)
 
     

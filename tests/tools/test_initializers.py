@@ -168,6 +168,22 @@ def test_gaussian_probe(ptycho_cxi_1):
     
     assert np.allclose(probe, normalization_2*np_probe)
 
-  
-    
+
+def test_SHARP_style_probe(ptycho_cxi_1):
+    # This code will probably change and honestly it doesn't need to
+    # be exactly the final thing. So just test that the function doesn't
+    # throw an error.
+    dataset = Ptycho_2D_Dataset.from_cxi(ptycho_cxi_1[0])
+    det_basis = t.Tensor(dataset.detector_geometry['basis'])
+    det_shape = t.Size(dataset.patterns.shape[-2:])
+    wavelength = dataset.wavelength
+    distance = dataset.detector_geometry['distance']
+
+    basis, shape, det_slice = initializers.exit_wave_geometry(det_basis,
+                                                              det_shape,
+                                                              wavelength,
+                                                              distance)
+
+    probe = initializers.SHARP_style_probe(dataset, shape, det_slice)
+    assert probe.shape == t.Size([256,256,2])
     
