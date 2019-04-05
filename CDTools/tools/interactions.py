@@ -3,6 +3,8 @@ from __future__ import division, print_function, absolute_import
 from CDTools.tools.cmath import *
 import torch as t
 
+
+
 #
 # This file will host tools to turn various kinds of model information
 # (probe, 2D object, 3D object, etc) into exit waves leaving the sample
@@ -31,11 +33,11 @@ def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0,0,1]))
     
     projection_1 = t.Tensor([[1,0,0],
                              [0,1,0],
-                             [0,0,0]])
+                             [0,0,0]]).to(device=basis.device,dtype=basis.dtype)
     projection_2 = t.inverse(t.Tensor([[1,0,0],
                                        [0,1,0],
                                        -surface_normal/
-                                       surface_normal[2]]))
+                                       surface_normal[2]])).to(device=basis.device,dtype=basis.dtype)
     basis_vectors_inv = t.pinverse(basis)
     projection = t.mm(basis_vectors_inv,
                       t.mm(projection_2,projection_1))

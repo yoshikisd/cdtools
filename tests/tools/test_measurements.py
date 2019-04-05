@@ -52,7 +52,7 @@ def test_quadratic_background():
     np_result = np.abs(cmath.torch_to_complex(wavefields))**2 + background.numpy()**2
     det_slice = np.s_[3:,5:8]
 
-    result = measurements.quadratic_background(wavefields,background,
+    result = measurements.quadratic_background(wavefields,background[det_slice],
                                                detector_slice=det_slice,
                                                measurement=measurements.intensity)
     assert t.allclose(result, t.tensor(np_result[(np.s_[:],)+det_slice]))

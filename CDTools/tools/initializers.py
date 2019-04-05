@@ -35,17 +35,25 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
         torch.Tensor : The exit wave's shape
         tuple(slice) : The slice corresponding to the physical detector
     """
-    det_shape = t.Tensor(tuple(det_shape))
+    
+    det_shape = t.Tensor(tuple(det_shape)).to(t.int32)
+    det_basis = t.Tensor(det_basis)
     # First, set the center if it's not already specified
     # This definition matches the center pixel of an fftshifted array
     if center is None:
         center = det_shape // 2
-
+    else:
+        center = t.Tensor(center).to(t.int32)
+    
     # Then, calculate the required detector size from the centering
     # This is a bit opaque but was worth doing accurately
     min_left = center * 2
     min_right = (det_shape - center) * 2 - 1
     full_shape = t.max(min_left,min_right).to(t.int32) + 2 * padding
+
+    # In some edge cases this shape can be smaller than the detector shape
+    full_shape = t.max(full_shape, det_shape)
+    
     if opt_for_fft:
         full_shape = t.Tensor([next_fast_len(dim) for dim in full_shape]).to(t.int32)
     # Then, generate a slice that pops the actual detector from the full
@@ -64,7 +72,7 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
     basis_dirs = det_basis / t.norm(det_basis, dim=0)
     real_space_basis = basis_dirs * wavelength * distance / \
         (full_shape.to(t.float32) * t.norm(det_basis,dim=0))
-
+    
     # Finally, convert the shape back to a torch.Size
     full_shape = t.Size([dim for dim in full_shape])
     
@@ -83,23 +91,27 @@ def calc_object_setup(probe_shape, translations, padding=0):
     correspond to (padding,padding)
     
     Args:
-        probe_shape (t.Size) : The size of the probe array
-        translations (t.Tensor) : Jx2 stack of pixel-valued (i,j) translations
+        probe_shape (torch.Size) : The size of the probe array
+        translations (torch.Tensor) : Jx2 stack of pixel-valued (i,j) translations
         padding (int) : Optional, the size of an extra border to include
+    Returns:
+        torch.Size : required size of object array
+        torch.Tensor : minimum pixel-valued translation
     """
+    
     # First we look at the translations to find the minimum translation
     # and the range of translations
     min_translation = t.min(translations, dim=0)[0]
     translation_range = t.max(translations, dim=0)[0] - min_translation
-
+    
     # Calculate the required shape
     translation_range = t.ceil(translation_range).numpy().astype(np.int32)
     shape = translation_range + np.array(probe_shape) + 2 * padding
     shape = t.Size(shape)
-
+    
     # And the minimum translation
     min_translation = min_translation - padding
-
+    
     return shape, min_translation
     
     
@@ -213,19 +225,23 @@ def SHARP_style_probe(dataset, shape, det_slice):
     We make a small tweak to this procedure to lower the central pixel of
     the probe generated this way, which can often overwhelm the rest of the
     probe if there is significant noise on the detector
-    
-    
-    
+        
+    Args:
+        dataset (Ptycho_2D_Dataset) : The dataset to work from
+        shape (torch.Size) : The size of the probe array to simulate
+        det_slice (slice) : A slice or tuple of slices corresponding to the detector region in Fourier space
     """
+
+    
     intensities = np.zeros(shape)
     for params, im in dataset:
         intensities[det_slice] += im.cpu().numpy()
     intensities /= len(dataset)
-        
+
     probe_fft = cmath.complex_to_torch(np.sqrt(intensities))
-
+    
     probe_guess = cmath.torch_to_complex(inverse_far_field(probe_fft))
-
+    
     # Now we remove the central pixel
     
     center = np.array(probe_guess.shape) // 2
@@ -235,7 +251,7 @@ def SHARP_style_probe(dataset, shape, det_slice):
         probe_guess[center[0]+1, center[1]],
         probe_guess[center[0], center[1]-1],
         probe_guess[center[0], center[1]+1]])
-
+    
     return cmath.complex_to_torch(probe_guess)
 
     

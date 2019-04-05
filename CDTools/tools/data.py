@@ -123,8 +123,16 @@ def get_sample_info(cxi_file):
     
     s1 = cxi_file['entry_1/sample_1']
     metadata_attrs = ['name','description','unit_cell_group']
-    metadata = {attr: str(s1[attr][()].decode()) for attr in metadata_attrs
-                if attr in s1}
+
+    metadata = {}
+    for attr in metadata_attrs:
+        # Somehow different ways of saving can lead to different ways to
+        # decode it here, so we try both
+        if attr in s1:
+            try:
+                metadata[attr] = str(s1[attr][()].decode())
+            except AttributeError as e:
+                metadata[attr] = str(np.array(s1[attr][:])[0].decode())
     
     float_attrs = ['concentration',
                    'mass',
@@ -276,7 +284,7 @@ def get_mask(cxi_file):
         return None
 
 
-def get_data(cxi_file):
+def get_data(cxi_file, cut_zeroes = True):
     """Returns an array with the full stack of detector data defined in the cxi file object
 
     This function will make sure to check all the various places that it's
@@ -306,6 +314,10 @@ def get_data(cxi_file):
     else:
         raise KeyError('Data is not defined within cxi file')
     data = np.array(cxi_file[pull_from]).astype(np.float32)
+
+    if cut_zeroes:
+        data[data < 0] = 0
+        
     if 'axes' in cxi_file[pull_from].attrs:
         axes = str(cxi_file[pull_from].attrs['axes'].decode()).split(':')
         axes = [axis.strip().lower() for axis in axes]
