@@ -4,6 +4,7 @@ import torch as t
 from CDTools.tools import cmath
 
 
+
 def centroid(im, dims=2):
     """Returns the centroid of an image or a stack of images
     
@@ -29,8 +30,6 @@ def centroid(im, dims=2):
                  for index in indices]
 
     return t.stack(centroids,dim=-1)
-    
-
 
 
 def centroid_sq(im, dims=2, comp=False):
@@ -57,4 +56,47 @@ def centroid_sq(im, dims=2, comp=False):
 
     return centroid(im_sq, dims=dims)
 
+    
+def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
+    """Calculates the subpixel shift between two images by maximizing the autocorrelation
+    
+    This function only searches in a 2 pixel by 2 pixel box around the
+    specified search_around parameter. The calculation is done using the
+    approach outlined in "﻿Efficient subpixel image registration algorithms",
+    Optics Express (2008) by Manual Guizar-Sicarios et al.
+
+    Args:
+        im1 (t.Tensor): The first real or complex-valued torch tensor
+        im2 (t.Tensor): The second real or complex-valued torch tensor
+        search_around (array_like) : Default (0,0), the shift to search in the vicinity of
+        resolution (int): Default is 10, the resolution to calculate to in units of 1/n
+    """
+
+def find_pixel_shift(im1, im2):
+    """Calculates the integer pixel shift between two images by maximizing the autocorrelation
+
+    This function simply takes the circular correlation with an FFT and
+    returns the position of the maximum of that correlation
+    
+    Args:
+        im1 (t.Tensor): The first real or complex-valued torch tensor
+        im2 (t.Tensor): The second real or complex-valued torch tensor
+        search_around (array_like) : Default (0,0), the shift to search in the vicinity of
+        resolution (int): Default is 10, the resolution to calculate to in units of 1/n
+    """
+    pass
+
+
+def find_shift(im1, im2, resolution=10):
+    """Calculates the shift between two images by maximizing the autocorrelation
+
+    This function starts by calculating the maximum shift to integer
+    pixel resolution, and then searchers the nearby area to calculate a
+    subpixel shift
+    
+    Args:
+        im1 (t.Tensor): The first real or complex-valued torch tensor
+        im2 (t.Tensor): The second real or complex-valued torch tensor
+        resolution (int): Default is 10, the resolution to calculate to in units of 1/n
+    """
     
