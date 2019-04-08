@@ -13,6 +13,18 @@ import datetime
 #
 #
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--plot", action="store", default=False, help="plot: True to show test plots"
+    )
+
+
+@pytest.fixture
+def show_plot(request):
+    return request.config.getoption("--plot")
+
+
+
 @pytest.fixture(scope='module')
 def ptycho_cxi_1():
     """Creates an example file for CXI ptychography. This file is defined
@@ -20,12 +32,12 @@ def ptycho_cxi_1():
     defined. It will return both a dictionary describing what is expected
     to be loaded and a file with the data stored in it.
     """
-    
+
     expected = {}
     f = h5py.File('ptycho_cxi_1',driver='core',backing_store=False)
 
     # Start by defining the basic structure
-    f.create_dataset('cxi_version', data=150)  
+    f.create_dataset('cxi_version', data=150)
     f.create_dataset('number_of_entries',data=1)
 
     # Then define a bunch of metadata for entry_1
@@ -74,7 +86,7 @@ def ptycho_cxi_1():
     energy = np.float32(1.3618e-16) #Joules, = 850 eV
     source1f['energy'] = energy
     expected['wavelength'] = np.float32(1.9864459e-25) / energy
-    source1f['wavelength'] = expected['wavelength'] 
+    source1f['wavelength'] = expected['wavelength']
 
     d1f = i1f.create_group('detector_1')
     expected['detector'] = {}
@@ -96,7 +108,7 @@ def ptycho_cxi_1():
     d1f.create_dataset('mask',data=mask)
 
     data1f = e1f.create_group('data_1')
-    
+
     data = np.random.rand(100,256,256).astype(np.float32)
     expected['data'] = data
     d1f.create_dataset('data',data=data)
@@ -111,7 +123,7 @@ def ptycho_cxi_1():
     data1f['translation'] = h5py.SoftLink('/entry_1/sample_1/geometry_1/translation')
     d1f['translation'] = h5py.SoftLink('/entry_1/sample_1/geometry_1/translation')
     expected['translations'] = -translations
-    
+
     yield f, expected
 
     f.close()
@@ -131,12 +143,12 @@ def ptycho_cxi_2():
     * Is missing many allowed metadata attributes
 
     """
-    
+
     expected = {}
     f = h5py.File('ptycho_cxi_2',driver='core',backing_store=False)
 
     # Start by defining the basic structure
-    f.create_dataset('cxi_version', data=150)  
+    f.create_dataset('cxi_version', data=150)
     f.create_dataset('number_of_entries',data=1)
 
     # Then define a bunch of metadata for entry_1
@@ -158,7 +170,7 @@ def ptycho_cxi_2():
 
     energy = np.float32(1.3618e-16) #Joules, = 850 eV
     expected['wavelength'] = np.float32(1.9864459e-25) / energy
-    source1f['wavelength'] = expected['wavelength'] 
+    source1f['wavelength'] = expected['wavelength']
 
     d1f = i1f.create_group('detector_1')
     expected['detector'] = {}
@@ -176,7 +188,7 @@ def ptycho_cxi_2():
     expected['mask'] = None
 
     data1f = e1f.create_group('data_1')
-    
+
     data = np.random.rand(100,256,256).astype(np.float32)
     expected['data'] = data
     d1f.create_dataset('data',data=data)
@@ -187,7 +199,7 @@ def ptycho_cxi_2():
     translations = np.arange(300).reshape((100,3)).astype(np.float32)
     g1f.create_dataset('translation',data=translations)
     expected['translations'] = -translations
-    
+
     yield f, expected
 
     f.close()
@@ -206,12 +218,12 @@ def ptycho_cxi_3():
     * Defines the sample to detector distance but no corner location
     * Is missing some of the allowed metadata
     """
-    
+
     expected = {}
     f = h5py.File('ptycho_cxi_3',driver='core',backing_store=False)
 
     # Start by defining the basic structure
-    f.create_dataset('cxi_version', data=150)  
+    f.create_dataset('cxi_version', data=150)
     f.create_dataset('number_of_entries',data=1)
 
     # Then define a bunch of metadata for entry_1
@@ -250,7 +262,7 @@ def ptycho_cxi_3():
     d1f.create_dataset('mask',data=mask)
 
     data1f = e1f.create_group('data_1')
-    
+
     data = np.random.rand(100,256,256).astype(np.float32)
     expected['data'] = data
     data1f.create_dataset('data',data=data)
@@ -261,7 +273,7 @@ def ptycho_cxi_3():
     translations = np.arange(300).reshape((100,3)).astype(np.float32)
     data1f.create_dataset('translation',data=translations)
     expected['translations'] = -translations
-    
+
     yield f, expected
 
     f.close()
@@ -280,4 +292,3 @@ def test_ptycho_cxis(ptycho_cxi_1, ptycho_cxi_2, ptycho_cxi_3):
     on the cxi files.
     """
     return [ptycho_cxi_1, ptycho_cxi_2, ptycho_cxi_3]
-    
