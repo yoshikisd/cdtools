@@ -34,8 +34,20 @@ def colorize(z):
     return hsv_to_rgb(np.dstack((h,s,v)))
 
 
-def plot_1d(im, **kwargs):
-    pass
+def plot_1d(arr, fig = None, **kwargs):
+    """Simple 1D plotter
+
+    Args:
+        im (numpy array) : A 1D array with dimensions (,N)
+        fig (matplotlib.figure.Figure) : A matplotlib figure to use to plot. If None,
+        a new figure is created with an Axes subplot at 111.
+        **kwargs: Can be used to set any keyword arguments for the matplotlib.axes.Axes class
+        (see https://matplotlib.org/api/axes_api.html#the-axes-class)
+    """
+    if fig is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, **kwargs)
+    plt.scatter(np.arange(arr.shape[-1]), arr)
 
 def plot_amplitude(im, fig = None, basis = np.array([[0,-1], [-1,0], [0,0]]), **kwargs):
     """ Plots the amplitude of a complex Tensor or numpy array with dimensions NxMx2.
@@ -43,7 +55,7 @@ def plot_amplitude(im, fig = None, basis = np.array([[0,-1], [-1,0], [0,0]]), **
         im (t.Tensor) : An image with dimensions NxMx2.
         fig (matplotlib.figure.Figure) : A matplotlib figure to use to plot. If None,
         a new figure is created with an Axes subplot at 111.
-        basis (array-like) : The probe basis, used to put the axis labels in real space units.
+        basis (numpy array) : The probe basis, used to put the axis labels in real space units.
         Should have dimensions 3x2
         **kwargs: Can be used to set any keyword arguments for the matplotlib.axes.Axes class
         (see https://matplotlib.org/api/axes_api.html#the-axes-class)
@@ -66,7 +78,7 @@ def plot_phase(im, fig = None, basis =  np.array([[0,-1], [-1,0], [0,0]]), **kwa
         im (t.Tensor) : An image with dimensions NxMx2.
         fig (matplotlib.figure.Figure) : A matplotlib figure to use to plot. If None,
         a new figure is created with an Axes subplot at 111.
-        basis (array-like) : The probe basis, used to put the axis labels in real space units.
+        basis (numpy array) : The probe basis, used to put the axis labels in real space units.
         Should have dimensions 3x2
         **kwargs: Can be used to set any keyword arguments for the matplotlib.axes.Axes class
         (see https://matplotlib.org/api/axes_api.html#the-axes-class)
@@ -94,7 +106,7 @@ def plot_colorized(im, fig = None, basis =  np.array([[0,-1], [-1,0], [0,0]]), *
         im (t.Tensor) : An image with dimensions NxMx2.
         fig (matplotlib.figure.Figure) : A matplotlib figure to use to plot. If None,
         a new figure is created with an Axes subplot at 111.
-        basis (array-like) : The probe basis, used to put the axis labels in real space units.
+        basis (numpy array) : The probe basis, used to put the axis labels in real space units.
         Should have dimensions 3x2
         **kwargs: Can be used to set any keyword arguments for the matplotlib.axes.Axes class
         (see https://matplotlib.org/api/axes_api.html#the-axes-class)
