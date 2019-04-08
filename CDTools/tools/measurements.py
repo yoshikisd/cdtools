@@ -86,5 +86,5 @@ def quadratic_background(wavefield, background, detector_slice=None, measurement
         return measurement(wavefield) + background**2
     else:
         return measurement(wavefield, detector_slice) \
-            + background[detector_slice]**2
+            + background**2
 

@@ -33,7 +33,7 @@ def far_field(wavefront):
         torch.Tensor : The JxNxMx2 propagated wavefield
     """
 
-    return fftshift(t.fft(wavefront, 2, normalized=True))
+    return fftshift(t.fft(ifftshift(wavefront), 2, normalized=True))
 
 
 def inverse_far_field(wavefront):
@@ -54,7 +54,7 @@ def inverse_far_field(wavefront):
     Returns:
         torch.Tensor : The JxNxMx2 exit wavefield
     """
-    return t.ifft(ifftshift(wavefront), 2, normalized=True)
+    return fftshift(t.ifft(ifftshift(wavefront), 2, normalized=True))
 
 
 def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, **kwargs):

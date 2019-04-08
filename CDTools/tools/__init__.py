@@ -7,4 +7,6 @@ from CDTools.tools import image_processing
 from CDTools.tools import initializers
 from CDTools.tools import losses
 from CDTools.tools import projectors
+from CDTools.tools import interactions
 from CDTools.tools import propagators
+from CDTools.tools import measurements
