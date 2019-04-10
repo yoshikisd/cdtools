@@ -5,7 +5,7 @@ import pytest
 import numpy as np
 import torch as t
 
-from CDTools.tools import image_processing, cmath
+from CDTools.tools import image_processing, cmath, initializers, interactions
 from scipy import ndimage
 
 
@@ -63,8 +63,30 @@ def test_find_pixel_shift():
 
 
 def test_find_subpixel_shift():
-    pass
+    # We can do this by creating a test probe and a test object
+    test_probe = t.rand((70,70,2))
+    test_obj = t.ones((300,300,2))
 
+    shift = t.tensor((0.8,0.75))
+    
+    im = interactions.ptycho_2D_sinc(test_probe, test_obj, shift)
 
+    retrieved_shift = image_processing.find_subpixel_shift(im, test_probe, search_around=(0,0), resolution=50)
+    # tolerance of 0.03 on this measurement
+    assert t.all(t.abs(shift - retrieved_shift) < 0.03)
+
+    
 def test_find_shift():
-    pass
+
+    # We can do this by creating a test probe and a test object
+    test_probe = t.rand((200,200,2))
+    test_obj = t.ones((300,300,2))
+
+    shift = t.tensor((0.8,0.75))
+    
+    im = interactions.ptycho_2D_sinc(test_probe, test_obj, shift)[:-40,:-6]
+
+    retrieved_shift = image_processing.find_shift(im, test_probe[40:,6:], resolution=50)
+    # tolerance of 0.03 on this measurement
+    assert t.all(t.abs(shift + t.Tensor((40,6)) - retrieved_shift) < 0.03)
+    
