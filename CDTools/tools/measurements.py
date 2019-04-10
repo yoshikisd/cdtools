@@ -12,7 +12,7 @@ import numpy as np
 __all__ = ['intensity', 'incoherent sum', 'quadratic_background']
 
 
-def intensity(wavefield, detector_slice=None):
+def intensity(wavefield, detector_slice=None, epsilon=1e-7):
     """Returns the intensity of a wavefield
     
     The intensity is defined as the magnitude squared of the
@@ -27,15 +27,15 @@ def intensity(wavefield, detector_slice=None):
         torch.Tensor : A real MxN array storing the wavefield's intensities
     """
     if detector_slice is None:
-        return cmath.cabssq(wavefield)
+        return cmath.cabssq(wavefield) + epsilon
     else:
         if wavefield.dim() == 3:
-            return cmath.cabssq(wavefield[detector_slice])
+            return cmath.cabssq(wavefield[detector_slice]) + epsilon
         else:
-            return cmath.cabssq(wavefield[(np.s_[:],) + detector_slice])
+            return cmath.cabssq(wavefield[(np.s_[:],) + detector_slice]) + epsilon
 
 
-def incoherent_sum(wavefields, detector_slice=None):
+def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7):
     """Returns the incoherent sum of the intensities of the wavefields
     
     The intensity is defined as the sum of the magnitudes squared of
@@ -56,16 +56,16 @@ def incoherent_sum(wavefields, detector_slice=None):
     """
     # This syntax just adds an axis to the slice to preserve the J direction
     if detector_slice is None:
-        return t.sum(cmath.cabssq(wavefields),dim=-3)
+        return t.sum(cmath.cabssq(wavefields),dim=-3) + epsilon
     else:
         if wavefields.dim() == 4:
-            return t.sum(cmath.cabssq(wavefields[(np.s_[:],)+detector_slice]),dim=-3)
+            return t.sum(cmath.cabssq(wavefields[(np.s_[:],)+detector_slice]),dim=-3) + epsilon
         else:
-            return t.sum(cmath.cabssq(wavefields[(np.s_[:],np.s_[:])+detector_slice]),dim=-3)
+            return t.sum(cmath.cabssq(wavefields[(np.s_[:],np.s_[:])+detector_slice]),dim=-3) + epsilon
                  
 
 
-def quadratic_background(wavefield, background, detector_slice=None, measurement=intensity):
+def quadratic_background(wavefield, background, detector_slice=None, measurement=intensity, epsilon=1e-7):
     """Returns the intensity of a wavefield plus a background
     
     The intensity is calculated via the given measurment function 
@@ -83,8 +83,8 @@ def quadratic_background(wavefield, background, detector_slice=None, measurement
         torch.Tensor : A real MxN array storing the wavefield's intensities
     """
     if detector_slice is None:
-        return measurement(wavefield) + background**2
+        return measurement(wavefield, epsilon=epsilon) + background**2
     else:
-        return measurement(wavefield, detector_slice) \
+        return measurement(wavefield, detector_slice, epsilon=epsilon) \
             + background**2
 

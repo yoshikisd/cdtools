@@ -11,7 +11,7 @@ class SimplePtycho(CDIModel):
     def __init__(self, wavelength, detector_geometry,
                  probe_basis, detector_slice,
                  probe_guess, obj_guess, min_translation = t.Tensor([0,0]),
-                 background = None):
+                 mask=None):
 
         super(SimplePtycho,self).__init__()
         self.wavelength = t.Tensor([wavelength])
@@ -28,6 +28,10 @@ class SimplePtycho(CDIModel):
 
         self.probe_basis = t.Tensor(probe_basis)
         self.detector_slice = detector_slice
+        if mask is None:
+            self.mask = None
+        else:
+            self.mask = t.ByteTensor(mask)
 
         # We rescale the probe here so it learns at the same rate as the
         # object
@@ -68,10 +72,16 @@ class SimplePtycho(CDIModel):
 
         # Finally, initialize the probe and  object using this information
         probe = tools.initializers.SHARP_style_probe(dataset, probe_shape, det_slice)
+        
         obj = t.ones(obj_size+(2,))
         det_geo = dataset.detector_geometry
-        
-        return cls(wavelength, det_geo, probe_basis, det_slice, probe, obj, min_translation=min_translation)
+
+        if hasattr(dataset, 'mask') and dataset.mask is not None:
+            mask = dataset.mask.to(t.uint8)
+        else:
+            mask = None
+            
+        return cls(wavelength, det_geo, probe_basis, det_slice, probe, obj, min_translation=min_translation, mask=mask)
                    
     
     def interaction(self, index, translations):
@@ -81,6 +91,7 @@ class SimplePtycho(CDIModel):
         return tools.interactions.ptycho_2D_round(self.probe_norm * self.probe,
                                                   self.obj,
                                                   pix_trans)
+
 
     def forward_propagator(self, wavefields):
         return tools.propagators.far_field(wavefields)
@@ -95,8 +106,8 @@ class SimplePtycho(CDIModel):
                                             detector_slice=self.detector_slice)
     
 
-    def loss(self, sim_data, real_data):
-        return tools.losses.amplitude_mse(real_data, sim_data)
+    def loss(self, sim_data, real_data, mask=None):
+        return tools.losses.amplitude_mse(real_data, sim_data,mask=mask)
 
     
     def to(self, *args, **kwargs):
@@ -111,6 +122,9 @@ class SimplePtycho(CDIModel):
         if hasattr(det_geo, 'corner'):
             det_geo['corner'] = det_geo['corner'].to(*args,**kwargs)
 
+        if self.mask is not None:
+            self.mask = self.mask.to(*args, **kwargs)
+        
         self.min_translation = self.min_translation.to(*args,**kwargs)
         self.probe_basis = self.probe_basis.to(*args,**kwargs)
         self.probe_norm = self.probe_norm.to(*args,**kwargs)

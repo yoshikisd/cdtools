@@ -101,7 +101,7 @@ class CDIModel(t.nn.Module):
             loss = 0
             N = 0
             for inputs, patterns in data_loader:
-                N += patterns.shape[0]
+                N += 1
                 
                 def closure():
                     optimizer.zero_grad()
@@ -138,3 +138,4 @@ class CDIModel(t.nn.Module):
 
     
 from CDTools.models.simple_ptycho import SimplePtycho
+from CDTools.models.fancy_ptycho import FancyPtycho

@@ -2,6 +2,7 @@ from __future__ import division, print_function, absolute_import
 
 from CDTools.tools.cmath import *
 import torch as t
+import numpy as np
 
 
 
@@ -178,3 +179,64 @@ def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
 
 
 #TODO: Implement a sinc-interpolated shift using a fourier space shifting op
+def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10):
+    """Returns a stack of exit waves accounting for subpixel shifts
+ 
+    This function returns a collection of exit waves, with the first
+    dimension as the translation index and the final dimensions
+    corresponding to the detector. The exit waves are calculated by
+    shifting the probe with each translation in turn, using sinc
+    interpolation (done via multiplication with a complex exponential
+    in Fourier space)
+
+    If shift_probe is True, it applies the subpixel shift to the probe,
+    otherwise the subpixel shift is applied to the object
+
+    Args:
+        probe (torch.Tensor) : An MxL probe function for the exit waves
+        object (torch.Tensor) : The object function to be probed
+        translations (torch.Tensor) : The Nx2 array of translations to simulate
+        shift_probe (bool) : Whether to subpixel shift the probe or object
+        padding (int) : Default 10, if shifting the object, the padding to apply to the object to avoid circular shift effects
+    Returns:
+        torch.Tensor : An NxMxL tensor of the calculated exit waves
+    """
+    single_translation = False
+    if translations.dim() == 1:
+        translations = translations[None,:]
+        single_translation = True
+        
+    # Separate the translations into a part that chooses the window
+    # And a part that defines the windowing function
+    integer_translations = t.floor(translations)
+    subpixel_translations = translations - integer_translations
+    integer_translations = integer_translations.to(dtype=t.int32)
+    
+    exit_waves = []
+    if shift_probe:
+        i = t.arange(probe.shape[0]) - probe.shape[0]//2
+        j = t.arange(probe.shape[1]) - probe.shape[1]//2
+        I,J = t.meshgrid(i,j)
+        I = 2 * np.pi * I.to(t.float32) / probe.shape[0]
+        J = 2 * np.pi * I.to(t.float32) / probe.shape[1]
+        I = I.to(dtype=probe.dtype,device=probe.device)
+        J = J.to(dtype=probe.dtype,device=probe.device)
+        
+        for tr, sp in zip(integer_translations,
+                          subpixel_translations):
+            fft_probe = fftshift(t.fft(probe, 2))
+            shifted_fft_probe = cmult(fft_probe, expi(-sp[0]*I - sp[1]*J))
+            shifted_probe = t.ifft(ifftshift(shifted_fft_probe),2)
+
+            obj_slice = obj[tr[0]:tr[0]+probe.shape[0],
+                            tr[1]:tr[1]+probe.shape[1]]
+
+            exit_waves.append(cmult(shifted_probe, obj_slice))
+        
+    else:
+        raise NotImplementedError('Object shift not yet implemented')
+
+    if single_translation:
+        return exit_waves[0]
+    else:
+        return t.stack(exit_waves)

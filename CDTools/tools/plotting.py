@@ -49,6 +49,7 @@ def plot_1d(arr, fig = None, **kwargs):
         ax = fig.add_subplot(111, **kwargs)
     plt.scatter(np.arange(arr.shape[-1]), arr)
 
+    
 def plot_amplitude(im, fig = None, basis = np.array([[0,-1], [-1,0], [0,0]]), **kwargs):
     """ Plots the amplitude of a complex Tensor or numpy array with dimensions NxMx2.
     Args:
@@ -71,6 +72,7 @@ def plot_amplitude(im, fig = None, basis = np.array([[0,-1], [-1,0], [0,0]]), **
     plt.imshow(absolute, cmap = 'viridis', extent = [0, absolute.shape[-1]*basis_norm[1], 0, absolute.shape[-2]*basis_norm[0]])
     plt.colorbar()
     return fig
+
 
 def plot_phase(im, fig = None, basis =  np.array([[0,-1], [-1,0], [0,0]]), **kwargs):
     """ Plots the phase of a complex Tensor or numpy array with dimensions NxMx2.
@@ -96,6 +98,7 @@ def plot_phase(im, fig = None, basis =  np.array([[0,-1], [-1,0], [0,0]]), **kwa
     except: plt.imshow(phase, cmap = 'hsv', extent = [0, phase.shape[-1]*basis_norm[1], 0, phase.shape[-2]*basis_norm[0]])
     plt.colorbar()
     return fig
+
 
 def plot_colorized(im, fig = None, basis =  np.array([[0,-1], [-1,0], [0,0]]), **kwargs):
     """ Plots the colorized version of a complex Tensor or numpy array with dimensions NxMx2.

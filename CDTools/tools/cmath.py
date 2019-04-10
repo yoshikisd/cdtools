@@ -13,7 +13,7 @@ import torch as t
 
 
 __all__ = ['complex_to_torch','torch_to_complex','cabssq','cabs','cconj',
-           'cmult', 'cdiv', 'cphase', 'fftshift', 'ifftshift']
+           'cmult', 'cdiv', 'cphase', 'fftshift', 'ifftshift','expi']
 
 
 #
@@ -239,3 +239,17 @@ def ifftshift(array,dims=None):
         array = t.cat((array.narrow(dim,cut_to,cut_len),
                        array.narrow(dim,0,cut_to)), dim)
     return array
+
+
+def expi(array):
+    """Returns a complex-format array for exp(i* (real array))
+    
+    Expects the input to be in the form of a real-valued array
+
+    Args:
+        array (torch.Tensor) : An array to be exponentiated
+    
+    Returns:
+        torch.Tensor : A complex-format array
+    """
+    return t.stack((t.cos(array),t.sin(array)),dim=-1)

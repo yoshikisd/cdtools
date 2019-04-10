@@ -38,3 +38,33 @@ def test_centroid_sq():
                     for im in np_ims]
     centroids = image_processing.centroid_sq(ims, comp=True)
     assert t.allclose(centroids, t.Tensor(np.array(sp_centroids)))
+
+
+def test_find_pixel_shift():
+
+    # Test two real ims
+    big_im = t.rand((30,70))
+    im1 = big_im[3:,:-20]
+    im2 = big_im[:-3,20:]
+    assert t.all(image_processing.find_pixel_shift(im1,im2) == t.LongTensor([-3,20]))
+
+    # Test a real and complex im
+    big_im = t.rand((30,70))
+    im1 = t.stack((big_im[:-5,10:],t.zeros_like(big_im[:-5,10:])),dim=-1)
+    im2 = big_im[5:,:-10]
+    assert t.all(image_processing.find_pixel_shift(im1,im2) == t.LongTensor([5,-10]))
+    assert t.all(image_processing.find_pixel_shift(im2,im1) == t.LongTensor([-5,10]))
+    
+    # Test two complex ims
+    big_im = t.rand((45,45,2))
+    im1 = big_im[:-5,:-4]
+    im2 = big_im[5:,4:]
+    assert t.all(image_processing.find_pixel_shift(im1,im2) == t.LongTensor([5,4]))
+
+
+def test_find_subpixel_shift():
+    pass
+
+
+def test_find_shift():
+    pass

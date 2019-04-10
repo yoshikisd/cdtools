@@ -71,12 +71,16 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
         search_around (array_like) : Default (0,0), the shift to search in the vicinity of
         resolution (int): Default is 10, the resolution to calculate to in units of 1/n
     """
+    pass
 
+    
 def find_pixel_shift(im1, im2):
     """Calculates the integer pixel shift between two images by maximizing the autocorrelation
 
     This function simply takes the circular correlation with an FFT and
-    returns the position of the maximum of that correlation
+    returns the position of the maximum of that correlation. This corresponds
+    to the amount that im1 would have to be shifted by to line up best with
+    im2
 
     Args:
         im1 (t.Tensor): The first real or complex-valued torch tensor
@@ -84,7 +88,21 @@ def find_pixel_shift(im1, im2):
         search_around (array_like) : Default (0,0), the shift to search in the vicinity of
         resolution (int): Default is 10, the resolution to calculate to in units of 1/n
     """
-    pass
+    # If last dimension is not 2, then convert to a complex tensor now
+    if im1.shape[-1] != 2:
+        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
+    if im2.shape[-1] != 2:
+        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
+
+    
+    cor = cmath.cabs(t.ifft(cmath.cmult(t.fft(im1,2),
+                                        cmath.cconj(t.fft(im2,2))),2))
+    
+    sh = t.tensor(cor.shape).to(device=im1.device)
+    cormax = t.tensor([t.argmax(cor) // sh[1],
+                       t.argmax(cor) % sh[1]]).to(device=im1.device)
+    return (cormax + sh // 2) % sh - sh//2
+
 
 
 def find_shift(im1, im2, resolution=10):
@@ -99,3 +117,9 @@ def find_shift(im1, im2, resolution=10):
         im2 (t.Tensor): The second real or complex-valued torch tensor
         resolution (int): Default is 10, the resolution to calculate to in units of 1/n
     """
+    integer_shift = find_pixel_shift(im1,im2)
+    subpixel_shift = find_subpixel_shift(im1, im2, search_around=integer_shift,
+                                         resolution=resolution)
+
+    return subpixel_shift
+    
