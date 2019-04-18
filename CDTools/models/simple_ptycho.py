@@ -10,7 +10,7 @@ class SimplePtycho(CDIModel):
 
     def __init__(self, wavelength, detector_geometry,
                  probe_basis, detector_slice,
-                 probe_guess, obj_guess, min_translation = t.Tensor([0,0]),
+                 probe_guess, obj_guess, min_translation = [0,0],
                  mask=None):
 
         super(SimplePtycho,self).__init__()
@@ -36,7 +36,7 @@ class SimplePtycho(CDIModel):
         # We rescale the probe here so it learns at the same rate as the
         # object
         self.probe_norm = t.max(tools.cmath.cabs(probe_guess.to(t.float32)))
-        
+
         self.probe = t.nn.Parameter(probe_guess.to(t.float32)
                                     / self.probe_norm)
         self.obj = t.nn.Parameter(obj_guess.to(t.float32))
@@ -56,7 +56,7 @@ class SimplePtycho(CDIModel):
         dataset.get_as(*get_as_args[0],**get_as_args[1])
 
         center = tools.image_processing.centroid(t.sum(patterns,dim=0))
-        
+
         # Then, generate the probe geometry from the dataset
         ewg = tools.initializers.exit_wave_geometry
         probe_basis, probe_shape, det_slice =  ewg(det_basis,
@@ -64,7 +64,7 @@ class SimplePtycho(CDIModel):
                                                    wavelength,
                                                    distance,
                                                    center=center)
-        
+
         # Next generate the object geometry from the probe geometry and
         # the translations
         pix_translations = tools.interactions.translations_to_pixel(probe_basis, translations)
@@ -72,7 +72,7 @@ class SimplePtycho(CDIModel):
 
         # Finally, initialize the probe and  object using this information
         probe = tools.initializers.SHARP_style_probe(dataset, probe_shape, det_slice)
-        
+
         obj = t.ones(obj_size+(2,))
         det_geo = dataset.detector_geometry
 
@@ -80,10 +80,10 @@ class SimplePtycho(CDIModel):
             mask = dataset.mask.to(t.uint8)
         else:
             mask = None
-            
+
         return cls(wavelength, det_geo, probe_basis, det_slice, probe, obj, min_translation=min_translation, mask=mask)
-                   
-    
+
+
     def interaction(self, index, translations):
         pix_trans = tools.interactions.translations_to_pixel(self.probe_basis,
                                                              translations)
@@ -104,12 +104,12 @@ class SimplePtycho(CDIModel):
     def measurement(self, wavefields):
         return tools.measurements.intensity(wavefields,
                                             detector_slice=self.detector_slice)
-    
+
 
     def loss(self, sim_data, real_data, mask=None):
-        return tools.losses.amplitude_mse(real_data, sim_data,mask=mask)
+        return tools.losses.amplitude_mse(real_data, sim_data, mask=mask)
 
-    
+
     def to(self, *args, **kwargs):
         super(SimplePtycho, self).to(*args, **kwargs)
         self.wavelength = self.wavelength.to(*args,**kwargs)
@@ -124,13 +124,41 @@ class SimplePtycho(CDIModel):
 
         if self.mask is not None:
             self.mask = self.mask.to(*args, **kwargs)
-        
+
         self.min_translation = self.min_translation.to(*args,**kwargs)
         self.probe_basis = self.probe_basis.to(*args,**kwargs)
         self.probe_norm = self.probe_norm.to(*args,**kwargs)
-    
+
 
     def sim_to_dataset(self, args_list):
         pass
 
-    
+
+    def ePIE(iterations, dataset, beta = 1.0):
+        """Runs an ePIE reconstruction as described in `Maiden et al. (2017) <https://www.osapublishing.org/optica/abstract.cfm?uri=optica-4-7-736>`_.
+        Optional parameters are:
+
+        :arg ``iterations``: Controls the number of iterations run, defaults to 1.
+        :arg ``beta``: Algorithmic parameter described in Maiden's implementation of rPIE. Defaults to 0.15.
+        :arg ``probe``: Initial probe wavefunction.
+        :arg ``object``: Initial object wavefunction.
+        """
+        """def probe_update(exit_wave, exit_wave_corrected, probe, object, i):
+            return probe+tools.cmult(beta*(tools.cconj(object)/ \
+            t.max(tools.cabssq(object)))[self.translations[i][0]:self.translations[i][0]+self.shape[0],self.translations[i][1]:self.translations[i][1]+self.shape[1]], \
+            exit_wave_corrected-exit_wave)
+        def object_update(exit_wave, exit_wave_corrected, probe, object, i):
+            object[self.translations[i][0]:self.translations[i][0]+self.shape[0],self.translations[i][1]:self.translations[i][1]+self.shape[1]]\
+            +=tools.cmult(tools.cconj(probe)/t.max(tools.cabssq(probe)),exit_wave_corrected-exit_wave)
+            return object"""
+        with t.no_grad():
+            data_loader = torchdata.DataLoader(dataset, shuffle=True)
+            for it in range(iterations):
+                for translations, patterns in data_loader:
+                    translation = translations[1]
+                    probe = self.probe.clone()
+                    object = self.obj.clone()
+                    exit_wave = tools.cmult(probe, object[self.translations[i][0]:self.translations[i][0]+self.shape[0],self.translations[i][1]:self.translations[i][1]+self.shape[1]]).clone()
+                    exit_wave_corrected = projectors.modulus(exit_wave, self.data[i], self.propagator).clone()
+                    self.probe = probe_update(exit_wave, exit_wave_corrected, probe, object, i).clone()
+                    self.obj = object_update(exit_wave, exit_wave_corrected, probe, object, i).clone()

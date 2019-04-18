@@ -7,8 +7,9 @@ import h5py
 import torch as t
 import numpy as np
 
-filename = '../../../Projects/CSX_3_19/cxis/processed/114429_p.cxi'
-filename = '../../../Projects/CSX_3_19/cxis/processed/115145_p.cxi'
+filename = '../../Downloads/114429_p.cxi'
+#filename = '../../../Projects/CSX_3_19/cxis/processed/114429_p.cxi'
+#filename = '../../../Projects/CSX_3_19/cxis/processed/115145_p.cxi'
 
 
 
@@ -26,7 +27,10 @@ dataset.get_as(device='cuda')
 
 for loss in model.Adam_optimize(100, dataset):
     print(loss)
-    
+
+for loss in model.ePIE(100, dataset):
+    print(loss)
+
 from matplotlib import pyplot as plt
 
 plot_amplitude(model.probe)
@@ -34,4 +38,3 @@ plot_phase(model.probe)
 plot_amplitude(model.obj)
 plot_phase(model.obj)
 plt.show()
-

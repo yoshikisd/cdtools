@@ -21,7 +21,8 @@ def centroid(im, dims=2):
     Returns:
         t.Tensor : An (i,j) index or stack of indices
     """
-    indices = (t.arange(im.shape[-dims+i]).to(t.float32) for i in range(dims))
+    # For some reason this needs to be a list
+    indices = [t.arange(im.shape[-dims+i]).to(t.float32) for i in range(dims)]
     indices = t.meshgrid(*indices)
 
     use_dims = [-dims+i for i in range(dims)]
@@ -73,7 +74,7 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
     """
     pass
 
-    
+
 def find_pixel_shift(im1, im2):
     """Calculates the integer pixel shift between two images by maximizing the autocorrelation
 
@@ -94,10 +95,10 @@ def find_pixel_shift(im1, im2):
     if im2.shape[-1] != 2:
         im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
 
-    
+
     cor = cmath.cabs(t.ifft(cmath.cmult(t.fft(im1,2),
                                         cmath.cconj(t.fft(im2,2))),2))
-    
+
     sh = t.tensor(cor.shape).to(device=im1.device)
     cormax = t.tensor([t.argmax(cor) // sh[1],
                        t.argmax(cor) % sh[1]]).to(device=im1.device)
@@ -122,4 +123,3 @@ def find_shift(im1, im2, resolution=10):
                                          resolution=resolution)
 
     return subpixel_shift
-    
