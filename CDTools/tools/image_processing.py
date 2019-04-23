@@ -57,6 +57,33 @@ def centroid_sq(im, dims=2, comp=False):
     return centroid(im_sq, dims=dims)
 
 
+def sinc_subpixel_shift(im, shift):
+    """Performs a subpixel shift with sinc interpolation on the given tensor
+    
+    The subpixel shift is done circularly via a multiplication with a linear
+    phase mask in Fourier space.
+
+    Args:
+        im (torch.Tensor) : A complex-valued tensor to perform the subpixel shift on
+        shift (array_like) : A length-2 array_like object describing the shift to perform, in pixels
+
+    Returns:
+        (torch.Tensor) : The subpixel shifted tensor
+    """
+    i = t.arange(im.shape[0]) - im.shape[0]//2
+    j = t.arange(im.shape[1]) - im.shape[1]//2
+    I,J = t.meshgrid(i,j)
+    I = 2 * np.pi * I.to(t.float32) / im.shape[0]
+    J = 2 * np.pi * J.to(t.float32) / im.shape[1]
+    I = I.to(dtype=im.dtype,device=im.device)
+    J = J.to(dtype=im.dtype,device=im.device)
+
+    fft_im = cmath.fftshift(t.fft(im, 2))
+    shifted_fft_im = cmath.cmult(fft_im, cmath.expi(-shift[0]*I - shift[1]*J))
+    return t.ifft(cmath.ifftshift(shifted_fft_im),2)
+
+
+
 def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
     """Calculates the subpixel shift between two images by maximizing the autocorrelation
 
@@ -91,7 +118,8 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
     # Not sure if this is more or less stable than just the correlation
     # maximum - requires some testing
     cor = t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2)
-
+    
+    
     # Now, I need to shift the array to pull out a contiguous window
     # around the correlation maximum
     try:
@@ -149,7 +177,7 @@ def find_pixel_shift(im1, im2):
     # Not sure if this is more or less stable than just the correlation
     # maximum - requires some testing
     cor = cmath.cabs(t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2))
-    #cor = cmath.cabs(t.ifft(cor_fft,2))
+    
     
     sh = t.tensor(cor.shape).to(device=im1.device)
     cormax = t.tensor([t.argmax(cor) // sh[1],

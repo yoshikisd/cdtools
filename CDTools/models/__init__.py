@@ -123,19 +123,44 @@ class CDIModel(t.nn.Module):
             yield loss
             
 
-    def Adam_optimize(self, iterations, dataset, batch_size=15, lr=0.005):
+    def Adam_optimize(self, iterations, dataset, batch_size=15, lr=0.005, schedule=False):
 
         # Make a dataloader
         data_loader = torchdata.DataLoader(dataset, batch_size=batch_size,
                                            shuffle=True)
 
-        
         # Define the optimizer
         optimizer = t.optim.Adam(self.parameters(), lr = lr)
+
+        
+        # Define the scheduler
+        if schedule:
+            scheduler = t.optim.ReduceLROnPlateau(optimizer, factor=0.2)
+        else:
+            scheduler = None
+            
+        return self.AD_optimize(iterations, data_loader, optimizer, scheduler=scheduler)
+
+
+    def LBFGS_optimize(self, iterations, dataset, batch_size=None,
+                       lr=0.1,history_size=2):
+
+        # Make a dataloader
+        if batch_size is not None:
+            data_loader = torchdata.DataLoader(dataset, batch_size=batch_size,
+                                               shuffle=True)
+        else:
+            data_loader = torchdata.DataLoader(dataset)
+
+        
+        # Define the optimizer
+        optimizer = t.optim.LBFGS(self.parameters(),
+                                  lr = lr, history_size=history_size)
         
         return self.AD_optimize(iterations, data_loader, optimizer)
-    
+
 
     
 from CDTools.models.simple_ptycho import SimplePtycho
 from CDTools.models.fancy_ptycho import FancyPtycho
+from CDTools.models.incoherent_ptycho import IncoherentPtycho

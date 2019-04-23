@@ -10,3 +10,4 @@ from CDTools.tools import projectors
 from CDTools.tools import interactions
 from CDTools.tools import propagators
 from CDTools.tools import measurements
+from CDTools.tools import analysis

@@ -178,7 +178,7 @@ def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
 
 
 
-#TODO: Implement a sinc-interpolated shift using a fourier space shifting op
+
 def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10):
     """Returns a stack of exit waves accounting for subpixel shifts
  
