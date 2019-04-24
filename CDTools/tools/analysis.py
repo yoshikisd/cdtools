@@ -4,8 +4,9 @@ import torch as t
 import numpy as np
 from CDTools.tools import cmath
 
+__all__ = ['orthogonalize_probes']
 
-
+from matplotlib import pyplot as plt
 def orthogonalize_probes(probes):
     """Orthogonalizes a set of incoherently mixing probes
     
@@ -32,25 +33,27 @@ def orthogonalize_probes(probes):
         ortho_probe = np.copy(probe)
         for j, basis in enumerate(bases):
             coefficients[j,i] = np.sum(basis.conj()*ortho_probe)
-            ortho_probe -= basis * coefficients[i,j]
+            ortho_probe -= basis * coefficients[j,i]
              
 
         coefficients[i,i] = np.sqrt(np.sum(np.abs(ortho_probe)**2))
         bases.append(ortho_probe / coefficients[i,i])
 
-    density_mat = np.conj(coefficients).transpose().dot(coefficients)
+
+    density_mat = coefficients.dot(np.conj(coefficients).transpose())
     eigvals, eigvecs = np.linalg.eigh(density_mat)
 
     ortho_probes = []
     for i in range(len(eigvals)):
         coefficients = np.sqrt(eigvals[i]) * eigvecs[:,i]
+        print(coefficients)
         probe = np.zeros(bases[0].shape, dtype=np.complex64)
         for coefficient, basis in zip(coefficients, bases):
             probe += basis * coefficient
         ortho_probes.append(probe)
 
         
-    return cmath.complex_to_torch(np.stack(ortho_probes))
+    return cmath.complex_to_torch(np.stack(ortho_probes[::-1]))
     
         
             

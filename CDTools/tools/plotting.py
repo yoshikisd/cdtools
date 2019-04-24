@@ -7,6 +7,10 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import hsv_to_rgb
 
 
+__all__ = ['colorize','plot_1D','plot_amplitude','plot_phase',
+           'plot_colorized']
+
+
 def colorize(z):
     """ Returns RGB values for a complex color plot given a complex array
     This function returns a set of RGB values that can be used directly
@@ -34,7 +38,7 @@ def colorize(z):
     return hsv_to_rgb(np.dstack((h,s,v)))
 
 
-def plot_1d(arr, fig = None, **kwargs):
+def plot_1D(arr, fig = None, **kwargs):
     """Simple 1D plotter
 
     Args:

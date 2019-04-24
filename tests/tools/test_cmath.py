@@ -124,3 +124,12 @@ def test_ifftshift():
     shifted = cmath.ifftshift(cmath.complex_to_torch(arr),dims=(0,1))
     assert np.allclose(ifftshift(arr,axes=(0,1)),
                        cmath.torch_to_complex(shifted))
+
+
+def test_expi():
+    phases = np.random.rand(20,70) * 2 * np.pi
+    np_result = np.exp(1j * phases)
+
+    torch_result = cmath.expi(t.Tensor(phases))
+
+    assert np.allclose(np_result, cmath.torch_to_complex(torch_result))

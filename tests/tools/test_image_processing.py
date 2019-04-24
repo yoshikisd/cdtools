@@ -39,6 +39,25 @@ def test_centroid_sq():
     centroids = image_processing.centroid_sq(ims, comp=True)
     assert t.allclose(centroids, t.Tensor(np.array(sp_centroids)))
 
+    
+def test_sinc_subpixel_shift():
+
+    im = np.zeros((512,512), dtype=np.complex128)
+    im[256,256] = 1
+
+    # test it by creating a single pixel object and seeing that it is
+    # shifted correctly
+    xs = np.arange(512) - 256
+    Ys,Xs = np.meshgrid(xs,xs)
+    sinc_im = np.sinc(Xs-0.3) * np.sinc(Ys-0.6)
+
+    torch_im = cmath.complex_to_torch(im)
+    test_im = image_processing.sinc_subpixel_shift(torch_im,(0.3,0.6))
+
+    # The fidelity isn't great due to the FFT-based approach, so we need
+    # a pretty relaxed condition
+    assert np.max(np.abs(sinc_im - cmath.torch_to_complex(test_im))) < 0.005
+
 
 def test_find_pixel_shift():
 

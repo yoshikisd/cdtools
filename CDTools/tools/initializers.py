@@ -3,7 +3,7 @@ import numpy as np
 import torch as t
 
 __all__ = ['exit_wave_geometry', 'calc_object_setup', 'gaussian',
-           'gaussian_probe']
+           'gaussian_probe', 'SHARP_style_probe'] 
 
 from CDTools.tools import cmath
 from CDTools.tools.propagators import inverse_far_field

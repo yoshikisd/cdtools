@@ -9,10 +9,10 @@ import torch as t
 import scipy.misc
 import matplotlib.pyplot as plt
 
-def test_plot_1d(show_plot):
+def test_plot_1D(show_plot):
     # Plot simple linear scatter plot
     arr = np.arange(10)
-    plotting.plot_1d(arr, title = 'Linear Plot')
+    plotting.plot_1D(arr, title = 'Linear Plot')
     if show_plot:
         plt.show()
 

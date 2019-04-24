@@ -4,6 +4,7 @@ import torch as t
 
 __all__ = ['modulus', 'support']
 
+
 def modulus(wavefront, intensities, mask = None):
     """Implements the modulus constraint in torch
 

@@ -136,4 +136,51 @@ def test_ptycho_2D_linear(single_pixel_probe, random_obj):
     assert np.isclose(np.sum(obj_shift * obj_section),exit_pixel)
     
     # Test for a single translation
+
+
+def test_ptycho_2D_sinc(single_pixel_probe, random_obj):
+    
+    
+    # For this one, I just want to check one translation, but
+    # I need to check both formats
+    translations = np.array([[46.7,53.2]])
+    translation = np.array([46.7,53.2])
+     
+    exit_waves_probe = interactions.ptycho_2D_sinc(
+        cmath.complex_to_torch(single_pixel_probe),
+        cmath.complex_to_torch(random_obj),
+        t.tensor(translations),
+        shift_probe=True)
+
+    exit_wave_probe = interactions.ptycho_2D_sinc(
+        cmath.complex_to_torch(single_pixel_probe),
+        cmath.complex_to_torch(random_obj),
+        t.tensor(translation),
+        shift_probe=True)
+
+    # Check that the outputs match
+    assert t.allclose(exit_waves_probe[0],exit_wave_probe)
+
+
+    # Now we explicitly define what the sinc interpolated array should
+    # look like
+    xs = np.arange(256) - 128
+    Ys,Xs = np.meshgrid(xs,xs)
+    sinc_probe = np.sinc(Xs) * np.sinc(Ys)
+    # Just check that the unshifted probe is correct
+    assert np.allclose(single_pixel_probe, sinc_probe)
+
+    sinc_shifted_probe = np.sinc(Xs-0.7) * np.sinc(Ys-0.2)
+    obj_section = random_obj[46:46+256,
+                             53:53+256]
+    exit_wave_np = sinc_shifted_probe * obj_section
+    
+    exit_wave_torch = cmath.torch_to_complex(exit_wave_probe)
+
+    # The fidelity isn't great due to the FFT-based approach, so we need
+    # a pretty relaxed condition
+    assert np.max(np.abs(exit_wave_np-exit_wave_torch)) < 0.005
+
+
+
     

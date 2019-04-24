@@ -86,3 +86,29 @@ def test_near_field():
 
     # Again, 10^-3 is about all the accuracy we can expect
     assert np.max(np.abs(Emz-Emz_t)) < 1e-3 * np.max(np.abs(Emz))
+
+
+def test_inverse_near_field():
+    
+    x = (np.arange(800) - 400) * 1.5e-9
+    y = (np.arange(1200) - 600) * 1e-9
+    Ys,Xs = np.meshgrid(y,x)
+    Rs = np.sqrt(Xs**2+Ys**2)
+    
+    wavelength = 3e-9 #nm
+    sigma = 20e-9 #nm
+    z = 1000e-9 #nm
+
+    w0 = np.sqrt(2)*sigma
+    E0 = np.exp(-Rs**2 / w0**2)
+
+    asp = propagators.generate_angular_spectrum_propagator(
+        E0.shape,(1.5e-9,1e-9),wavelength,z,dtype=t.float64)
+
+    E0 = cmath.complex_to_torch(E0)
+    E_prop = propagators.near_field(E0,asp)
+    
+    E_backprop = propagators.inverse_near_field(E_prop, asp)
+
+    # We just want to check that it actually is the inverse
+    assert t.all(t.isclose(E0,E_backprop))

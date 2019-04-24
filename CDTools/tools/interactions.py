@@ -5,12 +5,15 @@ import torch as t
 import numpy as np
 
 
+__all__ = ['translations_to_pixel', #'pixel_to_translations',
+           'ptycho_2D_round','ptycho_2D_linear','ptycho_2D_sinc']
 
 #
 # This file will host tools to turn various kinds of model information
 # (probe, 2D object, 3D object, etc) into exit waves leaving the sample
 # area.
 #
+
 
 def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0,0,1])):
     """Takes real space translations and outputs them in pixel space

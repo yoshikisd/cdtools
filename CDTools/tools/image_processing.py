@@ -3,6 +3,8 @@ import numpy as np
 import torch as t
 from CDTools.tools import cmath
 
+__all__ = ['centroid', 'centroid_sq', 'sinc_subpixel_shift',
+           'find_subpixel_shift', 'find_pixel_shift', 'find_shift']
 
 
 def centroid(im, dims=2):
