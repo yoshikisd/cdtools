@@ -8,54 +8,8 @@ from scipy import fftpack
 
 from CDTools.tools import cmath, plotting
 from CDTools.tools import image_processing as ip
+from CDTools.tools.analysis import *
 
-
-def standardize(probe, obj, obj_slice=None):
-    # First, we normalize the probe intensity to a fixed value.
-    # Should this be the maximum or the integrated intensity? I think
-    # probably the integrated intensity. We set the average per-[ixel
-    # intensity in the probe to be one
-    normalization = np.sqrt(np.sum(np.abs(probe)**2) / len(probe.ravel()))
-    probe = cmath.complex_to_torch(probe / normalization)
-    obj = cmath.complex_to_torch(obj * normalization)
-
-
-    # Default slice of the object to use for alignment, etc.
-    if obj_slice is None:
-        obj_slice = np.s_[(obj.shape[0]//8)*3:(obj.shape[0]//8)*5,
-                          (obj.shape[1]//8)*3:(obj.shape[1]//8)*5]
-
-
-    
-    # Now we get rid of the probe's phase ramp
-    # Currently disabled
-    #center_freq = ip.centroid_sq(cmath.fftshift(t.fft(probe,2)),comp=True)
-    #center_freq -= (t.tensor(probe.shape[:-1]) // 2).to(t.float32)
-    #center_freq /= t.tensor(probe.shape[:-1]).to(t.float32)
-
-
-    
-    #Is, Js = np.mgrid[:probe.shape[0],:probe.shape[1]]
-    #probe_phase_ramp = cmath.expi(2*np.pi *
-    #                              (center_freq[0] * t.tensor(Is).to(t.float32) +
-    #                               center_freq[1] * t.tensor(Js).to(t.float32)))
-    #probe = cmath.cmult(probe, cmath.cconj(probe_phase_ramp))
-    #Is, Js = np.mgrid[:obj.shape[0],:obj.shape[1]]
-    #obj_phase_ramp = cmath.expi(2*np.pi *
-    #                            (center_freq[0] * t.tensor(Is).to(t.float32) +
-    #                             center_freq[1] * t.tensor(Js).to(t.float32)))
-    #obj = cmath.cmult(obj, obj_phase_ramp)
-
-    
-    # Then, we set them to consistent absolute phases
-    probe_angle = cmath.cphase(t.sum(probe,dim=(0,1)))
-    obj_angle = cmath.cphase(t.sum(obj[obj_slice],dim=(0,1)))
-
-    probe = cmath.cmult(probe, cmath.expi(-probe_angle))
-    obj = cmath.cmult(obj, cmath.expi(-obj_angle))
-
-    return probe, obj
-    
 
 def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None):
 
@@ -63,11 +17,14 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None)
         obj_slice = np.s_[(objects[0].shape[0]//8)*3:(objects[0].shape[0]//8)*5,
                           (objects[0].shape[1]//8)*3:(objects[0].shape[1]//8)*5]
     
+    probes = [cmath.complex_to_torch(probe).to(t.float32) for probe in probes]
+    objects = [cmath.complex_to_torch(obj).to(t.float32) for obj in objects]
     
     synth_probe, synth_obj = standardize(probes[0], objects[0])
     obj_stack = [cmath.torch_to_complex(synth_obj)]
     for i, (probe, obj) in enumerate(zip(probes[1:],objects[1:])):
         probe, obj = standardize(probe, obj)
+        
         probe = probe[0]
         print(i)
         #plt.imshow(np.angle(cmath.torch_to_complex(obj[obj_slice])))
@@ -154,19 +111,17 @@ if __name__ == '__main__':
 
     synth_probe, synth_obj, aligned_objs = synthesize_reconstructions(
         dataset['probe'], dataset['obj'], args.use_probe)
-
+    
     freqs, prtf = calc_prtf(synth_obj, aligned_objs, dataset['basis'])
 
     print(np.linalg.norm(dataset['basis'],axis=0))
     plotting.plot_phase(dataset['probe'][0][0],basis=1e6*dataset['basis'])
     plotting.plot_amplitude(dataset['probe'][0][0],basis=1e6*dataset['basis'])
     plotting.plot_colorized(dataset['probe'][0][0],basis=1e6*dataset['basis'])
-    #plotting.plot_amplitude(synth_obj[400:750,450:850],basis=1e6*dataset['basis'])
-    #plotting.plot_colorized(synth_obj[400:750,450:850],basis=1e6*dataset['basis'])
-    #plotting.plot_phase(synth_obj[400:750,450:850],basis=1e6*dataset['basis'])
-    plotting.plot_amplitude(synth_obj[::-1,::-1][450:900,325:775],basis=1e6*dataset['basis'])
-    plotting.plot_phase(synth_obj[::-1,::-1][450:900,325:775],basis=1e6*dataset['basis'])
-    plotting.plot_colorized(synth_obj[::-1,::-1][450:900,325:775],basis=1e6*dataset['basis'])
+    plotting.plot_amplitude(synth_obj,basis=1e6*dataset['basis'])
+    plotting.plot_colorized(synth_obj,basis=1e6*dataset['basis'])
+    plotting.plot_phase(synth_obj,basis=1e6*dataset['basis'])
+    
 
     plt.figure()
     real_translations = dataset['basis'].dot(dataset['translation'][0].transpose())

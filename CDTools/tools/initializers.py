@@ -122,7 +122,7 @@ def calc_object_setup(probe_shape, translations, padding=0):
 def gaussian(shape, sigma, amplitude=1, center = None, curvature=[0,0]):
     """Returns an array with a centered Gaussian
 
-    Takes in the shape, amplitude, and standard deviation of a gaussian
+    Takes in the shape and standard deviation of a gaussian
     and returns a complex torch tensor (trailing dimension is 2) with
     values corresponding to a two-dimensional gaussian function
 
@@ -135,8 +135,8 @@ def gaussian(shape, sigma, amplitude=1, center = None, curvature=[0,0]):
 
     Args:
         shape (array_like) : A 1x2 array-like object specifying the dimensions of the output array in the form (i shape, j shape)
-        amplitude (float or int): The amplitude the gaussian to simulate
         sigma (array_like): A 1x2 array-like object specifying the i- and j- standard deviation of the gaussian in the form (i stdev, j stdev)
+        amplitude (float or int): Default 1, the amplitude the gaussian to simulate
         center (array_like) : Optional 1x2 array-like object specifying the location of the center of the gaussian (i center, j center)
         curvature (array_like) : Optional complex part to add to the gaussian coefficient
 
