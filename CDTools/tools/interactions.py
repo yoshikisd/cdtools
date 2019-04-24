@@ -5,7 +5,7 @@ import torch as t
 import numpy as np
 
 
-__all__ = ['translations_to_pixel', #'pixel_to_translations',
+__all__ = ['translations_to_pixel', 'pixel_to_translations',
            'ptycho_2D_round','ptycho_2D_linear','ptycho_2D_sinc']
 
 #
@@ -60,6 +60,53 @@ def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0,0,1]))
         return pixel_translations
     
 
+def pixel_to_translations(basis, pixel_translations, surface_normal=t.Tensor([0,0,1])):
+    """Takes pixel-space translations and outputs them in real space
+    
+    This works for any 2D ptychography geometry. It takes in
+    A set of internal pixel unit translations in (i,j) space and
+    outputs the same translations real (x,y) space
+    
+    It uses information on the wavefield basis and, if defined, the
+    sample normal, to perform the conversion.
+    
+    The assumed geometry is incoming radiation with a wavevector parallel
+    to the +z axis, [0,0,1]. The default sample orientation has a surface
+    normal parallel to this direction. Because of this, the z direction
+    translation is always set to zero in the conversion
+
+    Args:
+        basis (torch.Tensor) : The real space basis the wavefields are defined in
+        translations (torch.Tensor) : A Jx2 stack of pixel-space translations
+        surface_normal (torch.Tensor) : Optional, the sample's surface normal
+    """
+    projection_1 = t.Tensor([[1,0,0],
+                             [0,1,0],
+                             [0,0,0]]).to(device=basis.device,dtype=basis.dtype)
+    projection_2 = t.inverse(t.Tensor([[1,0,0],
+                                       [0,1,0],
+                                       -surface_normal/
+                                       surface_normal[2]])).to(device=basis.device,dtype=basis.dtype)
+    basis_vectors_inv = t.pinverse(basis)
+    projection = t.mm(basis_vectors_inv,
+                      t.mm(projection_2,projection_1))
+    # Literally just need the pseudoinverse of the projection we used to go
+    # the other way
+    projection = t.pinverse(projection).t()
+
+    single_translation = False
+    if len(pixel_translations.shape) == 1:
+        pixel_translations = pixel_translations[None,:]
+        single_translation = True
+
+    translations = t.mm(pixel_translations, projection)
+
+    if single_translation:
+        return translations[0]
+    else:
+        return translations
+
+    
 def ptycho_2D_round(probe, obj, translations):
     """Returns a stack of exit waves without accounting for subpixel shifts
 
