@@ -13,6 +13,7 @@ __all__ = ['get_entry_info',
            'get_wavelength',
            'get_detector_geometry',
            'get_mask',
+           'get_dark',
            'get_data',
            'get_ptycho_translations',
            'create_cxi',
@@ -21,6 +22,7 @@ __all__ = ['get_entry_info',
            'add_source',
            'add_detector',
            'add_mask',
+           'add_dark',
            'add_data',
            'add_ptycho_translations']
 
@@ -284,6 +286,35 @@ def get_mask(cxi_file):
         return None
 
 
+def get_dark(cxi_file):
+    """Returns an array with a dark image to use for initialization of a background model
+
+    This looks for a set of dark images at
+    entry_1/instrument_1/detector_1/data_dark. If the darks exist, it will
+    return the mean of the array along all axes but the last two. That is,
+    if the dark image is a single image, it will return that image. If it
+    is a stack of images, it will return the mean along the stack axis.
+
+    If the darks do not exist, it will return None
+
+    Args:
+        cxi_file (h5py.File) : a file object to be read
+    
+    Returns:
+        np.array : An array storing the dark image
+    """
+    i1 = cxi_file['entry_1/instrument_1']
+    if 'detector_1/data_dark' in i1:
+        darks = np.array(i1['detector_1/data_dark'])
+        dims = tuple(range(len(darks.shape) - 2))
+        darks = np.nanmean(darks,axis=dims)
+    else:
+        darks = None
+
+    return darks
+
+
+    
 def get_data(cxi_file, cut_zeroes = True):
     """Returns an array with the full stack of detector data defined in the cxi file object
 
@@ -508,6 +539,28 @@ def add_mask(cxi_file, mask):
     d1.create_dataset('mask',data=mask_to_save)
 
 
+def add_dark(cxi_file, dark):
+    """Adds the specified dark image to a cxi file
+
+    It places the dark image data into the data_dark dataset under 
+    entry_1/instrument_1/detector_1.
+    
+    Args:
+        cxi_file (h5py.File) : The file to add the mask to    
+        dark (array_like) : The dark image(s) to save out to the file
+    """
+    if 'entry_1/instrument_1' not in cxi_file:
+        cxi_file['entry_1'].create_group('instrument_1')
+    i1 = cxi_file['entry_1/instrument_1']
+    if 'detector_1' not in i1:
+        i1.create_group('detector_1')
+    d1 = i1['detector_1']
+    if isinstance(dark, t.Tensor):
+        dark = dark.detach().cpu().numpy()
+
+    d1.create_dataset('data_dark',data=dark)
+    
+    
 def add_data(cxi_file, data, axes=None):
     """Adds the specified data to the cxi file
     

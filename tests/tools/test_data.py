@@ -64,7 +64,16 @@ def test_get_mask(test_ptycho_cxis):
             continue
         assert np.all(data.get_mask(cxi) == expected['mask'])
 
-    
+
+def test_get_dark(test_ptycho_cxis):
+    for cxi, expected in test_ptycho_cxis:
+        dark = data.get_dark(cxi)
+        if dark is None:
+            assert expected['dark'] is None
+        else:
+            assert np.allclose(dark, expected['dark'])
+            
+        
 def test_get_data(test_ptycho_cxis):
     for cxi, expected in test_ptycho_cxis:
         patterns, axes = data.get_data(cxi)
@@ -188,7 +197,21 @@ def test_add_mask(tmp_path):
         read_mask = data.get_mask(f)
 
     assert np.all(mask == read_mask)
+
     
+def test_add_dark(tmp_path):
+    dark = np.random.rand(350,620)
+
+    with data.create_cxi(tmp_path / 'test_add_dark.cxi') as f:
+        data.add_dark(f, dark)
+
+    with h5py.File(tmp_path / 'test_add_dark.cxi') as f:
+        read_dark = data.get_dark(f)
+
+    print(dark.shape)
+    assert np.allclose(dark, read_dark)
+
+
 
 def test_add_data(tmp_path):
     # First test from numpy, with axes

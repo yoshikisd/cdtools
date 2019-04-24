@@ -47,22 +47,22 @@ def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=Non
     the wavefields. If a detector slice is given, the returned array
     will only include that slice from the simulated wavefronts.
 
-    The first index is the index of the diffraction pattern to measure,
-    the second index is the set of incoherently adding patterns, and
-    the next two indices index the wavefield. The final index is the complex
+    The first index is the set of incoherently adding patterns, and
+    the second index is the index of the diffraction pattern to measure.
+    The next two indices index the wavefield. The final index is the complex
     index.
     
     Args:
-        wavefields (torch.Tensor) : A JxLxMxNx2 stack of complex wavefields
+        wavefields (torch.Tensor) : An LxJxMxNx2 stack of complex wavefields
         detector_slice (slice) : Optional, a slice or tuple of slices defining a section of the simulation to return
         saturation (float) : Optional, a maximum saturation value to clamp the resulting intensities to
 
     Returns:
-        torch.Tensor : A real MxN array storing the incoherently summed intensities
+        torch.Tensor : A real JXMxN array storing the incoherently summed intensities
     """
     # This syntax just adds an axis to the slice to preserve the J direction
     if detector_slice is None:
-        output = t.sum(cmath.cabssq(wavefields),dim=-3) + epsilon
+        output = t.sum(cmath.cabssq(wavefields),dim=0) + epsilon
     else:
         if wavefields.dim() == 4:
             output =  t.sum(cmath.cabssq(wavefields[(np.s_[:],)+detector_slice]),dim=0) + epsilon
