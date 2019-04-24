@@ -31,11 +31,11 @@ def test_intensity():
 def test_incoherent_sum():
     wavefields = t.rand((5,4,10,10,2))
     epsilon=1e-6
-    np_result = np.sum(np.abs(cmath.torch_to_complex(wavefields))**2,axis=1) + epsilon
+    np_result = np.sum(np.abs(cmath.torch_to_complex(wavefields))**2,axis=0) + epsilon
     assert t.allclose(measurements.incoherent_sum(wavefields,epsilon=epsilon),
                       t.tensor(np_result))
     # Test single field case
-    assert t.allclose(measurements.incoherent_sum(wavefields[0],epsilon=epsilon),
+    assert t.allclose(measurements.incoherent_sum(wavefields[:,0],epsilon=epsilon),
                       t.tensor(np_result[0]))
 
     
@@ -43,7 +43,7 @@ def test_incoherent_sum():
     assert t.allclose(measurements.incoherent_sum(wavefields,det_slice,epsilon=epsilon),
                       t.tensor(np_result[(np.s_[:],)+det_slice]))
     # Test single field case
-    assert t.allclose(measurements.incoherent_sum(wavefields[0],det_slice,epsilon=epsilon),
+    assert t.allclose(measurements.incoherent_sum(wavefields[:,0],det_slice,epsilon=epsilon),
                       t.tensor(np_result[0][det_slice]))
 
 
