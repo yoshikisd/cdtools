@@ -103,9 +103,14 @@ def ptycho_cxi_1():
 
     # Remember the format for the CXI file differs from the format used
     # internally
-    mask = np.zeros((100,256,256)).astype(np.uint32)
-    expected['mask'] = np.ones((100,256,256)).astype(np.uint8)
+    mask = np.zeros((256,256)).astype(np.uint32)
+    expected['mask'] = np.ones((256,256)).astype(np.uint8)
     d1f.create_dataset('mask',data=mask)
+
+    # Create an initial background
+    dark = np.ones((256,256)) * 0.01
+    expected['dark'] = dark
+    d1f.create_dataset('data_dark', data=dark)
 
     data1f = e1f.create_group('data_1')
 
@@ -187,6 +192,12 @@ def ptycho_cxi_2():
     # internally
     expected['mask'] = None
 
+    # Test with a set of dark images
+    dark = np.ones((10,256,256)) * 0.01
+    expected['dark'] = np.nanmean(dark,axis=0)
+    d1f.create_dataset('data_dark', data=dark)
+
+
     data1f = e1f.create_group('data_1')
 
     data = np.random.rand(100,256,256).astype(np.float32)
@@ -257,10 +268,11 @@ def ptycho_cxi_3():
 
     # Remember the format for the CXI file differs from the format used
     # internally
-    mask = np.ones((100,256,256)).astype(np.uint32) * 0x00001000
-    expected['mask'] = np.ones((100,256,256)).astype(np.uint8)
+    mask = np.ones((256,256)).astype(np.uint32) * 0x00001000
+    expected['mask'] = np.ones((256,256)).astype(np.uint8)
     d1f.create_dataset('mask',data=mask)
-
+    expected['dark'] = None
+    
     data1f = e1f.create_group('data_1')
 
     data = np.random.rand(100,256,256).astype(np.float32)
