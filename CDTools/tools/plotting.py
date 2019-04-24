@@ -64,7 +64,7 @@ def plot_amplitude(im, fig = None, basis = np.array([[0,-1], [-1,0], [0,0]]), **
     if fig is None:
         fig = plt.figure()
         ax = fig.add_subplot(111, **kwargs)
-    basis_norm = np.linalg.norm(basis, axis = -1)
+    basis_norm = np.linalg.norm(basis, axis = 0)
     if isinstance(im, t.Tensor):
         absolute = cmath.cabs(im).detach().cpu().numpy()
     else:
@@ -93,7 +93,7 @@ def plot_phase(im, fig = None, basis =  np.array([[0,-1], [-1,0], [0,0]]), **kwa
         phase = cmath.cphase(im).detach().cpu().numpy()
     else:
         phase = np.angle(im)
-    basis_norm = np.linalg.norm(basis, axis = -1)
+    basis_norm = np.linalg.norm(basis, axis = 0)
     try: plt.imshow(phase, cmap = 'twilight', extent = [0, phase.shape[-1]*basis_norm[1], 0, phase.shape[-2]*basis_norm[0]])
     except: plt.imshow(phase, cmap = 'hsv', extent = [0, phase.shape[-1]*basis_norm[1], 0, phase.shape[-2]*basis_norm[0]])
     plt.colorbar()
@@ -119,7 +119,7 @@ def plot_colorized(im, fig = None, basis =  np.array([[0,-1], [-1,0], [0,0]]), *
         ax = fig.add_subplot(111, **kwargs)
     if isinstance(im, t.Tensor):
         im = cmath.torch_to_complex(im.detach().cpu())
-    basis_norm = np.linalg.norm(basis, axis = -1)
+    basis_norm = np.linalg.norm(basis, axis = 0)
     colorized = colorize(im)
     plt.imshow(colorized, extent = [0, im.shape[-1]*basis_norm[1], 0, im.shape[-2]*basis_norm[0]])
     return fig

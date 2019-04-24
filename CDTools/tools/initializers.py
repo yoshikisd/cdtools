@@ -56,6 +56,7 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
     
     if opt_for_fft:
         full_shape = t.Tensor([next_fast_len(dim) for dim in full_shape]).to(t.int32)
+    
     # Then, generate a slice that pops the actual detector from the full
     # detector shape
     full_center = full_shape // 2
@@ -64,9 +65,10 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
                       int(full_center[1]-center[1]):
                       int(full_center[1]-center[1]+det_shape[1])]
 
+    
     # Finally, generate the basis for the exit wave in real space
     # I believe this calculation is incorrect for non-rectangular
-    # detectors, because the real space basis shoud be related to the
+    # detectors, because the real space basis should be related to the
     # dual of the original basis. Leaving this for now since
     # non-rectangular detectors are not a pressing concern.
     basis_dirs = det_basis / t.norm(det_basis, dim=0)
@@ -75,7 +77,8 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
     
     # Finally, convert the shape back to a torch.Size
     full_shape = t.Size([dim for dim in full_shape])
-    
+
+
     return real_space_basis, full_shape, det_slice
 
 
@@ -245,6 +248,10 @@ def SHARP_style_probe(dataset, shape, det_slice):
     # Now we remove the central pixel
     
     center = np.array(probe_guess.shape) // 2
+
+    
+    # I had to remove this because it put some intensity outside of
+    # the detector region that caused issues
     
     probe_guess[center[0], center[1]]=np.mean([
         probe_guess[center[0]-1, center[1]],

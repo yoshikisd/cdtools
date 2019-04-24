@@ -58,6 +58,33 @@ def centroid_sq(im, dims=2, comp=False):
     return centroid(im_sq, dims=dims)
 
 
+def sinc_subpixel_shift(im, shift):
+    """Performs a subpixel shift with sinc interpolation on the given tensor
+
+    The subpixel shift is done circularly via a multiplication with a linear
+    phase mask in Fourier space.
+
+    Args:
+        im (torch.Tensor) : A complex-valued tensor to perform the subpixel shift on
+        shift (array_like) : A length-2 array_like object describing the shift to perform, in pixels
+
+    Returns:
+        (torch.Tensor) : The subpixel shifted tensor
+    """
+    i = t.arange(im.shape[0]) - im.shape[0]//2
+    j = t.arange(im.shape[1]) - im.shape[1]//2
+    I,J = t.meshgrid(i,j)
+    I = 2 * np.pi * I.to(t.float32) / im.shape[0]
+    J = 2 * np.pi * J.to(t.float32) / im.shape[1]
+    I = I.to(dtype=im.dtype,device=im.device)
+    J = J.to(dtype=im.dtype,device=im.device)
+
+    fft_im = cmath.fftshift(t.fft(im, 2))
+    shifted_fft_im = cmath.cmult(fft_im, cmath.expi(-shift[0]*I - shift[1]*J))
+    return t.ifft(cmath.ifftshift(shifted_fft_im),2)
+
+
+
 def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
     """Calculates the subpixel shift between two images by maximizing the autocorrelation
 
@@ -72,7 +99,57 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
         search_around (array_like) : Default (0,0), the shift to search in the vicinity of
         resolution (int): Default is 10, the resolution to calculate to in units of 1/n
     """
-    pass
+    #
+    # Here's my approach, perhaps it's a little unconventional. I will first
+    # calculate the phase correlation function as found in ____ (cite a paper
+    # defining it). This is strongly peaked, so I can take a small window
+    # of say, 10x10 pixels, and then do a sinc interpolation of that area
+    # using an FFT with upsampling by a factor of resolution in reciprocal
+    # space
+    #
+        # If last dimension is not 2, then convert to a complex tensor now
+    if im1.shape[-1] != 2:
+        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
+    if im2.shape[-1] != 2:
+        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
+
+
+    cor_fft = cmath.cmult(t.fft(im1,2),cmath.cconj(t.fft(im2,2)))
+
+    # Not sure if this is more or less stable than just the correlation
+    # maximum - requires some testing
+    cor = t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2)
+
+
+    # Now, I need to shift the array to pull out a contiguous window
+    # around the correlation maximum
+    try:
+        search_around = search_around.cpu()
+    except:
+        search_around = t.tensor(search_around)
+
+    window_size = 15
+    shift_zero = tuple(-search_around + t.tensor([window_size,window_size]))
+    cor_window = t.roll(cor, shift_zero, dims=(0,1))[:2*window_size,:2*window_size]
+
+    # Now we upsample this window
+    cor_window_fft = cmath.fftshift(t.fft(cor_window,2))
+    upsampled = t.zeros(tuple(t.tensor(cor_window_fft.shape)[:-1] * resolution) + (2,),
+                        dtype=cor.dtype,device=cor.device)
+
+    upsampled[:2*window_size,:2*window_size] = cor_window_fft
+    upsampled = t.roll(upsampled,(-window_size,-window_size),dims=(0,1))
+    upsampled = t.roll(cmath.cabssq(t.ifft(upsampled, 2)),(-window_size*resolution,-window_size*resolution), dims=(0,1))
+
+
+    # And we extract the shift from the window
+    sh = t.tensor(upsampled.shape).to(device=upsampled.device)
+    cormax = t.tensor([t.argmax(upsampled) // sh[1],
+                       t.argmax(upsampled) % sh[1]]).to(device=upsampled.device)
+    subpixel_shift = ((cormax + sh // 2) % sh - sh//2).to(dtype=upsampled.dtype)
+
+    return search_around.to(device=upsampled.device, dtype=upsampled.dtype) + \
+        subpixel_shift / resolution
 
 
 def find_pixel_shift(im1, im2):
@@ -96,8 +173,12 @@ def find_pixel_shift(im1, im2):
         im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
 
 
-    cor = cmath.cabs(t.ifft(cmath.cmult(t.fft(im1,2),
-                                        cmath.cconj(t.fft(im2,2))),2))
+    cor_fft = cmath.cmult(t.fft(im1,2),cmath.cconj(t.fft(im2,2)))
+
+    # Not sure if this is more or less stable than just the correlation
+    # maximum - requires some testing
+    cor = cmath.cabs(t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2))
+
 
     sh = t.tensor(cor.shape).to(device=im1.device)
     cormax = t.tensor([t.argmax(cor) // sh[1],
