@@ -23,7 +23,8 @@ def centroid(im, dims=2):
     Returns:
         t.Tensor : An (i,j) index or stack of indices
     """
-    indices = (t.arange(im.shape[-dims+i]).to(t.float32) for i in range(dims))
+    # For some reason this needs to be a list
+    indices = [t.arange(im.shape[-dims+i]).to(t.float32) for i in range(dims)]
     indices = t.meshgrid(*indices)
 
     use_dims = [-dims+i for i in range(dims)]
@@ -61,7 +62,7 @@ def centroid_sq(im, dims=2, comp=False):
 
 def sinc_subpixel_shift(im, shift):
     """Performs a subpixel shift with sinc interpolation on the given tensor
-    
+
     The subpixel shift is done circularly via a multiplication with a linear
     phase mask in Fourier space.
 
@@ -120,15 +121,15 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
     # Not sure if this is more or less stable than just the correlation
     # maximum - requires some testing
     cor = t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2)
-    
-    
+
+
     # Now, I need to shift the array to pull out a contiguous window
     # around the correlation maximum
     try:
         search_around = search_around.cpu()
     except:
         search_around = t.tensor(search_around)
-        
+
     window_size = 15
     shift_zero = tuple(-search_around + t.tensor([window_size,window_size]))
     cor_window = t.roll(cor, shift_zero, dims=(0,1))[:2*window_size,:2*window_size]
@@ -148,11 +149,11 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
     cormax = t.tensor([t.argmax(upsampled) // sh[1],
                        t.argmax(upsampled) % sh[1]]).to(device=upsampled.device)
     subpixel_shift = ((cormax + sh // 2) % sh - sh//2).to(dtype=upsampled.dtype)
-        
+
     return search_around.to(device=upsampled.device, dtype=upsampled.dtype) + \
-        subpixel_shift / resolution 
-    
-    
+        subpixel_shift / resolution
+
+
 def find_pixel_shift(im1, im2):
     """Calculates the integer pixel shift between two images by maximizing the autocorrelation
 
@@ -179,8 +180,8 @@ def find_pixel_shift(im1, im2):
     # Not sure if this is more or less stable than just the correlation
     # maximum - requires some testing
     cor = cmath.cabs(t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2))
-    
-    
+
+
     sh = t.tensor(cor.shape).to(device=im1.device)
     cormax = t.tensor([t.argmax(cor) // sh[1],
                        t.argmax(cor) % sh[1]]).to(device=im1.device)
@@ -205,4 +206,3 @@ def find_shift(im1, im2, resolution=10):
                                          resolution=resolution)
 
     return subpixel_shift
-    

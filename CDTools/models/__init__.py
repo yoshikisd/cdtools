@@ -13,8 +13,8 @@ from torch.utils import data as torchdata
 # I gain in it being easy to reload the non-learned aspects of the model,
 # like the wavelength and sample geometry. Remember that it's important
 # that the final outputs of the reconstructions are transferrable to other
-# places 
-# 
+# places
+#
 
 
 #
@@ -26,14 +26,14 @@ from torch.utils import data as torchdata
 
 class CDIModel(t.nn.Module):
     """This base model defines all the functions that must be exposed for a valid CDIModel subclass
-    
+
     Most of the functions only raise a NotImplementedError at this level and
     must be explicitly defined by any subclass. The functions required can be
     split into several subsections:
-    
+
     Creation:
     from_dataset : a function to create a CDIModel from an appropriate CDataset
-    
+
     Simulation:
     interaction : a function to simulate exit waves from experimental parameters
     forward_propagator : the propagator from the experiment plane to the detector plane
@@ -47,33 +47,33 @@ class CDIModel(t.nn.Module):
     Reconstruction:
     AD_optimize : predefined, a generic automatic differentiation reconstruction
     Adam_optimize : predefined,  sensible automatic differentiation reconstruction using ADAM
-    
+
     The work of defining the various subclasses boils down to creating an
     appropriate implementation for this set of functions.
     """
-    
-    
-    
+
+
+
     def from_dataset(self, dataset):
         raise NotImplementedError()
 
-    
+
     def interaction(self, *args):
         raise NotImplementedError()
 
-    
+
     def forward_propagator(self, exit_wave):
         raise NotImplementedError()
 
 
     def backward_propagator(self, detector_wave):
         raise NotImplementedError()
-    
-    
+
+
     def measurement(self, detector_wave):
         raise NotImplementedError()
 
-    
+
     def forward(self, *args):
         return self.measurement(self.forward_propagator(self.interaction(*args)))
 
@@ -86,15 +86,15 @@ class CDIModel(t.nn.Module):
     def to(self, *args, **kwargs):
         super(CDIModel,self).to(*args,**kwargs)
 
-    
+
     def simulate(self, args_list):
         return t.Tensor([self.forward(*args) for args in args_list])
 
-    
+
     def simulate_to_dataset(self, args_list):
         raise NotImplementedError()
 
-    
+
     def AD_optimize(self, iterations, data_loader,  optimizer, scheduler=None):
 
         for it in range(iterations):
@@ -102,7 +102,7 @@ class CDIModel(t.nn.Module):
             N = 0
             for inputs, patterns in data_loader:
                 N += 1
-                
+
                 def closure():
                     optimizer.zero_grad()
                     sim_patterns = self.forward(*inputs)
@@ -113,7 +113,7 @@ class CDIModel(t.nn.Module):
 
                     loss.backward()
                     return loss
-                    
+
                 loss += optimizer.step(closure).detach().cpu().numpy()
 
             loss /= N
@@ -121,7 +121,7 @@ class CDIModel(t.nn.Module):
                 scheduler.step(loss)
 
             yield loss
-            
+
 
     def Adam_optimize(self, iterations, dataset, batch_size=15, lr=0.005, schedule=False):
 
@@ -132,13 +132,13 @@ class CDIModel(t.nn.Module):
         # Define the optimizer
         optimizer = t.optim.Adam(self.parameters(), lr = lr)
 
-        
+
         # Define the scheduler
         if schedule:
             scheduler = t.optim.ReduceLROnPlateau(optimizer, factor=0.2)
         else:
             scheduler = None
-            
+
         return self.AD_optimize(iterations, data_loader, optimizer, scheduler=scheduler)
 
 
@@ -152,15 +152,16 @@ class CDIModel(t.nn.Module):
         else:
             data_loader = torchdata.DataLoader(dataset)
 
-        
+
         # Define the optimizer
         optimizer = t.optim.LBFGS(self.parameters(),
                                   lr = lr, history_size=history_size)
-        
+
         return self.AD_optimize(iterations, data_loader, optimizer)
 
 
-    
+
+
 from CDTools.models.simple_ptycho import SimplePtycho
 from CDTools.models.fancy_ptycho import FancyPtycho
 from CDTools.models.incoherent_ptycho import IncoherentPtycho
