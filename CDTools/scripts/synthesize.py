@@ -11,52 +11,6 @@ from CDTools.tools import image_processing as ip
 from CDTools.tools.analysis import *
 
 
-def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None):
-
-    if obj_slice is None:
-        obj_slice = np.s_[(objects[0].shape[0]//8)*3:(objects[0].shape[0]//8)*5,
-                          (objects[0].shape[1]//8)*3:(objects[0].shape[1]//8)*5]
-    
-    probes = [cmath.complex_to_torch(probe).to(t.float32) for probe in probes]
-    objects = [cmath.complex_to_torch(obj).to(t.float32) for obj in objects]
-    
-    synth_probe, synth_obj = standardize(probes[0], objects[0])
-    obj_stack = [cmath.torch_to_complex(synth_obj)]
-    for i, (probe, obj) in enumerate(zip(probes[1:],objects[1:])):
-        probe, obj = standardize(probe, obj)
-        
-        probe = probe[0]
-        print(i)
-        #plt.imshow(np.angle(cmath.torch_to_complex(obj[obj_slice])))
-        #plt.show()
-
-        if use_probe:
-            shift = ip.find_shift(synth_probe,probe, resolution=50)
-        else:
-            shift = ip.find_shift(synth_obj[obj_slice],obj[obj_slice], resolution=50)
-        
-
-        obj = ip.sinc_subpixel_shift(obj,np.array(shift))
-        probe = ip.sinc_subpixel_shift(probe,tuple(shift))
-        #obj = t.roll(obj,tuple(int(s) for s in shift),dims=(0,1)) 
-        #probe = t.roll(probe,tuple(int(s) for s in shift),dims=(0,1))
-
-        synth_probe += probe
-        synth_obj += obj
-        obj_stack.append(cmath.torch_to_complex(obj))
-
-
-
-    # If there only was one image
-    try:
-        i
-    except:
-        i = -1
-
-    synth_probe = cmath.torch_to_complex(synth_probe)
-    synth_obj = cmath.torch_to_complex(synth_obj)
-    return synth_probe/(i+2), synth_obj/(i+2), obj_stack
-
 
 
 def calc_prtf(synth_obj, objects, basis, obj_slice=None):
@@ -114,16 +68,26 @@ if __name__ == '__main__':
     
     freqs, prtf = calc_prtf(synth_obj, aligned_objs, dataset['basis'])
 
-    print(np.linalg.norm(dataset['basis'],axis=0))
+    
     plotting.plot_phase(dataset['probe'][0][0],basis=1e6*dataset['basis'])
     plotting.plot_amplitude(dataset['probe'][0][0],basis=1e6*dataset['basis'])
     plotting.plot_colorized(dataset['probe'][0][0],basis=1e6*dataset['basis'])
+
+    
+    plotting.plot_phase(synth_probe[1],basis=1e6*dataset['basis'])
+    plotting.plot_amplitude(synth_probe[1],basis=1e6*dataset['basis'])
+    plotting.plot_colorized(synth_probe[1],basis=1e6*dataset['basis'])
+
+    
+    
     plotting.plot_amplitude(synth_obj,basis=1e6*dataset['basis'])
     plotting.plot_colorized(synth_obj,basis=1e6*dataset['basis'])
     plotting.plot_phase(synth_obj,basis=1e6*dataset['basis'])
     
 
     plt.figure()
+    plt.show()
+    exit()
     real_translations = dataset['basis'].dot(dataset['translation'][0].transpose())
     real_translations -= np.min(real_translations,axis=1)[:,None]
     plt.plot(real_translations[0]*1e6,real_translations[1]*1e6,'k.')

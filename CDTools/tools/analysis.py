@@ -5,7 +5,7 @@ import numpy as np
 from CDTools.tools import cmath
 from CDTools.tools import image_processing as ip
 
-__all__ = ['orthogonalize_probes','standardize']
+__all__ = ['orthogonalize_probes','standardize', 'synthesize_reconstructions']
 
 from matplotlib import pyplot as plt
 def orthogonalize_probes(probes):
@@ -77,13 +77,20 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
 
     When dealing with the properties of the object, a slice is used by
     default as the edges of the object often are dominated by unphysical
-    noise. The default slice is from 3/8 to 5/8 of the way across.
+    noise. The default slice is from 3/8 to 5/8 of the way across. If the
+    probe is actually a stack of incoherently mixing probes, then the
+    dominant probe mode (assumed to be the first in the list) is used, but
+    all the probes are updated with the same factors.
 
     Args:
-        probe (t.tensor) : tensor or numpy array storing a retrieved probe
+        probe (t.tensor) : tensor or numpy array storing a retrieved probe or stack of incoherently mixed probes
         obj (t.tensor) : tensor or numpy array storing a retrieved probe
         obj_slice (slice) : optional, a slice to take from the object for calculating normalizations
         correct_ramp (bool) : Default False, whether to correct for the relative phase ramps
+
+    Returns:
+        (t.tensor) : The standardized probe
+        (t.tensor) : The standardized object
 
     """
     # First, we normalize the probe intensity to a fixed value.
@@ -95,8 +102,16 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
     if isinstance(obj, np.ndarray):
         obj = cmath.complex_to_torch(obj).to(t.float32)
         obj_np = True
+
+    # If this is a single probe and not a stack of probes
+    if len(probe.shape) == 3:
+        probe = probe[None,...]
+        single_probe = True
+    else:
+        single_probe = False
+
         
-    normalization = t.sqrt(t.sum(cmath.cabssq(probe)) / (len(probe.view(-1))/2))
+    normalization = t.sqrt(t.sum(cmath.cabssq(probe[0])) / (len(probe[0].view(-1))/2))
     probe = probe / normalization
     obj = obj * normalization
 
@@ -108,13 +123,13 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
     
     if correct_ramp:
         # Need to check if this is actually working and, if noy, why not
-        center_freq = ip.centroid_sq(cmath.fftshift(t.fft(probe,2)),comp=True)
-        center_freq -= (t.tensor(probe.shape[:-1]) // 2).to(t.float32)
-        center_freq /= t.tensor(probe.shape[:-1]).to(t.float32)
+        center_freq = ip.centroid_sq(cmath.fftshift(t.fft(probe[0],2)),comp=True)
+        center_freq -= (t.tensor(probe[0].shape[:-1]) // 2).to(t.float32)
+        center_freq /= t.tensor(probe[0].shape[:-1]).to(t.float32)
 
 
     
-        Is, Js = np.mgrid[:probe.shape[0],:probe.shape[1]]
+        Is, Js = np.mgrid[:probe[0].shape[0],:probe[0].shape[1]]
         probe_phase_ramp = cmath.expi(2*np.pi *
                                       (center_freq[0] * t.tensor(Is).to(t.float32) +
                                        center_freq[1] * t.tensor(Js).to(t.float32)))
@@ -127,12 +142,17 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
 
     
     # Then, we set them to consistent absolute phases
-    probe_angle = cmath.cphase(t.sum(probe,dim=(0,1)))
+    
     obj_angle = cmath.cphase(t.sum(obj[obj_slice],dim=(0,1)))
-
-    probe = cmath.cmult(probe, cmath.expi(-probe_angle))
     obj = cmath.cmult(obj, cmath.expi(-obj_angle))
 
+    for i in range(probe.shape[0]):
+        probe_angle = cmath.cphase(t.sum(probe[i],dim=(0,1)))
+        probe[i] = cmath.cmult(probe[i], cmath.expi(-probe_angle))
+        
+    if single_probe:
+        probe = probe[0]
+        
     if probe_np:
         probe = cmath.torch_to_complex(probe.detach().cpu())
     if obj_np:
@@ -140,3 +160,83 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
     
     return probe, obj
     
+
+
+def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None, correct_ramp=False):
+    """Takes a collection of reconstructions and outputs a single synthesized probe and object
+    
+    The function first standardizes the sets of probes and objects using the
+    standardize function, passing through the relevant options. Then it
+    calculates the closest overlap of subsequent frames to subpixel
+    precision and uses a sinc interpolation to shift all the probes and objects
+    to a common frame. Then the images are summed.
+    
+    Args:
+        probes (list) : A list of probes or stacks of probe modes
+        objects (list) : A list of objects
+        use_probe (bool) : Default False, whether to use the probe or object for alignment
+        obj_slice (slice) : Optional, A slice of the object to use for alignment and normalization
+        correct_ramp (bool) : Default False, whether to correct for a relative phase ramp in the probe and object
+
+    Returns:
+        (array_like) : The synthesized probe
+        (array_like) : The synthesized object
+        (list) : a list of standardized objects, for further processing
+    
+    """
+    
+    probe_np = False
+    if isinstance(probes[0], np.ndarray):
+        probes = [cmath.complex_to_torch(probe).to(t.float32) for probe in probes]
+        probe_np = True
+    obj_np = False
+    if isinstance(objects[0], np.ndarray):
+        objects = [cmath.complex_to_torch(obj).to(t.float32) for obj in objects]
+        obj_np = True
+
+    
+    if obj_slice is None:
+        obj_slice = np.s_[(objects[0].shape[0]//8)*3:(objects[0].shape[0]//8)*5,
+                          (objects[0].shape[1]//8)*3:(objects[0].shape[1]//8)*5]
+    
+    
+    synth_probe, synth_obj = standardize(probes[0], objects[0], obj_slice=obj_slice,correct_ramp=correct_ramp)
+    obj_stack = [synth_obj]
+    
+    for i, (probe, obj) in enumerate(zip(probes[1:],objects[1:])):
+        probe, obj = standardize(probe, obj, obj_slice=obj_slice,correct_ramp=correct_ramp)
+
+
+        if use_probe:
+            shift = ip.find_shift(synth_probe[0],probe[0], resolution=50)
+        else:
+            shift = ip.find_shift(synth_obj[obj_slice],obj[obj_slice], resolution=50)
+        
+
+        obj = ip.sinc_subpixel_shift(obj,np.array(shift))
+
+        if len(probe.shape) == 4:
+            probe = t.stack([ip.sinc_subpixel_shift(p,tuple(shift))
+                             for p in probe],dim=0)
+        else:
+            probe = ip.sinc_subpixel_shift(probe,tuple(shift))
+
+        synth_probe += probe
+        synth_obj += obj
+        obj_stack.append(obj)
+
+    
+    # If there only was one image
+    try:
+        i
+    except:
+        i = -1
+
+    if probe_np:
+        synth_probe = cmath.torch_to_complex(synth_probe)
+    if obj_np:
+        synth_obj = cmath.torch_to_complex(synth_obj)
+        obj_stack = [cmath.torch_to_complex(obj) for obj in obj_stack]
+
+    return synth_probe/(i+2), synth_obj/(i+2), obj_stack
+

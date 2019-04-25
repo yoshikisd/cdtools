@@ -42,7 +42,6 @@ def test_orthogonalize_probes():
     assert np.allclose(probe_intensity,ortho_probe_intensity)
 
 
-from matplotlib import pyplot as plt
 
 def test_standardize():
 
@@ -80,7 +79,7 @@ def test_standardize():
     assert np.allclose(obj, s_obj)
 
     
-    # And ensure that standardization maps back to the standard versions
+    # Then do one with a phase ramp
     phase_ramp_dir = (np.random.rand(2) - 0.5)
 
     probe_Xs, probe_Ys = np.mgrid[:probe.shape[0],:probe.shape[1]]
@@ -89,12 +88,31 @@ def test_standardize():
     test_probe = test_probe * phase_ramp
 
     obj_Xs, obj_Ys = np.mgrid[:obj.shape[0],:obj.shape[1]]
-    phase_ramp = np.exp(-1j*obj_Ys * phase_ramp_dir[1]+
+    obj_phase_ramp = np.exp(-1j*obj_Ys * phase_ramp_dir[1]+
                         -1j*obj_Xs * phase_ramp_dir[0])
-    test_obj = test_obj * phase_ramp
+    test_obj = test_obj * obj_phase_ramp
 
     s_probe, s_obj = analysis.standardize(test_probe, test_obj, correct_ramp=True)
 
     assert np.max(s_probe - probe) / np.max(np.abs(probe)) < 1e-4
     assert np.max(s_obj - obj) / np.max(np.abs(obj)) < 1e-4
 
+    # Finally a test with the phase ramp and multiple probes
+    subdominant_probe = 0.1*np.random.rand(230,240) * np.exp(1j * (np.random.rand(230,240) - 0.5))
+    subdominant_probe = subdominant_probe * np.exp(-1j * np.angle(np.sum(subdominant_probe)))
+    test_subdominant_probe = subdominant_probe * 37.6
+    test_subdominant_probe = test_subdominant_probe * phase_ramp
+
+    incoh_probe = np.array([test_probe,test_subdominant_probe])
+
+    s_probe, s_obj = analysis.standardize(incoh_probe, test_obj, correct_ramp=True)
+
+    assert np.max(s_probe[0] - probe) / np.max(np.abs(probe)) < 1e-4
+    assert np.max(s_obj - obj) / np.max(np.abs(obj)) < 1e-4
+    assert np.max(s_probe[1] - subdominant_probe) / np.max(np.abs(subdominant_probe)) < 1e-4
+
+
+
+from matplotlib import pyplot as plt
+def test_synthesize_reconstructions():
+    pass
