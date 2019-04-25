@@ -115,4 +115,35 @@ def test_standardize():
 
 from matplotlib import pyplot as plt
 def test_synthesize_reconstructions():
+    # Not really sure how to test this to be honest
+
+    # Perhaps it's just best to test for a lack of failures?
     pass
+
+
+def test_calc_consistency_prtf():
+
+    # Create an object with a specific structure
+    obj = 30 * np.random.rand(1030,1040) * np.exp(1j * (np.random.rand(1030,1040) - 0.5))
+
+    #
+    synth_obj = np.sqrt(0.7) * obj
+
+    obj_stack = [obj]#,obj,obj,obj]
+
+    basis = np.array([[0,2,0],
+                      [3,0,0]])
+    
+    freqs, prtf = analysis.calc_consistency_prtf(synth_obj, obj_stack, basis)
+    assert np.allclose(prtf, 0.7)
+    
+    freqs, prtf = analysis.calc_consistency_prtf(synth_obj, obj_stack, basis, nbins=30)
+    assert np.allclose(prtf, 0.7)
+
+    # Check that is uses the right number of bins
+    assert len(prtf) == 30
+    assert len(freqs) == 30
+    
+    # Check that the maximum frequency is correct for the basis
+    assert np.isclose(freqs[-1]-freqs[-2] + freqs[-1], np.sqrt(1/4**2 + 1/6**2))
+    

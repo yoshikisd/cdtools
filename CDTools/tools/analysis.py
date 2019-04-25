@@ -4,8 +4,11 @@ import torch as t
 import numpy as np
 from CDTools.tools import cmath
 from CDTools.tools import image_processing as ip
+from scipy import fftpack
 
-__all__ = ['orthogonalize_probes','standardize', 'synthesize_reconstructions']
+__all__ = ['orthogonalize_probes','standardize', 'synthesize_reconstructions',
+           'calc_consistency_prtf']
+
 
 from matplotlib import pyplot as plt
 def orthogonalize_probes(probes):
@@ -239,4 +242,73 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None,
         obj_stack = [cmath.torch_to_complex(obj) for obj in obj_stack]
 
     return synth_probe/(i+2), synth_obj/(i+2), obj_stack
+
+
+
+def calc_consistency_prtf(synth_obj, objects, basis, obj_slice=None,nbins=None):
+    """Calculates a PRTF between each the individual objects and an averaged one
+    
+    The consistency PRTF at any given spatial frequency is defined as the ratio
+    between the intensity of any given reconstruction and the intensity
+    of a synthesized or averaged reconstruction at that spatial frequency.
+    Typically, the PRTF is averaged over spatial frequencies with the same
+    magnitude.
+    
+    Args:
+        synth_obj (t.Tensor) : The synthesized object in the numerator of the PRTF
+        objects (list): A list of objects or diffraction patterns for the denomenator of the PRTF
+        basis (array_like) : The basis for the reconstruction array to allow output in physical unit
+        obj_slice : Optional, a slice of the objects to use for calculating the PRTF
+        nbinbs (int) : Optional, number of bins to use in the histogram. Defaults to a sensible value
+
+    Returns:
+        (t.Tensor) : The frequencies for the PRTF
+        (t.Tensor) : The values of the PRTF
+    """
+
+    obj_np = False
+    if isinstance(objects[0], np.ndarray):
+        objects = [cmath.complex_to_torch(obj).to(t.float32) for obj in objects]
+        obj_np = True
+    if isinstance(synth_obj, np.ndarray):
+        synth_obj = cmath.complex_to_torch(synth_obj).to(t.float32)
+
+        
+    if obj_slice is None:
+        obj_slice = np.s_[(objects[0].shape[0]//8)*3:(objects[0].shape[0]//8)*5,
+                          (objects[0].shape[1]//8)*3:(objects[0].shape[1]//8)*5]
+
+    if nbins is None:
+        nbins = np.max(synth_obj[obj_slice].shape) // 4
+    
+    synth_fft = cmath.cabssq(cmath.fftshift(t.fft(synth_obj[obj_slice],2))).numpy()
+
+    
+    di = np.linalg.norm(basis[:,0]) 
+    dj = np.linalg.norm(basis[:,1])
+    
+    i_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[0],d=di))
+    j_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[1],d=dj))
+    
+    Js,Is = np.meshgrid(j_freqs,i_freqs)
+    Rs = np.sqrt(Is**2+Js**2)
+    
+    
+    synth_ints, bins = np.histogram(Rs,bins=nbins,weights=synth_fft)
+
+    prtfs = []
+    for obj in objects:
+        obj = obj[obj_slice]
+        single_fft = cmath.cabssq(cmath.fftshift(t.fft(obj,2))).numpy() 
+        single_ints, bins = np.histogram(Rs,bins=nbins,weights=single_fft)
+
+        prtfs.append(synth_ints/single_ints)
+
+
+    if not obj_np:
+        bins = t.Tensor(bins)
+        prtfs = t.Tensor(prtfs)
+        
+    return bins[:-1], np.mean(prtfs,axis=0)
+        
 
