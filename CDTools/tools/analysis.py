@@ -203,13 +203,11 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None,
                           (objects[0].shape[1]//8)*3:(objects[0].shape[1]//8)*5]
     
     
-    synth_probe, synth_obj = standardize(probes[0], objects[0], obj_slice=obj_slice,correct_ramp=correct_ramp)
+    synth_probe, synth_obj = standardize(probes[0].clone(), objects[0].clone(), obj_slice=obj_slice,correct_ramp=correct_ramp)
     obj_stack = [synth_obj]
     
     for i, (probe, obj) in enumerate(zip(probes[1:],objects[1:])):
-        probe, obj = standardize(probe, obj, obj_slice=obj_slice,correct_ramp=correct_ramp)
-
-
+        probe, obj = standardize(probe.clone(), obj.clone(), obj_slice=obj_slice,correct_ramp=correct_ramp)
         if use_probe:
             shift = ip.find_shift(synth_probe[0],probe[0], resolution=50)
         else:
@@ -224,8 +222,8 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None,
         else:
             probe = ip.sinc_subpixel_shift(probe,tuple(shift))
 
-        synth_probe += probe
-        synth_obj += obj
+        synth_probe = synth_probe + probe
+        synth_obj = synth_obj + obj
         obj_stack.append(obj)
 
     

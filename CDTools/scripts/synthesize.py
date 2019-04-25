@@ -27,7 +27,9 @@ if __name__ == '__main__':
 
     synth_probe, synth_obj, aligned_objs = synthesize_reconstructions(
         dataset['probe'], dataset['obj'], args.use_probe)
-    
+
+    print(np.max(np.abs(synth_obj)))
+    print(np.max(np.abs(aligned_objs[0])))
     freqs, prtf = calc_consistency_prtf(synth_obj, aligned_objs, dataset['basis'])
 
     

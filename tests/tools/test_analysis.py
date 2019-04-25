@@ -115,11 +115,39 @@ def test_standardize():
 
 from matplotlib import pyplot as plt
 def test_synthesize_reconstructions():
-    # Not really sure how to test this to be honest
+    # I can only really test for a lack of failures, so I think my plan
+    # will be to create a dataset that just needs to be added and see that
+    # it successfully doesn't mess it up.
 
-    # Perhaps it's just best to test for a lack of failures?
-    pass
+    # Start by making a probe and object that should meet the standardization
+    # conditions
+    probe = initializers.gaussian((230,240),(20,20),curvature=(0.01,0.01))
+    probe = cmath.torch_to_complex(probe)
+    probe = probe * np.sqrt(len(probe.ravel()) / np.sum(np.abs(probe)**2))
+    probe = probe * np.exp(-1j * np.angle(np.sum(probe)))
 
+    assert np.isclose(1, np.sum(np.abs(probe)**2)/ len(probe.ravel()))
+    assert np.isclose(0,np.angle(np.sum(probe)))
+
+    obj = 30 * np.random.rand(230,240) * np.exp(1j * (np.random.rand(230,240) - 0.5))
+    obj_slice = np.s_[(obj.shape[0]//8)*3:(obj.shape[0]//8)*5,
+                      (obj.shape[1]//8)*3:(obj.shape[1]//8)*5]
+
+    obj = obj * np.exp(-1j * np.angle(np.sum(obj[obj_slice])))
+    assert np.isclose(0,np.angle(np.sum(obj[obj_slice])))
+
+    # Now I make stacks of identical probes and objects
+    probes = [probe,probe,probe,probe]
+    probe = np.copy(probe)
+    objects = [obj,obj,obj,obj]
+    obj = np.copy(obj)
+
+    s_probe, s_obj, obj_stack = analysis.synthesize_reconstructions(probes,objects)
+    assert np.max(s_probe - probe) < 1e-5
+    assert np.max(s_obj - obj) < 1e-5
+    for t_obj in obj_stack:
+        assert np.max(t_obj - obj) < 1e-5
+    
 
 def test_calc_consistency_prtf():
 
@@ -129,7 +157,7 @@ def test_calc_consistency_prtf():
     #
     synth_obj = np.sqrt(0.7) * obj
 
-    obj_stack = [obj]#,obj,obj,obj]
+    obj_stack = [obj,obj,obj,obj]
 
     basis = np.array([[0,2,0],
                       [3,0,0]])
