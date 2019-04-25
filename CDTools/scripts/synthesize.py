@@ -28,35 +28,30 @@ if __name__ == '__main__':
     synth_probe, synth_obj, aligned_objs = synthesize_reconstructions(
         dataset['probe'], dataset['obj'], args.use_probe)
 
-    print(np.max(np.abs(synth_obj)))
-    print(np.max(np.abs(aligned_objs[0])))
     freqs, prtf = calc_consistency_prtf(synth_obj, aligned_objs, dataset['basis'])
-
     
-    plotting.plot_phase(dataset['probe'][0][0],basis=1e6*dataset['basis'])
-    plotting.plot_amplitude(dataset['probe'][0][0],basis=1e6*dataset['basis'])
-    plotting.plot_colorized(dataset['probe'][0][0],basis=1e6*dataset['basis'])
-
+    plotting.plot_phase(dataset['probe'][0][0]),basis=dataset['basis'])
+    plotting.plot_amplitude(dataset['probe'][0][0]),basis=dataset['basis'])
+    plotting.plot_colorized(dataset['probe'][0][0]),basis=dataset['basis'])
     
     try:
-        plotting.plot_phase(synth_probe[1],basis=1e6*dataset['basis'])
-        plotting.plot_amplitude(synth_probe[1],basis=1e6*dataset['basis'])
-        plotting.plot_colorized(synth_probe[1],basis=1e6*dataset['basis'])
+        plotting.plot_phase(synth_probe[1],basis=dataset['basis'])
+        plotting.plot_amplitude(synth_probe[1],basis=dataset['basis'])
+        plotting.plot_colorized(synth_probe[1],basis=dataset['basis'])
     except:
         pass
-    
-    
-    plotting.plot_amplitude(synth_obj,basis=1e6*dataset['basis'])
-    plotting.plot_colorized(synth_obj,basis=1e6*dataset['basis'])
-    plotting.plot_phase(synth_obj,basis=1e6*dataset['basis'])
+      
+    plotting.plot_amplitude(synth_obj,basis=dataset['basis'])
+    plotting.plot_colorized(synth_obj,basis=dataset['basis'])
+    plotting.plot_phase(synth_obj,basis=dataset['basis'])
     
 
     plt.figure()
     try:
         real_translations = dataset['basis'].dot(dataset['translation'][0].transpose())
         real_translations -= np.min(real_translations,axis=1)[:,None]
-        plt.plot(real_translations[0]*1e6,real_translations[1]*1e6,'k.')
-        plt.plot(real_translations[0]*1e6,real_translations[1]*1e6,'b-',linewidth=0.5)
+        real_translations = real_translations.transpose()
+        plotting.plot_translations(real_translations)
         plt.figure()
     except:
         pass

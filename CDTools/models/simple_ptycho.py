@@ -3,8 +3,10 @@ from __future__ import division, print_function, absolute_import
 import torch as t
 from CDTools.models import CDIModel
 from CDTools import tools
+from CDTools.tools import plotting as p
 from copy import copy
 from torch.utils import data as torchdata
+from matplotlib import pyplot as plt
 
 
 class SimplePtycho(CDIModel):
@@ -132,9 +134,27 @@ class SimplePtycho(CDIModel):
 
 
     def sim_to_dataset(self, args_list):
-        pass
+        raise NotImplementedError()
 
 
+    def inspect(self):
+        p.plot_amplitude(self.probe, basis=self.probe_basis)
+        plt.title('Probe Amplitude')
+        p.plot_phase(self.probe, basis=self.probe_basis)
+        plt.title('Probe Phase')
+        p.plot_amplitude(self.obj, basis=self.probe_basis)
+        plt.title('Object Amplitude')
+        p.plot_phase(self.obj, basis=self.probe_basis)
+        plt.title('Object Phase')
+
+
+    def save_results(self):
+        probe = tools.cmath.torch_to_complex(self.probe.detach().cpu())
+        probe = probe * self.probe_norm.detach().cpu().numpy()
+        obj = tools.cmath.torch_to_complex(self.obj.detach().cpu())
+        return {'probe':probe,'obj':obj}
+        
+    
     def ePIE(self, iterations, dataset, beta = 1.0):
         """Runs an ePIE reconstruction as described in `Maiden et al. (2017) <https://www.osapublishing.org/optica/abstract.cfm?uri=optica-4-7-736>`_.
         Optional parameters are:
@@ -148,6 +168,8 @@ class SimplePtycho(CDIModel):
 
         if self.mask is not None:
             mask = self.mask[...,None]
+        else:
+            mask=None
 
         def probe_update(exit_wave, exit_wave_corrected, probe, object, translation):
             return probe+tools.cmath.cmult(beta*(tools.cmath.cconj(object)/t.max(tools.cmath.cabssq(object)))[translation[0]:translation[0]+probe_shape[0],translation[1]:translation[1]+probe_shape[1]], \

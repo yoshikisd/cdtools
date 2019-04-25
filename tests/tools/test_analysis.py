@@ -143,10 +143,11 @@ def test_synthesize_reconstructions():
     obj = np.copy(obj)
 
     s_probe, s_obj, obj_stack = analysis.synthesize_reconstructions(probes,objects)
-    assert np.max(s_probe - probe) < 1e-5
-    assert np.max(s_obj - obj) < 1e-5
+    assert np.max(s_probe - probe) < 2e-5
+    assert np.max(s_obj - obj) < 2e-5
     for t_obj in obj_stack:
-        assert np.max(t_obj - obj) < 1e-5
+        assert np.max(t_obj - obj) < 5e-5
+        
     
 
 def test_calc_consistency_prtf():

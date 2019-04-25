@@ -8,7 +8,7 @@ from matplotlib.colors import hsv_to_rgb
 
 
 __all__ = ['colorize','plot_1D','plot_amplitude','plot_phase',
-           'plot_colorized']
+           'plot_colorized', 'plot_translations','get_units_factor']
 
 
 def colorize(z):
@@ -38,6 +38,34 @@ def colorize(z):
     return hsv_to_rgb(np.dstack((h,s,v)))
 
 
+def get_units_factor(units):
+    """Gets the multiplicative factor associated with a length unit
+
+    Args:
+        units (str) : The abbreviation for the unit type
+    
+    Returns:
+        (float) : The factor meters / (unit)
+    """
+    
+    u = units.lower()
+    if u=='m':
+        factor=1
+    if u=='cm':
+        factor=1e2
+    if u=='mm':
+        factor=1e3
+    if u=='um':
+        factor=1e6
+    if u=='nm':
+        factor=1e9
+    if u=='a':
+        factor=1e10
+    if u=='pm':
+        factor=1e12
+    return factor
+
+
 def plot_1D(arr, fig = None, **kwargs):
     """Simple 1D plotter
 
@@ -51,60 +79,108 @@ def plot_1D(arr, fig = None, **kwargs):
     if fig is None:
         fig = plt.figure()
         ax = fig.add_subplot(111, **kwargs)
+    else:
+        plt.figure(fig.number)
+
     plt.scatter(np.arange(arr.shape[-1]), arr)
 
     
-def plot_amplitude(im, fig = None, basis = np.array([[0,-1], [-1,0], [0,0]]), **kwargs):
+def plot_amplitude(im, fig = None, basis=None, units='um', **kwargs):
     """ Plots the amplitude of a complex Tensor or numpy array with dimensions NxMx2.
     Args:
         im (t.Tensor) : An image with dimensions NxMx2.
         fig (matplotlib.figure.Figure) : A matplotlib figure to use to plot. If None,
         a new figure is created with an Axes subplot at 111.
-        basis (numpy array) : The probe basis, used to put the axis labels in real space units.
-        Should have dimensions 3x2
+        basis (numpy array) : Optional, the 3x2 probe basis, used to put the axis labels in real space units.
+        units (str) : The units to convert the basis to
         **kwargs: Can be used to set any keyword arguments for the matplotlib.axes.Axes class
         (see https://matplotlib.org/api/axes_api.html#the-axes-class)
     """
     if fig is None:
         fig = plt.figure()
         ax = fig.add_subplot(111, **kwargs)
-    basis_norm = np.linalg.norm(basis, axis = 0)
+    else:
+        plt.figure(fig.number)
+
     if isinstance(im, t.Tensor):
         absolute = cmath.cabs(im).detach().cpu().numpy()
     else:
         absolute = np.absolute(im)
-    plt.imshow(absolute, cmap = 'viridis', extent = [0, absolute.shape[-1]*basis_norm[1], 0, absolute.shape[-2]*basis_norm[0]])
+
+    #Plot in a basis if it exists, otherwise dont
+    if basis is not None:
+        if isinstance(basis,t.Tensor):
+            basis = basis.detach().cpu().numpy()
+        basis_norm = np.linalg.norm(basis, axis = 0)
+        basis_norm = basis_norm * get_units_factor(units)
+        
+        extent = [0, absolute.shape[-1]*basis_norm[1], 0, absolute.shape[-2]*basis_norm[0]]
+    else:
+        extent=None
+        
+    plt.imshow(absolute, cmap = 'viridis', extent = extent)
     plt.colorbar()
+    if basis is not None:
+        plt.xlabel('X (' + units + ')')
+        plt.ylabel('Y (' + units + ')')
+    else:
+        plt.xlabel('j (pixels)')
+        plt.ylabel('i (pixels)')
+        
     return fig
 
 
-def plot_phase(im, fig = None, basis =  np.array([[0,-1], [-1,0], [0,0]]), **kwargs):
+def plot_phase(im, fig=None, basis=None, units='um', **kwargs):
     """ Plots the phase of a complex Tensor or numpy array with dimensions NxMx2.
     Args:
         im (t.Tensor) : An image with dimensions NxMx2.
         fig (matplotlib.figure.Figure) : A matplotlib figure to use to plot. If None,
         a new figure is created with an Axes subplot at 111.
-        basis (numpy array) : The probe basis, used to put the axis labels in real space units.
-        Should have dimensions 3x2
+        basis (numpy array) : Optional, the 3x2 probe basis, used to put the axis labels in real space units.
         **kwargs: Can be used to set any keyword arguments for the matplotlib.axes.Axes class
         (see https://matplotlib.org/api/axes_api.html#the-axes-class)
     """
     if fig is None:
         fig = plt.figure()
         ax = fig.add_subplot(111, **kwargs)
+    else:
+        plt.figure(fig.number)
+
     # If the user has matplotlib >=3.0, use the preferred colormap
     if isinstance(im, t.Tensor):
         phase = cmath.cphase(im).detach().cpu().numpy()
     else:
         phase = np.angle(im)
-    basis_norm = np.linalg.norm(basis, axis = 0)
-    try: plt.imshow(phase, cmap = 'twilight', extent = [0, phase.shape[-1]*basis_norm[1], 0, phase.shape[-2]*basis_norm[0]])
-    except: plt.imshow(phase, cmap = 'hsv', extent = [0, phase.shape[-1]*basis_norm[1], 0, phase.shape[-2]*basis_norm[0]])
+
+    if basis is not None:
+        if isinstance(basis,t.Tensor):
+            basis = basis.detach().cpu().numpy()
+        basis_norm = np.linalg.norm(basis, axis = 0)
+        basis_norm = basis_norm * get_units_factor(units)
+        
+        extent = [0, phase.shape[-1]*basis_norm[1], 0, phase.shape[-2]*basis_norm[0]]
+    else:
+        extent=None
+
+    try:
+        plt.imshow(phase, cmap = 'twilight', extent=extent)
+    except:
+        plt.imshow(phase, cmap = 'hsv', extent=extent)
+
     plt.colorbar()
+
+    if basis is not None:
+        plt.xlabel('X (' + units + ')')
+        plt.ylabel('Y (' + units + ')')
+    else:
+        plt.xlabel('j (pixels)')
+        plt.ylabel('i (pixels)')
+
+        
     return fig
 
 
-def plot_colorized(im, fig = None, basis =  np.array([[0,-1], [-1,0], [0,0]]), **kwargs):
+def plot_colorized(im, fig=None, basis=None, units='um', **kwargs):
     """ Plots the colorized version of a complex Tensor or numpy array with dimensions NxMx2.
     The darkness corresponds to the intensity of the image, and the color corresponds
     to the phase.
@@ -113,17 +189,69 @@ def plot_colorized(im, fig = None, basis =  np.array([[0,-1], [-1,0], [0,0]]), *
         im (t.Tensor) : An image with dimensions NxMx2.
         fig (matplotlib.figure.Figure) : A matplotlib figure to use to plot. If None,
         a new figure is created with an Axes subplot at 111.
-        basis (numpy array) : The probe basis, used to put the axis labels in real space units.
-        Should have dimensions 3x2
+        basis (numpy array) : Optional, the 3x2 probe basis, used to put the axis labels in real space units.
         **kwargs: Can be used to set any keyword arguments for the matplotlib.axes.Axes class
         (see https://matplotlib.org/api/axes_api.html#the-axes-class)
     """
     if fig is None:
         fig = plt.figure()
         ax = fig.add_subplot(111, **kwargs)
+    else:
+        plt.figure(fig.number)
+        
     if isinstance(im, t.Tensor):
         im = cmath.torch_to_complex(im.detach().cpu())
-    basis_norm = np.linalg.norm(basis, axis = 0)
+
+    if basis is not None:
+        if isinstance(basis,t.Tensor):
+            basis = basis.detach().cpu().numpy()
+        basis_norm = np.linalg.norm(basis, axis = 0)
+        basis_norm = basis_norm * get_units_factor(units)
+        
+        extent = [0, im.shape[-1]*basis_norm[1], 0, im.shape[-2]*basis_norm[0]]
+    else:
+        extent=None
+
     colorized = colorize(im)
-    plt.imshow(colorized, extent = [0, im.shape[-1]*basis_norm[1], 0, im.shape[-2]*basis_norm[0]])
+    plt.imshow(colorized, extent=extent)
+
+    if basis is not None:
+        plt.xlabel('X (' + units + ')')
+        plt.ylabel('Y (' + units + ')')
+    else:
+        plt.xlabel('j (pixels)')
+        plt.ylabel('i (pixels)')
+        
     return fig
+
+
+
+def plot_translations(translations, fig=None, units='um'):
+    """Plots a set of probe translations in a nicely formatted way
+    
+    Args:
+        translations: An Nx2 or Nx3 set of translations in real space
+        fig : Optional, a figure to plot into
+        units : Default is um, units to report in (assuming input in m)
+
+    Returns:
+        
+    """
+    
+    factor = get_units_factor(units)
+    
+    if fig is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+    else:
+        plt.figure(fig.number)
+
+    if isinstance(translations, t.Tensor):
+        translations = translations.detach().cpu().numpy()
+        
+    translations = translations * factor
+    plt.plot(translations[:,0], translations[:,1],'k.')
+    plt.plot(translations[:,0], translations[:,1],'b-', linewidth=0.5)
+    plt.xlabel('X (' + units + ')')
+    plt.ylabel('Y (' + units + ')')
+

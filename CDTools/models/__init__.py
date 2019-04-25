@@ -95,6 +95,10 @@ class CDIModel(t.nn.Module):
         raise NotImplementedError()
 
 
+    def inspect(self):
+        raise NotImplementedError()
+    
+
     def AD_optimize(self, iterations, data_loader,  optimizer, scheduler=None):
 
         for it in range(iterations):

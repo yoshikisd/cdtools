@@ -7,20 +7,22 @@ from CDTools.tools import interactions
 import h5py
 import numpy as np
 from matplotlib import pyplot as plt
+import torch as t
+import pickle
 
 filename = '../../../Downloads/AuBalls_700ms_30nmStep_3_3SS_filter.cxi'
 #filename = '/media/Data Bank/CSX_3_19/Processed_CXIs/115195_p.cxi'
 
 with h5py.File(filename,'r') as f:
     dataset = CDTools.datasets.Ptycho_2D_Dataset.from_cxi(f)
-    darks = np.array(f['entry_1/instrument_1/detector_1/data_dark'])
+    #darks = np.array(f['entry_1/instrument_1/detector_1/data_dark'])
 
-old_patterns = dataset.patterns.clone()
-dataset.patterns -= t.tensor(np.nanmean(darks,axis=0))
-dataset.patterns = t.clamp(dataset.patterns,min=0)
+#old_patterns = dataset.patterns.clone()
+#dataset.patterns -= t.tensor(np.nanmean(darks,axis=0))
+#dataset.patterns = t.clamp(dataset.patterns,min=0)
 
 model = CDTools.models.FancyPtycho.from_dataset(dataset,n_modes=3,randomize_ang=0.1*np.pi)
-dataset.patterns = old_patterns
+#dataset.patterns = old_patterns
 
 # default is CPU with 32-bit floats
 model.to(device='cuda')
@@ -38,13 +40,9 @@ for i, loss in enumerate(model.Adam_optimize(50, dataset, batch_size=100, lr=0.0
     print(i,loss)
 
 
-# Show some figures of merit
-plot_amplitude(model.probe[0], basis=model.probe_basis.cpu()*1e6)
-plot_phase(model.probe[0], basis=model.probe_basis.cpu()*1e6)
-plot_amplitude(model.obj, basis=model.probe_basis.cpu()*1e6)
-plot_phase(model.obj, basis=model.probe_basis.cpu()*1e6)
-translations = (interactions.translations_to_pixel(model.probe_basis.cpu(), dataset.translations) + model.translation_offsets.detach().cpu()).numpy()
-plt.figure()
-plt.plot(translations[:,1],translations[:,0],'k-',linewidth=0.5)
-plt.plot(translations[:,1],translations[:,0],'b.')
+#with open('test_results.pickle', 'wb') as f:
+#    pickle.dump(model.save_results(dataset),f)
+    
+model.inspect(dataset)
 plt.show()
+exit()

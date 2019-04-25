@@ -4,6 +4,8 @@ import torch as t
 from CDTools.models import CDIModel
 from CDTools import tools
 from CDTools.tools import cmath
+from CDTools.tools import plotting as p
+from matplotlib import pyplot as plt
 import numpy as np
 from copy import copy
 
@@ -225,3 +227,47 @@ class FancyPtycho(CDIModel):
         pass
 
     
+    def corrected_translations(self,dataset):
+        translations = dataset.translations.to(dtype=self.probe.dtype,device=self.probe.device)
+        t_offset = tools.interactions.pixel_to_translations(self.probe_basis,self.translation_offsets*self.translation_scale)
+        return translations + t_offset
+    
+
+    def inspect(self, dataset=None):
+        p.plot_amplitude(self.probe[0], basis=self.probe_basis)
+        plt.title('Dominant Probe Amplitude')
+        p.plot_phase(self.probe[0], basis=self.probe_basis)
+        plt.title('Dominant Probe Phase')
+        
+        if len(self.probe) >=2:
+            p.plot_amplitude(self.probe[1], basis=self.probe_basis)
+            plt.title('Subdominant Probe Amplitude')
+            p.plot_phase(self.probe[1], basis=self.probe_basis)
+            plt.title('Subdominant Probe Phase')
+
+        p.plot_amplitude(self.obj, basis=self.probe_basis)
+        plt.title('Object Amplitude')
+        p.plot_phase(self.obj, basis=self.probe_basis)
+        plt.title('Object Phase')
+
+        if dataset is not None:
+            p.plot_translations(self.corrected_translations(dataset))
+
+        plt.figure()
+        plt.imshow(self.background.detach().cpu().numpy()**2)
+        plt.title('Background')
+        
+
+    def save_results(self, dataset):
+        basis = self.probe_basis.detach().cpu().numpy()
+        translations = self.corrected_translations(dataset).detach().cpu().numpy()
+        probe = cmath.torch_to_complex(self.probe.detach().cpu())
+        probe = probe * self.probe_norm.detach().cpu().numpy()
+        obj = cmath.torch_to_complex(self.obj.detach().cpu())
+        background = self.background.detach().cpu().numpy()
+        weights = self.weights.detach().cpu().numpy()
+        
+        return {'basis':basis, 'translation':translations,
+                'probe':probe,'obj':obj,
+                'background':background,
+                'weights':weights}
