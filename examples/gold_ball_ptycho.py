@@ -36,7 +36,7 @@ for i, loss in enumerate(model.Adam_optimize(30, dataset, batch_size=100)):
 for i, loss in enumerate(model.Adam_optimize(30, dataset, batch_size=100, lr=0.001)):
     print(i,loss)
 
-for i, loss in enumerate(model.Adam_optimize(50, dataset, batch_size=100, lr=0.0001)):
+for i, loss in enumerate(model.Adam_optimize(30, dataset, batch_size=100, lr=0.0001)):
     print(i,loss)
 
 

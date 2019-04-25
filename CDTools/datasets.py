@@ -20,7 +20,8 @@ class CDataset(torchdata.Dataset):
 
     def __init__(self, entry_info=None, sample_info=None,
                  wavelength=None,
-                 detector_geometry=None, mask=None):
+                 detector_geometry=None, mask=None,
+                 background=None):
 
         # Force pass-by-value-like behavior to stop strangeness
         self.entry_info = copy(entry_info)
@@ -31,6 +32,10 @@ class CDataset(torchdata.Dataset):
             self.mask = t.tensor(mask)
         else:
             self.mask = None
+        if background is not None:
+            self.background = t.Tensor(background)
+        else:
+            self.background = None
     
         self.get_as(device='cpu')
 
@@ -45,6 +50,8 @@ class CDataset(torchdata.Dataset):
         
         if self.mask is not None:
             self.mask = self.mask.to(*args,**mask_kwargs)          
+        if self.background is not None:
+            self.background = self.background.to(*args,**kwargs)          
 
 
     def get_as(self, *args, **kwargs):
@@ -83,11 +90,12 @@ class CDataset(torchdata.Dataset):
                              'basis'    : basis,
                              'corner'   : corner}
         mask = cdtdata.get_mask(cxi_file)
+        dark = cdtdata.get_dark(cxi_file)
         return cls(entry_info = entry_info,
                    sample_info = sample_info,
                    wavelength=wavelength,
                    detector_geometry=detector_geometry,
-                   mask=mask)
+                   mask=mask, background=dark)
     
     
     def to_cxi(self, cxi_file):
@@ -108,6 +116,8 @@ class CDataset(torchdata.Dataset):
                                corner = corner)
         if self.mask is not None:
             cdtdata.add_mask(cxi_file, self.mask)
+        if self.background is not None:
+            cdtdata.add_dark(cxi_file, self.background)
         
 
 
@@ -152,6 +162,7 @@ class Ptycho_2D_Dataset(CDataset):
                              'basis'    : basis,
                              'corner'   : corner}
         mask = cdtdata.get_mask(cxi_file)
+        dark = cdtdata.get_dark(cxi_file)
         patterns, axes = cdtdata.get_data(cxi_file)
 
         translations = cdtdata.get_ptycho_translations(cxi_file)
@@ -160,7 +171,7 @@ class Ptycho_2D_Dataset(CDataset):
                    sample_info = sample_info,
                    wavelength=wavelength,
                    detector_geometry=detector_geometry,
-                   mask=mask)
+                   mask=mask, background=dark)
     
 
     def to_cxi(self, cxi_file):

@@ -63,6 +63,11 @@ def test_CDataset_from_cxi(test_ptycho_cxis):
         if expected['mask'] is not None:
             assert t.all(t.eq(t.tensor(expected['mask']),dataset.mask))
 
+        if expected['dark'] is not None:
+            assert t.all(t.eq(t.Tensor(expected['dark']),dataset.background))
+
+            
+
             
 def test_CDataset_to_cxi(test_ptycho_cxis, tmp_path):
     for cxi, expected in test_ptycho_cxis:
@@ -95,7 +100,10 @@ def test_CDataset_to_cxi(test_ptycho_cxis, tmp_path):
         
         if dataset.mask is not None:
             assert t.all(t.eq(dataset.mask,read_dataset.mask))
-        
+
+        if dataset.background is not None:
+            assert t.all(t.eq(dataset.background, read_dataset.background))
+
 
 
 def test_CDataset_to(ptycho_cxi_1):
@@ -107,6 +115,7 @@ def test_CDataset_to(ptycho_cxi_1):
     if t.cuda.is_available():
         dataset.to(device='cuda:0')
         assert dataset.mask.device == t.device('cuda:0')
+        assert dataset.background.device == t.device('cuda:0')
 
 
 
@@ -176,6 +185,10 @@ def test_Ptycho_2D_Dataset_from_cxi(test_ptycho_cxis):
         if expected['mask'] is not None:
             assert t.all(t.eq(t.tensor(expected['mask']),dataset.mask))
 
+        if expected['dark'] is not None:
+            assert t.all(t.eq(t.Tensor(expected['dark']),dataset.background))
+
+            
         assert t.allclose(t.tensor(expected['data']),dataset.patterns)
         assert t.allclose(t.tensor(expected['translations']),dataset.translations)
         
@@ -214,6 +227,9 @@ def test_Ptycho_2D_Dataset_to_cxi(test_ptycho_cxis, tmp_path):
         if dataset.mask is not None:
             assert t.all(t.eq(dataset.mask,read_dataset.mask))
 
+        if dataset.background is not None:
+            assert t.all(t.eq(dataset.background, read_dataset.background))
+
         assert t.allclose(dataset.patterns, read_dataset.patterns)
         assert t.allclose(dataset.translations, read_dataset.translations)
 
@@ -229,6 +245,7 @@ def test_Ptycho_2D_Dataset_to(ptycho_cxi_1):
     if t.cuda.is_available():
         dataset.to(device='cuda:0')
         assert dataset.mask.device == t.device('cuda:0')
+        assert dataset.background.device == t.device('cuda:0')
         assert dataset.patterns.device == t.device('cuda:0')
         assert dataset.translations.device == t.device('cuda:0')
 

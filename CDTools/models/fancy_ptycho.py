@@ -110,6 +110,11 @@ class FancyPtycho(CDIModel):
         
         obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=50)
 
+        if hasattr(dataset, 'background'):
+            background = t.sqrt(dataset.background)
+        else:
+            background = None
+
         # Finally, initialize the probe and  object using this information
         if probe_size is None:
             probe = tools.initializers.SHARP_style_probe(dataset, probe_shape, det_slice)
@@ -145,9 +150,7 @@ class FancyPtycho(CDIModel):
             probe_support = t.ones_like(probe[0].to(dtype=t.float32))
         
 
-
-        #return cls(wavelength, det_geo, probe_basis, det_slice, probe, obj, min_translation=min_translation, translation_offsets = translation_offsets)
-        return cls(wavelength, det_geo, probe_basis, det_slice, probe, obj, min_translation=min_translation, translation_offsets = translation_offsets, weights=weights, mask=mask, translation_scale=translation_scale, saturation=saturation, probe_support=probe_support)
+        return cls(wavelength, det_geo, probe_basis, det_slice, probe, obj, min_translation=min_translation, translation_offsets = translation_offsets, weights=weights, mask=mask, background=background, translation_scale=translation_scale, saturation=saturation, probe_support=probe_support)
                    
     
     def interaction(self, index, translations):
@@ -264,7 +267,7 @@ class FancyPtycho(CDIModel):
         probe = cmath.torch_to_complex(self.probe.detach().cpu())
         probe = probe * self.probe_norm.detach().cpu().numpy()
         obj = cmath.torch_to_complex(self.obj.detach().cpu())
-        background = self.background.detach().cpu().numpy()
+        background = self.background.detach().cpu().numpy()**2
         weights = self.weights.detach().cpu().numpy()
         
         return {'basis':basis, 'translation':translations,

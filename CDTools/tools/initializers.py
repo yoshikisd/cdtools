@@ -241,6 +241,10 @@ def SHARP_style_probe(dataset, shape, det_slice):
         intensities[det_slice] += im.cpu().numpy()
     intensities /= len(dataset)
 
+    # Subtract off a known background if it's stored
+    if hasattr(dataset, 'background'):
+        intensities[det_slice] = np.clip(intensities[det_slice] - dataset.background.cpu().numpy(), a_min=0,a_max=None)
+    
     probe_fft = cmath.complex_to_torch(np.sqrt(intensities))
     
     probe_guess = cmath.torch_to_complex(inverse_far_field(probe_fft))
