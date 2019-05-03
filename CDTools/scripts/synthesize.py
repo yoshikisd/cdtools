@@ -27,12 +27,14 @@ if __name__ == '__main__':
 
     synth_probe, synth_obj, aligned_objs = synthesize_reconstructions(
         dataset['probe'], dataset['obj'], args.use_probe)
+    print(dataset['basis'])
 
+    print(synth_probe.shape)
     freqs, prtf = calc_consistency_prtf(synth_obj, aligned_objs, dataset['basis'])
     
-    plotting.plot_phase(dataset['probe'][0][0]),basis=dataset['basis'])
-    plotting.plot_amplitude(dataset['probe'][0][0]),basis=dataset['basis'])
-    plotting.plot_colorized(dataset['probe'][0][0]),basis=dataset['basis'])
+    plotting.plot_phase(synth_probe,basis=dataset['basis'])
+    plotting.plot_amplitude(synth_probe,basis=dataset['basis'])
+    plotting.plot_colorized(synth_probe,basis=dataset['basis'])
     
     try:
         plotting.plot_phase(synth_probe[1],basis=dataset['basis'])

@@ -79,7 +79,7 @@ class FancyPtycho(CDIModel):
         
         
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None):
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
         det_shape = dataset[0][1].shape
@@ -110,16 +110,16 @@ class FancyPtycho(CDIModel):
         
         obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=50)
 
-        if hasattr(dataset, 'background'):
+        if hasattr(dataset, 'background') and dataset.background is not None:
             background = t.sqrt(dataset.background)
         else:
             background = None
 
         # Finally, initialize the probe and  object using this information
         if probe_size is None:
-            probe = tools.initializers.SHARP_style_probe(dataset, probe_shape, det_slice)
+            probe = tools.initializers.SHARP_style_probe(dataset, probe_shape, det_slice, propagation_distance=propagation_distance)
         else:
-            probe = tools.initializers.gaussian_probe(dataset, probe_basis, probe_shape, probe_size)
+            probe = tools.initializers.gaussian_probe(dataset, probe_basis, probe_shape, probe_size, propagation_distance=propagation_distance)
 
 
         # Now we initialize all the subdominant probe modes

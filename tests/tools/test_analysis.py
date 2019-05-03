@@ -25,21 +25,24 @@ def test_orthogonalize_probes():
                        3*np.exp(-probe_Rs**2 / (2 * 12**2)),
                        1*np.exp(-probe_Rs**2 / (2 * 15**2))]).astype(np.complex64)
 
-    ortho_probes = cmath.torch_to_complex(analysis.orthogonalize_probes(probes))
-    
+    # test that it works on numpy arrays
+    ortho_probes = analysis.orthogonalize_probes(probes)
+
+    # test that it also works on torch tensors
+    ortho_probes_t = cmath.torch_to_complex(analysis.orthogonalize_probes(cmath.complex_to_torch(probes)))
+        
     for p1,p2 in combinations(ortho_probes,2):
         assert np.sum(np.conj(p1)*p2) / np.sum(np.abs(p1)**2) < 1e-6
 
-    for probe in ortho_probes:
-        print(np.sum(np.abs(probe)**2))
+    for p1,p2 in combinations(ortho_probes_t,2):
+        assert np.sum(np.conj(p1)*p2) / np.sum(np.abs(p1)**2) < 1e-6
 
-    for probe in probes:
-        print(np.sum(np.abs(probe)**2))
-        
     probe_intensity = np.sum(np.abs(probes)**2,axis=0)
     ortho_probe_intensity = np.sum(np.abs(ortho_probes)**2,axis=0)
+    ortho_probe_t_intensity = np.sum(np.abs(ortho_probes_t)**2,axis=0)
 
     assert np.allclose(probe_intensity,ortho_probe_intensity)
+    assert np.allclose(probe_intensity,ortho_probe_t_intensity)
 
 
 

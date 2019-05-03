@@ -28,8 +28,9 @@ def orthogonalize_probes(probes):
 
     try:
         probes = cmath.torch_to_complex(probes.detach().cpu())
+        send_to_torch = True
     except:
-        pass
+        send_to_torch = False
 
     bases = []
     coefficients = np.zeros((probes.shape[0],probes.shape[0]), dtype=np.complex64)
@@ -50,15 +51,16 @@ def orthogonalize_probes(probes):
     ortho_probes = []
     for i in range(len(eigvals)):
         coefficients = np.sqrt(eigvals[i]) * eigvecs[:,i]
-        print(coefficients)
         probe = np.zeros(bases[0].shape, dtype=np.complex64)
         for coefficient, basis in zip(coefficients, bases):
             probe += basis * coefficient
         ortho_probes.append(probe)
 
-        
-    return cmath.complex_to_torch(np.stack(ortho_probes[::-1]))
     
+    if send_to_torch:
+        return cmath.complex_to_torch(np.stack(ortho_probes[::-1]))
+    else:
+        return np.stack(ortho_probes[::-1])
         
 
 

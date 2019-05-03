@@ -81,6 +81,7 @@ def plot_1D(arr, fig = None, **kwargs):
         ax = fig.add_subplot(111, **kwargs)
     else:
         plt.figure(fig.number)
+        plt.gcf().clear()
 
     plt.scatter(np.arange(arr.shape[-1]), arr)
 
@@ -101,6 +102,7 @@ def plot_amplitude(im, fig = None, basis=None, units='um', **kwargs):
         ax = fig.add_subplot(111, **kwargs)
     else:
         plt.figure(fig.number)
+        plt.gcf().clear()
 
     if isinstance(im, t.Tensor):
         absolute = cmath.cabs(im).detach().cpu().numpy()
@@ -145,6 +147,7 @@ def plot_phase(im, fig=None, basis=None, units='um', **kwargs):
         ax = fig.add_subplot(111, **kwargs)
     else:
         plt.figure(fig.number)
+        plt.gcf().clear()
 
     # If the user has matplotlib >=3.0, use the preferred colormap
     if isinstance(im, t.Tensor):
@@ -198,6 +201,7 @@ def plot_colorized(im, fig=None, basis=None, units='um', **kwargs):
         ax = fig.add_subplot(111, **kwargs)
     else:
         plt.figure(fig.number)
+        plt.gcf().clear()
         
     if isinstance(im, t.Tensor):
         im = cmath.torch_to_complex(im.detach().cpu())
@@ -226,16 +230,17 @@ def plot_colorized(im, fig=None, basis=None, units='um', **kwargs):
 
 
 
-def plot_translations(translations, fig=None, units='um'):
+def plot_translations(translations, fig=None, units='um', lines=True):
     """Plots a set of probe translations in a nicely formatted way
     
     Args:
         translations: An Nx2 or Nx3 set of translations in real space
         fig : Optional, a figure to plot into
         units : Default is um, units to report in (assuming input in m)
+        lines : Whether to plot the lines indicating the path
 
     Returns:
-        
+        None
     """
     
     factor = get_units_factor(units)
@@ -245,13 +250,15 @@ def plot_translations(translations, fig=None, units='um'):
         ax = fig.add_subplot(111)
     else:
         plt.figure(fig.number)
+        plt.gcf().clear()
 
     if isinstance(translations, t.Tensor):
         translations = translations.detach().cpu().numpy()
         
     translations = translations * factor
     plt.plot(translations[:,0], translations[:,1],'k.')
-    plt.plot(translations[:,0], translations[:,1],'b-', linewidth=0.5)
+    if lines:
+        plt.plot(translations[:,0], translations[:,1],'b-', linewidth=0.5)
     plt.xlabel('X (' + units + ')')
     plt.ylabel('Y (' + units + ')')
 

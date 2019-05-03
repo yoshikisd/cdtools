@@ -186,4 +186,8 @@ def test_SHARP_style_probe(ptycho_cxi_1):
 
     probe = initializers.SHARP_style_probe(dataset, shape, det_slice)
     assert probe.shape == t.Size([256,256,2])
-    
+
+    probe = initializers.SHARP_style_probe(dataset, shape, det_slice, propagation_distance=20e-6)
+    assert probe.shape == t.Size([256,256,2])
+
+

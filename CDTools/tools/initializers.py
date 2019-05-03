@@ -6,7 +6,7 @@ __all__ = ['exit_wave_geometry', 'calc_object_setup', 'gaussian',
            'gaussian_probe', 'SHARP_style_probe'] 
 
 from CDTools.tools import cmath
-from CDTools.tools.propagators import inverse_far_field
+from CDTools.tools.propagators import inverse_far_field, generate_angular_spectrum_propagator, near_field
 from scipy.fftpack import next_fast_len
 import numpy as np
 
@@ -211,7 +211,7 @@ def gaussian_probe(dataset, basis, shape, sigma, propagation_distance=0):
     return avg_intensity / probe_intensity * probe
     
 
-def SHARP_style_probe(dataset, shape, det_slice):
+def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None):
     """Generates a SHARP style probe guess from a dataset
 
     What we call the "SHARP" style probe guess is to take a mean of all
@@ -233,6 +233,7 @@ def SHARP_style_probe(dataset, shape, det_slice):
         dataset (Ptycho_2D_Dataset) : The dataset to work from
         shape (torch.Size) : The size of the probe array to simulate
         det_slice (slice) : A slice or tuple of slices corresponding to the detector region in Fourier space
+        propagatioin_distance (float) : Default is no propagation, an amount to propagate the guessed probe from it's focal point
     """
 
     
@@ -242,7 +243,7 @@ def SHARP_style_probe(dataset, shape, det_slice):
     intensities /= len(dataset)
 
     # Subtract off a known background if it's stored
-    if hasattr(dataset, 'background'):
+    if hasattr(dataset, 'background') and dataset.background is not None:
         intensities[det_slice] = np.clip(intensities[det_slice] - dataset.background.cpu().numpy(), a_min=0,a_max=None)
     
     probe_fft = cmath.complex_to_torch(np.sqrt(intensities))
@@ -262,7 +263,32 @@ def SHARP_style_probe(dataset, shape, det_slice):
         probe_guess[center[0]+1, center[1]],
         probe_guess[center[0], center[1]-1],
         probe_guess[center[0], center[1]+1]])
+
+
+    probe_guess = cmath.complex_to_torch(probe_guess)
     
-    return cmath.complex_to_torch(probe_guess)
+    if propagation_distance is not None:
+        # First generate the propagation array
+
+        probe_shape = t.Tensor(tuple(shape))
+
+        # Start by recalculating the probe basis from the given information
+        det_basis = t.Tensor(dataset.detector_geometry['basis'])
+        basis_dirs = det_basis / t.norm(det_basis, dim=0)
+        distance = dataset.detector_geometry['distance']
+        probe_basis = basis_dirs * dataset.wavelength * distance / \
+            (probe_shape * t.norm(det_basis,dim=0))
+
+        # Then package everything as it's needed
+        probe_spacing = t.norm(probe_basis,dim=0).numpy()
+        probe_shape = probe_shape.numpy().astype(np.int32)
+
+        #assert 0
+        # And generate the propagator
+        AS_prop = generate_angular_spectrum_propagator(probe_shape, probe_spacing, dataset.wavelength, propagation_distance)
+
+        probe_guess = near_field(probe_guess,AS_prop)
+    
+    return probe_guess
 
     
