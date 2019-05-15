@@ -22,7 +22,7 @@ def modulus(wavefront, intensities, mask = None):
         wavefront (torch.Tensor) : The JxNxMx2 stack of complex propagated wavefronts
         intensities (torch.Tensor): The measured diffraction pattern(s) stored as an JxNxM stack of real tensors
         mask (torch.Tensor) : Mask for the intensities array with shape JxNxM, where bad detector pixels are set to 0 and usable pixels set to 1
-    
+
     Returns:
         torch.Tensor : The JxNxMx2 propagated wavefield with corrected intensities
     """
@@ -55,10 +55,9 @@ def support(wavefront, support):
 
     Args:
         wavefront (torch.Tensor) : The JxNxMx2 stack of complex propagated wavefronts
-        support (torch.Tensor) : An NxM support, with 1s within the support and 0s outside 
-    
+        support (torch.Tensor) : An NxM support, with 1s within the support and 0s outside
+
     Returns:
         torch.Tensor : The JxNxMx2 wavefield with the support mask applied
     """
     return wavefront * support.to(wavefront.dtype)[...,None]
-
