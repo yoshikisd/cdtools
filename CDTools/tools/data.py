@@ -30,7 +30,7 @@ __all__ = ['get_entry_info',
 #
 # I will put here some thoughts about how to load data into this program.
 #
-# 
+#
 # The reconstructions should have the ability to generate datasets.
 # So you could write a reconstruction engine and then it would be
 # able to simulate data directly in the engine for you to use as a
@@ -41,7 +41,7 @@ __all__ = ['get_entry_info',
 # file into an h5py object. This file could host the simple cxi file
 # browser, perhaps. But I think the reality is that we need individual
 # loaders for each kind of experiment. Perhaps we could put some basic
-# reuseable tools for inspecting cxi-type h5 files in this file. 
+# reuseable tools for inspecting cxi-type h5 files in this file.
 #
 #
 # Then, there can be some more sophisticated tools that load data for
@@ -65,7 +65,7 @@ __all__ = ['get_entry_info',
 # whatever), and a diffraction pattern. They would also have a "setup"
 # attribute, or "metadata", or whatever you'd want to call it, that contain
 # the various fixed experimental parameters (energy, distance, etc.)
-# 
+#
 # And I think the cxi visualizer should really go into it's own script,
 # because it's not a reuseable component.
 #
@@ -84,7 +84,7 @@ def get_entry_info(cxi_file):
     String type metadata is read out as a string, and datetime metadata
     is converted to python datetime objects if the string is properly
     formatted.
-    
+
     Args:
         cxi_file (h5py.File) : a file object to be read
 
@@ -112,7 +112,7 @@ def get_entry_info(cxi_file):
 
 def get_sample_info(cxi_file):
     """Returns a dictionary with the basic metadata from the cxi file's entry_1/sample_1 attribute
-    
+
     Args:
         cxi_file (h5py.File) : a file object to be read
 
@@ -122,7 +122,7 @@ def get_sample_info(cxi_file):
     """
     if 'entry_1/sample_1' not in cxi_file:
         return None
-    
+
     s1 = cxi_file['entry_1/sample_1']
     metadata_attrs = ['name','description','unit_cell_group']
 
@@ -135,7 +135,7 @@ def get_sample_info(cxi_file):
                 metadata[attr] = str(s1[attr][()].decode())
             except AttributeError as e:
                 metadata[attr] = str(np.array(s1[attr][:])[0].decode())
-    
+
     float_attrs = ['concentration',
                    'mass',
                    'temperature',
@@ -149,23 +149,23 @@ def get_sample_info(cxi_file):
         metadata['unit_cell'] = np.array(s1['unit_cell']).astype(np.float32)
 
     # TODO: Add my nonstandard "surface normal" attribute here
-    
+
     # TODO: I should add the sample geometry as a valid metadata that can
     # be copied over
-    
+
     # Check if the metadata is empty
     if metadata == {}:
         metadata = None
-    
+
     return metadata
 
 
 def get_wavelength(cxi_file):
     """Returns the wavelength of the source defined in the cxi file object, in m
-    
+
     Args:
         cxi_file (h5py.File) : a file object to be read
-    
+
     Returns:
         np.float32 : The wavelength of the source defined in the cxi file
     """
@@ -177,7 +177,7 @@ def get_wavelength(cxi_file):
         wavelength = 1.9864459e-25 / energy
     else:
         raise KeyError('Neither Wavelength or Energy Defined in provided .cxi File')
-    
+
     return wavelength
 
 
@@ -189,16 +189,16 @@ def get_detector_geometry(cxi_file):
     outputs includes the sample to detector distance, the corner location
     of the detector, and the basis vectors defining the detector. It can
     only handle detectors defined as rectangular grids of pixels.
-    
+
     The distance and corner_location values are technically overdetermining
     the detector location, but for many experiments (particularly
-    transmission experiments), the distance is needed and the exact 
+    transmission experiments), the distance is needed and the exact
     corner location is not. If the corner location is not reported in
     the cxi file, no attempt will be made to calculate it.
 
     Args:
         cxi_file (h5py.File) : a file object to be read
-    
+
     Returns:
         distance (np.float32) : The sample to detector distance, in m
         basis_vectors (np.array) : The basis vectors for the detector
@@ -210,6 +210,8 @@ def get_detector_geometry(cxi_file):
 
     if 'detector_1/basis_vectors' in i1:
         basis_vectors = np.array(d1['basis_vectors'])
+        if basis_vectors.shape == (2,3):
+            basis_vectors = basis_vectors.T
     else:
         # This whole thing just to account for all the ways people can
         # implicitly define the x or y pixel size for a detector. I've
@@ -231,7 +233,7 @@ def get_detector_geometry(cxi_file):
             raise KeyError('Detector pixel size not defined in file.')
         basis_vectors = np.array([[0,-y_pixel_size,0],
                                   [-x_pixel_size,0,0]]).transpose()
-        
+
     try:
         distance = np.float32(d1['distance'])
     except:
@@ -240,7 +242,7 @@ def get_detector_geometry(cxi_file):
         corner_position = np.array(d1['corner_position'])
     except:
         corner_position = None
-    
+
     # Don't pretend to calculate corner position from distance if it's
     # if it's not defined, but do calculate distance from corner position
     # if distance is not defined. If neither is defined, then raise
@@ -250,7 +252,7 @@ def get_detector_geometry(cxi_file):
                                    basis_vectors[:,1])
         detector_normal /= np.linalg.norm(detector_normal)
         distance = np.linalg.norm(np.dot(corner_position, detector_normal))
-        
+
     if distance is None and corner_position is not None:
         raise KeyError('Neither sample to detector distance or corner position is defined in file.')
 
@@ -268,14 +270,14 @@ def get_mask(cxi_file):
     pixel, with the exception of pixels marked exactly as 0x00001000,
     which is defined to mean that the pixel has signal above the
     background. These pixels are treated as on pixels
-    
+
     Args:
         cxi_file (h5py.File) : a file object to be read
-    
+
     Returns:
         np.array : An array storing the mask from the cxi file
     """
-    
+
     i1 = cxi_file['entry_1/instrument_1']
     if 'detector_1/mask' in i1:
         mask = np.array(i1['detector_1/mask']).astype(np.uint32)
@@ -299,7 +301,7 @@ def get_dark(cxi_file):
 
     Args:
         cxi_file (h5py.File) : a file object to be read
-    
+
     Returns:
         np.array : An array storing the dark image
     """
@@ -314,7 +316,7 @@ def get_dark(cxi_file):
     return darks
 
 
-    
+
 def get_data(cxi_file, cut_zeroes = True):
     """Returns an array with the full stack of detector data defined in the cxi file object
 
@@ -324,19 +326,19 @@ def get_data(cxi_file, cut_zeroes = True):
     to all the required locations.
 
     It will return the data array in whatever shape it's defined in.
-    
+
     It will also read out the axes attribute of the data into a list
     of strings
-    
+
     Args:
         cxi_file (h5py.File) : a file object to be read
-    
+
     Returns:
         np.array : An array storing the data defined in the cxi file
         list : A list of the axes defined in the axes attribute, if any
     """
     # Possible locations for the data
-    # 
+    #
     # entry_1/detector_1/data
     if 'entry_1/data_1/data' in cxi_file:
         pull_from = 'entry_1/data_1/data'
@@ -348,7 +350,7 @@ def get_data(cxi_file, cut_zeroes = True):
 
     if cut_zeroes:
         data[data < 0] = 0
-        
+
     if 'axes' in cxi_file[pull_from].attrs:
         axes = str(cxi_file[pull_from].attrs['axes'].decode()).split(':')
         axes = [axis.strip().lower() for axis in axes]
@@ -365,15 +367,15 @@ def get_ptycho_translations(cxi_file):
     It negates the translations, because the CXI file format is designed
     to specify translations of the samples and the CDTools code specifies
     translations of the optics.
-    
+
     Args:
         cxi_file (h5py.File) : a file object to be read
-    
+
     Returns:
         np.array : An array storing the translations defined in the cxi file
         list : A list of the axes defined in the axes attribute, if any
     """
-    
+
     if 'entry_1/data_1/translation' in cxi_file:
         pull_from = 'entry_1/data_1/translation'
     elif 'entry_1/sample_1/geometry_1/translation' in cxi_file:
@@ -385,7 +387,7 @@ def get_ptycho_translations(cxi_file):
 
     translations = -np.array(cxi_file[pull_from]).astype(np.float32)
     return translations
-    
+
 
 
 #
@@ -397,10 +399,10 @@ def create_cxi(filename):
     """Creates a new cxi file with a single entry group
 
     Args:
-        filename (str) : The path at which to create the file    
+        filename (str) : The path at which to create the file
     """
     file_obj = h5py.File(filename,'w')
-    file_obj.create_dataset('cxi_version', data=160)  
+    file_obj.create_dataset('cxi_version', data=160)
     file_obj.create_dataset('number_of_entries',data=1)
     e1f = file_obj.create_group('entry_1')
     return file_obj
@@ -408,7 +410,7 @@ def create_cxi(filename):
 
 def add_entry_info(cxi_file, metadata):
     """Adds a dictionary of entry metadata to the entry_1 group of a cxi file object
-    
+
     Args:
         cxi_file (h5py.File) : The file to add the info to
         metadata (dict) : A dictionary containing all the metadata to be stored
@@ -433,7 +435,7 @@ def add_sample_info(cxi_file, metadata):
     """Adds a dictionary of entry metadata to the entry_1/sample_1 group of a cxi file object
 
     This function will create the sample_1 attribute if it doesn't already exist
-    
+
     Args:
         cxi_file (h5py.File) : The file to add the info to
         metadata (dict) : A dictionary containing all the metadata to be stored
@@ -441,7 +443,7 @@ def add_sample_info(cxi_file, metadata):
     if 'entry_1/sample_1' not in cxi_file:
         cxi_file['entry_1'].create_group('sample_1')
     s1 = cxi_file['entry_1/sample_1']
-        
+
     for key, value in metadata.items():
         if isinstance(value,(str,bytes)):
             s1[key] = np.string_(value)
@@ -454,11 +456,11 @@ def add_sample_info(cxi_file, metadata):
         elif isinstance(value, t.Tensor):
             asnumpy = value.detach().cpu().numpy()
             s1.create_dataset(key, data=asnumpy)
-    
+
 
 def add_source(cxi_file, wavelength):
     """Adds the entry_1/source_1 group to a cxi file object
-    
+
     It stores the energy and wavelength attributes in the source_1 group,
     given a wavelength to define them from.
 
@@ -479,7 +481,7 @@ def add_source(cxi_file, wavelength):
 
 def add_detector(cxi_file, distance, basis, corner=None):
     """Adds the entry_1/instrument_1/detector_1 group to a cxi file object
-    
+
     It will define all the relevant parameters - distance, pixel size,
     detector basis, and corner position (if relevant) based on the provided
     information
@@ -489,7 +491,7 @@ def add_detector(cxi_file, distance, basis, corner=None):
         distance (float) : The sample to detector distance
         basis (array_like) : The detector basis
         corner (array_like) : Optional, the corner position of the detector
-    
+
     """
     if 'entry_1/instrument_1' not in cxi_file:
         cxi_file['entry_1'].create_group('instrument_1')
@@ -513,18 +515,18 @@ def add_detector(cxi_file, distance, basis, corner=None):
 def add_mask(cxi_file, mask):
     """Adds the specified mask to the cxi file
 
-    It places the mask into the mask dataset under 
-    entry_1/instrument_1/detector_1. The internal mask is defined 
+    It places the mask into the mask dataset under
+    entry_1/instrument_1/detector_1. The internal mask is defined
     simply as a 1 for an "on" pixel and a 0 for an "off" pixel, and
     the saved mask is exactly the opposite. This is simpler than the
     most general mask allowed by the cxi file format but it captures the
     distinction between pixels to be used and pixels not to be used.
-    
+
     Args:
-        cxi_file (h5py.File) : The file to add the mask to    
+        cxi_file (h5py.File) : The file to add the mask to
         mask (array_like) : The mask to save out to the file
     """
-    
+
     if 'entry_1/instrument_1' not in cxi_file:
         cxi_file['entry_1'].create_group('instrument_1')
     i1 = cxi_file['entry_1/instrument_1']
@@ -533,7 +535,7 @@ def add_mask(cxi_file, mask):
     d1 = i1['detector_1']
     if isinstance(mask, t.Tensor):
         mask = mask.detach().cpu().numpy()
-    
+
     mask_to_save = np.zeros(mask.shape).astype(np.uint32)
     mask_to_save[mask == 0] = 1
     d1.create_dataset('mask',data=mask_to_save)
@@ -542,11 +544,11 @@ def add_mask(cxi_file, mask):
 def add_dark(cxi_file, dark):
     """Adds the specified dark image to a cxi file
 
-    It places the dark image data into the data_dark dataset under 
+    It places the dark image data into the data_dark dataset under
     entry_1/instrument_1/detector_1.
-    
+
     Args:
-        cxi_file (h5py.File) : The file to add the mask to    
+        cxi_file (h5py.File) : The file to add the mask to
         dark (array_like) : The dark image(s) to save out to the file
     """
     if 'entry_1/instrument_1' not in cxi_file:
@@ -559,13 +561,13 @@ def add_dark(cxi_file, dark):
         dark = dark.detach().cpu().numpy()
 
     d1.create_dataset('data_dark',data=dark)
-    
-    
+
+
 def add_data(cxi_file, data, axes=None):
     """Adds the specified data to the cxi file
-    
+
     It will add the data unchanged to the file, placing it in two spots:
-    
+
     1) The entry_1/instrument_1/detector_1/data path
     2) A softlink at entry_1/data_1/data
 
@@ -577,7 +579,7 @@ def add_data(cxi_file, data, axes=None):
     if 'entry_1/data_1' not in cxi_file:
         cxi_file['entry_1'].create_group('data_1')
     data1 = cxi_file['entry_1/data_1']
-    
+
     if 'entry_1/instrument_1' not in cxi_file:
         cxi_file['entry_1'].create_group('instrument_1')
     i1 = cxi_file['entry_1/instrument_1']
@@ -601,17 +603,17 @@ def add_data(cxi_file, data, axes=None):
 
 def add_ptycho_translations(cxi_file, translations):
     """Adds the specified translations to the cxi file
-    
+
     It will add the translations to the file, negating them to conform to
     the standard in cxi files that the translations refer to the object's
     translation.
-    
+
     It will generally store them in 3 places:
 
     1) The entry_1/sample_1/geometry_1/translation path
     2) A softlink at entry_1/data_1/translation
     3) A softlink at entry_1/instrument_1/detector_1/translation
-    
+
     Args:
         cxi_file (h5py.File) : The file to add the translations to
         translations (array_like) : The translations to be saved
@@ -624,11 +626,11 @@ def add_ptycho_translations(cxi_file, translations):
     if 'geometry_1' not in s1:
         s1.create_group('geometry_1')
     g1 = s1['geometry_1']
-    
+
     if 'entry_1/data_1' not in cxi_file:
         cxi_file['entry_1'].create_group('data_1')
     data1 = cxi_file['entry_1/data_1']
-    
+
     if 'entry_1/instrument_1' not in cxi_file:
         cxi_file['entry_1'].create_group('instrument_1')
     i1 = cxi_file['entry_1/instrument_1']
@@ -643,7 +645,7 @@ def add_ptycho_translations(cxi_file, translations):
     # accounting for the different definition between cxi files and
     # CDTools
     translations = -translations
-    
+
     g1.create_dataset('translation', data=translations)
     data1['translation'] = h5py.SoftLink('/entry_1/sample_1/geometry_1/translation')
     det1['translation'] = h5py.SoftLink('/entry_1/sample_1/geometry_1/translation')
