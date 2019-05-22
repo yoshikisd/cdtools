@@ -7,7 +7,7 @@ from CDTools.tools import plotting as p
 from copy import copy
 from torch.utils import data as torchdata
 from matplotlib import pyplot as plt
-
+import numpy as np
 
 class SimplePtycho(CDIModel):
 
@@ -43,6 +43,7 @@ class SimplePtycho(CDIModel):
         self.probe = t.nn.Parameter(probe_guess.to(t.float32)
                                     / self.probe_norm)
         self.obj = t.nn.Parameter(obj_guess.to(t.float32))
+
 
 
     @classmethod
@@ -138,14 +139,10 @@ class SimplePtycho(CDIModel):
 
 
     def inspect(self):
-        p.plot_amplitude(self.probe, basis=self.probe_basis)
-        plt.title('Probe Amplitude')
-        p.plot_phase(self.probe, basis=self.probe_basis)
-        plt.title('Probe Phase')
-        p.plot_amplitude(self.obj, basis=self.probe_basis)
-        plt.title('Object Amplitude')
-        p.plot_phase(self.obj, basis=self.probe_basis)
-        plt.title('Object Phase')
+        p.plot_amplitude(self.probe, basis=self.probe_basis, title = 'Probe Amplitude')
+        p.plot_phase(self.probe, basis=self.probe_basis, title = 'Probe Phase')
+        p.plot_amplitude(self.obj, basis=self.probe_basis, title = 'Object Amplitude')
+        p.plot_phase(self.obj, basis=self.probe_basis, title = 'Object Phase')
 
 
     def save_results(self):
@@ -153,8 +150,8 @@ class SimplePtycho(CDIModel):
         probe = probe * self.probe_norm.detach().cpu().numpy()
         obj = tools.cmath.torch_to_complex(self.obj.detach().cpu())
         return {'probe':probe,'obj':obj}
-        
-    
+
+
     def ePIE(self, iterations, dataset, beta = 1.0):
         """Runs an ePIE reconstruction as described in `Maiden et al. (2017) <https://www.osapublishing.org/optica/abstract.cfm?uri=optica-4-7-736>`_.
         Optional parameters are:
@@ -172,13 +169,13 @@ class SimplePtycho(CDIModel):
             mask=None
 
         def probe_update(exit_wave, exit_wave_corrected, probe, object, translation):
-            return probe+tools.cmath.cmult(beta*(tools.cmath.cconj(object)/t.max(tools.cmath.cabssq(object)))[translation[0]:translation[0]+probe_shape[0],translation[1]:translation[1]+probe_shape[1]], \
-            exit_wave_corrected-exit_wave)
+            new_probe = probe + tools.cmath.cmult(beta * tools.cmath.cconj(object[translation])/(self.probe_norm*t.max(tools.cmath.cabssq(object))), exit_wave_corrected-exit_wave)
+            return new_probe
 
         def object_update(exit_wave, exit_wave_corrected, probe, object, translation):
-            object[translation[0]:translation[0]+probe_shape[0],translation[1]:translation[1]+probe_shape[1]]\
-            +=tools.cmath.cmult(tools.cmath.cconj(probe)/t.max(tools.cmath.cabssq(probe)),exit_wave_corrected-exit_wave)
-            return object
+            new_object = object.clone()
+            new_object[translation] = object[translation] + tools.cmath.cmult(beta * tools.cmath.cconj(probe)/(self.probe_norm*t.max(tools.cmath.cabssq(probe))), exit_wave_corrected-exit_wave)
+            return new_object
 
         with t.no_grad():
             data_loader = torchdata.DataLoader(dataset, shuffle=True)
@@ -186,15 +183,33 @@ class SimplePtycho(CDIModel):
             for it in range(iterations):
                 loss = []
                 for (i, [translations]), [patterns] in data_loader:
-                    probe = self.probe.clone()
-                    object = self.obj.clone()
-                    exit_wave = self.interaction(i, translations)
-                    exit_wave_corrected = exit_wave.clone()
-                    exit_wave_corrected[self.detector_slice] = tools.projectors.modulus(self.forward_propagator(exit_wave)[self.detector_slice], patterns, mask = mask)
+                    probe = self.probe.data.clone()
+                    object = self.obj.data.clone()
 
-                    integer_translations = t.round(translations).to(dtype=t.int32)
-                    self.probe.data = probe_update(exit_wave, exit_wave_corrected, probe, object, integer_translations)
-                    self.obj.data = object_update(exit_wave, exit_wave_corrected, probe, object, integer_translations)
+                    exit_wave = self.interaction(i, translations).clone()
+                    # Apply modulus constraint
+                    exit_wave_corrected = exit_wave.clone()
+                    exit_wave_corrected = self.forward_propagator(exit_wave_corrected.clone())
+                    exit_wave_corrected[self.detector_slice] = tools.projectors.modulus(exit_wave_corrected.clone()[self.detector_slice], patterns, mask = mask)
+                    exit_wave_corrected = self.backward_propagator(exit_wave_corrected.clone())
+
+                    # Calculate the section of the object wavefunction to be modified
+                    pix_trans = tools.interactions.translations_to_pixel(self.probe_basis,
+                                                                         translations)
+                    pix_trans -= self.min_translation
+
+                    pix_trans = t.round(pix_trans).to(dtype=t.int32).numpy()
+
+                    object_slice = np.s_[pix_trans[0]:
+                                      pix_trans[0]+probe_shape[0],
+                                      pix_trans[1]:
+                                      pix_trans[1]+probe_shape[1]]
+
+                    # Apply probe and object updates
+                    self.probe.data = probe_update(exit_wave, exit_wave_corrected, probe, object, object_slice)
+                    self.obj.data = object_update(exit_wave, exit_wave_corrected, probe, object, object_slice)
+
+                    # Calculate loss
                     loss.append(self.loss(self.measurement(self.interaction(i, translations)), patterns))
 
-                yield t.mean(t.Tensor(loss)).cpu().numpy()
+                yield it, t.mean(t.Tensor(loss)).cpu().numpy()
