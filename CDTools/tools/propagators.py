@@ -144,3 +144,8 @@ def inverse_near_field(wavefront, angular_spectrum_propagator):
 
 
 
+# I think it would be worthwhile to implement an FFT-DI based strategy as
+# well, especially for probe initialization where the propagation distance
+# can be large relative to what the angular spectrum method can reliably handle
+
+

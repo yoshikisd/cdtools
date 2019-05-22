@@ -17,7 +17,7 @@ class FancyPtycho(CDIModel):
                  probe_guess, obj_guess, min_translation = t.Tensor([0,0]),
                  background = None, translation_offsets=None, mask=None,
                  weights = None, translation_scale = 1, saturation=None,
-                 probe_support = None):
+                 probe_support = None, obj_support=None):
         
         super(FancyPtycho,self).__init__()
         self.wavelength = t.Tensor([wavelength])
@@ -76,10 +76,17 @@ class FancyPtycho(CDIModel):
             self.probe_support = probe_support
         else:
             self.probe_support = t.ones_like(self.probe[0])
+
+        if obj_support is not None:
+            self.obj_support = obj_support
+            self.obj.data = self.obj * obj_support
+        else:
+            self.obj_support = t.ones_like(self.obj)
         
         
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1):
+        
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
         det_shape = dataset[0][1].shape
@@ -147,10 +154,19 @@ class FancyPtycho(CDIModel):
             probe_support[p_cent[0]-psr:p_cent[0]+psr,
                           p_cent[1]-psr:p_cent[1]+psr] = 1
         else:
-            probe_support = t.ones_like(probe[0].to(dtype=t.float32))
-        
+            probe_support = None;
 
-        return cls(wavelength, det_geo, probe_basis, det_slice, probe, obj, min_translation=min_translation, translation_offsets = translation_offsets, weights=weights, mask=mask, background=background, translation_scale=translation_scale, saturation=saturation, probe_support=probe_support)
+        if restrict_obj != -1:
+            ro = restrict_obj
+            os = np.array(obj_size)
+            ps = np.array(probe_shape)
+            obj_support = t.zeros_like(obj.to(dtype=t.float32))
+            obj_support[ps[0]//2-ro:os[0]+ro-ps[0]//2,
+                        ps[1]//2-ro:os[1]+ro-ps[1]//2] = 1
+        else:
+            obj_support = None
+
+        return cls(wavelength, det_geo, probe_basis, det_slice, probe, obj, min_translation=min_translation, translation_offsets = translation_offsets, weights=weights, mask=mask, background=background, translation_scale=translation_scale, saturation=saturation, probe_support=probe_support, obj_support=obj_support)
                    
     
     def interaction(self, index, translations):
@@ -168,7 +184,7 @@ class FancyPtycho(CDIModel):
             #                                                self.obj,
             #                                                pix_trans)
             exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(pr,
-                                                           self.obj,
+                                                           self.obj_support * self.obj,
                                                            pix_trans,
                                                            shift_probe=True)
             exit_waves = exit_waves * self.probe_support[...,:,:]
@@ -224,6 +240,7 @@ class FancyPtycho(CDIModel):
         self.probe_basis = self.probe_basis.to(*args,**kwargs)
         self.probe_norm = self.probe_norm.to(*args,**kwargs)
         self.probe_support = self.probe_support.to(*args,**kwargs)
+        self.obj_support = self.obj_support.to(*args,**kwargs)
         
 
     def sim_to_dataset(self, args_list):

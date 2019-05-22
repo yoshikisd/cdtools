@@ -236,10 +236,11 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None):
         propagatioin_distance (float) : Default is no propagation, an amount to propagate the guessed probe from it's focal point
     """
 
-    
+
+    # to use the mask or not?
     intensities = np.zeros(shape)
     for params, im in dataset:
-        intensities[det_slice] += im.cpu().numpy()
+        intensities[det_slice] += dataset.mask.cpu().numpy() * im.cpu().numpy()
     intensities /= len(dataset)
 
     # Subtract off a known background if it's stored
@@ -255,8 +256,7 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None):
     center = np.array(probe_guess.shape) // 2
 
     
-    # I had to remove this because it put some intensity outside of
-    # the detector region that caused issues
+    # I'm always divided on whether to use this modification:
     
     probe_guess[center[0], center[1]]=np.mean([
         probe_guess[center[0]-1, center[1]],

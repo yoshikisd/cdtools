@@ -8,7 +8,8 @@ from matplotlib.colors import hsv_to_rgb
 
 
 __all__ = ['colorize','plot_1D','plot_amplitude','plot_phase',
-           'plot_colorized', 'plot_translations','get_units_factor']
+           'plot_colorized', 'plot_translations','get_units_factor',
+           'plot_nanomap']
 
 
 def colorize(z):
@@ -86,7 +87,7 @@ def plot_1D(arr, fig = None, **kwargs):
     plt.scatter(np.arange(arr.shape[-1]), arr)
 
     
-def plot_amplitude(im, fig = None, basis=None, units='um', **kwargs):
+def plot_amplitude(im, fig = None, basis=None, units='um', cmap='viridis', **kwargs):
     """ Plots the amplitude of a complex Tensor or numpy array with dimensions NxMx2.
     Args:
         im (t.Tensor) : An image with dimensions NxMx2.
@@ -94,6 +95,7 @@ def plot_amplitude(im, fig = None, basis=None, units='um', **kwargs):
         a new figure is created with an Axes subplot at 111.
         basis (numpy array) : Optional, the 3x2 probe basis, used to put the axis labels in real space units.
         units (str) : The units to convert the basis to
+        cmap (str) : Default is 'viridis', the colormap to plot with
         **kwargs: Can be used to set any keyword arguments for the matplotlib.axes.Axes class
         (see https://matplotlib.org/api/axes_api.html#the-axes-class)
     """
@@ -120,8 +122,10 @@ def plot_amplitude(im, fig = None, basis=None, units='um', **kwargs):
     else:
         extent=None
         
-    plt.imshow(absolute, cmap = 'viridis', extent = extent)
-    plt.colorbar()
+    plt.imshow(absolute, cmap = cmap, extent = extent)
+    cbar = plt.colorbar()
+    cbar.set_label('Amplitude (a.u.)')
+
     if basis is not None:
         plt.xlabel('X (' + units + ')')
         plt.ylabel('Y (' + units + ')')
@@ -132,13 +136,14 @@ def plot_amplitude(im, fig = None, basis=None, units='um', **kwargs):
     return fig
 
 
-def plot_phase(im, fig=None, basis=None, units='um', **kwargs):
+def plot_phase(im, fig=None, basis=None, units='um', cmap='auto', **kwargs):
     """ Plots the phase of a complex Tensor or numpy array with dimensions NxMx2.
     Args:
         im (t.Tensor) : An image with dimensions NxMx2.
         fig (matplotlib.figure.Figure) : A matplotlib figure to use to plot. If None,
         a new figure is created with an Axes subplot at 111.
         basis (numpy array) : Optional, the 3x2 probe basis, used to put the axis labels in real space units.
+        cmap (str) : Default is 'auto', which chooses between twilight and hsv based on availability.
         **kwargs: Can be used to set any keyword arguments for the matplotlib.axes.Axes class
         (see https://matplotlib.org/api/axes_api.html#the-axes-class)
     """
@@ -165,13 +170,17 @@ def plot_phase(im, fig=None, basis=None, units='um', **kwargs):
     else:
         extent=None
 
-    try:
-        plt.imshow(phase, cmap = 'twilight', extent=extent)
-    except:
-        plt.imshow(phase, cmap = 'hsv', extent=extent)
-
-    plt.colorbar()
-
+    if cmap == 'auto':
+        try:
+            plt.imshow(phase, cmap = 'twilight', extent=extent)
+        except:
+            plt.imshow(phase, cmap = 'hsv', extent=extent)
+    else:
+        plt.imshow(phase, cmap = cmap, extent=extent)
+        
+    cbar = plt.colorbar()
+    cbar.set_label('Phase (rad)')
+    
     if basis is not None:
         plt.xlabel('X (' + units + ')')
         plt.ylabel('Y (' + units + ')')
@@ -261,4 +270,55 @@ def plot_translations(translations, fig=None, units='um', lines=True):
         plt.plot(translations[:,0], translations[:,1],'b-', linewidth=0.5)
     plt.xlabel('X (' + units + ')')
     plt.ylabel('Y (' + units + ')')
+
+
+    
+def plot_nanomap(translations, values, fig=None, units='um', convention='probe'):
+    """Plots a set of nanomap data in a flexible way
+    
+    Args:
+        translations : An Nx2 or Nx3 set of translations in real space
+        values : a length-N object of values associated with the translations
+        fig : Optional, a figure to plot into
+        units : Default is um, units to report in (assuming input in m)
+        lines : Whether to plot the lines indicating the path
+        convention : 'probe' if the translations refer to probe translations, 'obj' if they refer to object translations
+
+    Returns:
+        None
+    """
+
+    if fig is None:
+        fig = plt.figure()
+    else:
+        plt.figure(fig.number)
+        plt.gcf().clear()
+
+    factor = get_units_factor(units)
+
+    bbox = fig.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    if isinstance(translations, t.Tensor):
+        trans = translations.detach().cpu().numpy()
+    else:
+        trans = np.array(translations)
+
+    if isinstance(values, t.Tensor):
+        values = values.detach().cpu().numpy()
+    else:
+        values = np.array(values)
+
+    if convention.lower() != 'probe':
+        trans = trans * -1
+        
+    s = bbox.width * bbox.height / trans.shape[0] * 72**2 #72 is points per inch
+    s /= 4 # A rough value to make the size work out
+    
+    plt.scatter(factor * trans[:,0],factor * trans[:,1],s=s,c=values)
+    
+    plt.gca().invert_xaxis()
+    plt.gca().set_facecolor('k')
+    plt.xlabel('Translation x (' + units + ')')
+    plt.ylabel('Translation y (' + units + ')')
+    plt.colorbar()
+
 
