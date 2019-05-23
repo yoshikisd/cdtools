@@ -123,8 +123,11 @@ def ptycho_cxi_1():
     expected['axes'] = ['translation','y','x']
 
     g1f = s1f.create_group('geometry_1')
+    orientation = np.array([1.,0,0,0,1,0])
+    g1f.create_dataset('orientation', data=orientation)
+    s1e['orientation'] = np.array([[1.,0,0],[0,1,0],[0,0,1]])
     translations = np.arange(300).reshape((100,3)).astype(np.float32)
-    g1f.create_dataset('translation',data=translations)
+    g1f.create_dataset('translation',data=translations)    
     data1f['translation'] = h5py.SoftLink('/entry_1/sample_1/geometry_1/translation')
     d1f['translation'] = h5py.SoftLink('/entry_1/sample_1/geometry_1/translation')
     expected['translations'] = -translations

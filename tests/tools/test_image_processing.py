@@ -7,7 +7,7 @@ import torch as t
 
 from CDTools.tools import image_processing, cmath, initializers, interactions
 from scipy import ndimage
-
+from scipy.signal import fftconvolve
 
 def test_centroid():
     # Test single im
@@ -108,4 +108,33 @@ def test_find_shift():
     retrieved_shift = image_processing.find_shift(im, test_probe[40:,6:], resolution=50)
     # tolerance of 0.03 on this measurement
     assert t.all(t.abs(shift + t.Tensor((40,6)) - retrieved_shift) < 0.03)
+
     
+def test_convolve_1d():
+    from matplotlib import pyplot as plt
+    test_image = np.random.rand(400,300)
+    #test_image = np.hstack((np.ones((400,150)),np.zeros((400,150))))
+    xs = np.linspace(-100,100,300)
+    kernel = 1/(1+xs**2)
+
+    # First, we test with everything real, dim=1
+    convolved = image_processing.convolve_1d(t.Tensor(test_image),t.Tensor(kernel),dim=1)
+
+    np_result = np.abs(np.fft.ifft(np.fft.fft(test_image,axis=1) * np.fft.fft(np.fft.ifftshift(kernel)), axis=1))
+    assert np.allclose(convolved.numpy(),np_result)
+
+
+    xs = np.linspace(-100,100,400)
+    kernel = 1/(1+xs**2)
+
+    # Then with dim=0, and a non-fftshifted kernel
+    convolved = image_processing.convolve_1d(t.Tensor(test_image),t.Tensor(np.fft.ifftshift(kernel)), fftshift_kernel=False)
+
+    np_result = np.abs(np.fft.ifft(np.fft.fft(test_image,axis=0) * np.fft.fft(np.fft.ifftshift(kernel))[:,None], axis=0))
+    assert np.allclose(convolved.numpy(),np_result)
+
+    # And finally with complex input
+    convolved = cmath.torch_to_complex(image_processing.convolve_1d(cmath.complex_to_torch(test_image),cmath.complex_to_torch(kernel)))
+
+    np_result = np.fft.ifft(np.fft.fft(test_image,axis=0) * np.fft.fft(np.fft.ifftshift(kernel))[:,None], axis=0)
+    assert np.allclose(convolved,np_result)

@@ -14,7 +14,9 @@ class FancyPtycho(CDIModel):
 
     def __init__(self, wavelength, detector_geometry,
                  probe_basis, detector_slice,
-                 probe_guess, obj_guess, min_translation = t.Tensor([0,0]),
+                 probe_guess, obj_guess,
+                 surface_normal=np.array([0.,0.,1.]),
+                 min_translation = t.Tensor([0,0]),
                  background = None, translation_offsets=None, mask=None,
                  weights = None, translation_scale = 1, saturation=None,
                  probe_support = None, obj_support=None):
@@ -34,7 +36,8 @@ class FancyPtycho(CDIModel):
 
         self.probe_basis = t.Tensor(probe_basis)
         self.detector_slice = detector_slice
-
+        self.surface_normal = t.Tensor(surface_normal)
+        
         self.saturation = saturation
         
         if mask is None:
@@ -45,9 +48,9 @@ class FancyPtycho(CDIModel):
         # We rescale the probe here so it learns at the same rate as the
         # object
         if probe_guess.dim() > 3:
-            self.probe_norm = t.max(tools.cmath.cabs(probe_guess[0].to(t.float32)))
+            self.probe_norm = 1 * t.max(tools.cmath.cabs(probe_guess[0].to(t.float32)))
         else:
-            self.probe_norm = t.max(tools.cmath.cabs(probe_guess.to(t.float32)))         
+            self.probe_norm = 1 * t.max(tools.cmath.cabs(probe_guess.to(t.float32)))         
             
         self.probe = t.nn.Parameter(probe_guess.to(t.float32)
                                     / self.probe_norm)
@@ -110,10 +113,18 @@ class FancyPtycho(CDIModel):
                                                    center=center,
                                                    padding=padding,
                                                    opt_for_fft=False)
+
+
+        if hasattr(dataset, 'sample_info') and \
+           dataset.sample_info is not None and \
+           'orientation' in dataset.sample_info:
+            surface_normal = dataset.sample_info['orientation'][2]
+        else:
+            surface_normal = np.array([0.,0.,1.])
         
         # Next generate the object geometry from the probe geometry and
         # the translations
-        pix_translations = tools.interactions.translations_to_pixel(probe_basis, translations)
+        pix_translations = tools.interactions.translations_to_pixel(probe_basis, translations, surface_normal=surface_normal)
         
         obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=50)
 
@@ -166,12 +177,21 @@ class FancyPtycho(CDIModel):
         else:
             obj_support = None
 
-        return cls(wavelength, det_geo, probe_basis, det_slice, probe, obj, min_translation=min_translation, translation_offsets = translation_offsets, weights=weights, mask=mask, background=background, translation_scale=translation_scale, saturation=saturation, probe_support=probe_support, obj_support=obj_support)
+        return cls(wavelength, det_geo, probe_basis, det_slice, probe, obj,
+                   surface_normal=surface_normal,
+                   min_translation=min_translation,
+                   translation_offsets = translation_offsets,
+                   weights=weights, mask=mask, background=background,
+                   translation_scale=translation_scale,
+                   saturation=saturation,
+                   probe_support=probe_support,
+                   obj_support=obj_support)
                    
     
     def interaction(self, index, translations):
         pix_trans = tools.interactions.translations_to_pixel(self.probe_basis,
-                                                             translations)
+                                                             translations,
+                                                             surface_normal=self.surface_normal)
         pix_trans -= self.min_translation
 
         if self.translation_offsets is not None:
@@ -249,7 +269,7 @@ class FancyPtycho(CDIModel):
     
     def corrected_translations(self,dataset):
         translations = dataset.translations.to(dtype=self.probe.dtype,device=self.probe.device)
-        t_offset = tools.interactions.pixel_to_translations(self.probe_basis,self.translation_offsets*self.translation_scale)
+        t_offset = tools.interactions.pixel_to_translations(self.probe_basis,self.translation_offsets*self.translation_scale,surface_normal=self.surface_normal)
         return translations + t_offset
     
 

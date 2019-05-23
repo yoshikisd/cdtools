@@ -4,7 +4,8 @@ import torch as t
 from CDTools.tools import cmath
 
 __all__ = ['centroid', 'centroid_sq', 'sinc_subpixel_shift',
-           'find_subpixel_shift', 'find_pixel_shift', 'find_shift']
+           'find_subpixel_shift', 'find_pixel_shift', 'find_shift',
+           'convolve_1d']
 
 
 def centroid(im, dims=2):
@@ -206,3 +207,55 @@ def find_shift(im1, im2, resolution=10):
                                          resolution=resolution)
 
     return subpixel_shift
+
+
+def convolve_1d(image, kernel, dim=0, fftshift_kernel=True):
+    """Convolves an image with a 1d kernel along a specified dimension
+
+    The convolution is a circular convolution calculated using a Fourier
+    transform. The calculation is done so the input remains differentiable
+    with respect to the output.
+
+    If the image has a final dimension of 2, it is assumed to be complex.
+    Otherwise, the image is assumed to be real. The image and kernel
+    must either both be real or both be complex.
+    
+    Args:
+        image (torch.Tensor) : The image to convolve
+        kernel (torch.Tensor) : The 1d kernel to convolve with
+        dim (int) : Default 0, the dimension to convolve along
+        fftshift_kernel (bool) : Default True, whether to fftshift the kernel first.
+    
+    Returns:
+        (torch.Tensor) : The convolved image
+    """
+
+    complex_things = 2
+    if image.shape[-1] != 2:
+        image = t.stack((image,t.zeros_like(image)),dim=-1)
+        complex_things -= 1
+        
+    if kernel.shape[-1] != 2:
+        kernel = t.stack((kernel,t.zeros_like(kernel)),dim=-1)
+        complex_things -= 1
+
+    # Take a correlation
+    if fftshift_kernel:
+        kernel = cmath.ifftshift(kernel)
+
+
+    # We have to transpose the relevant dimension to -2 before using the fft,
+    # which expects to operate on the final non-complex dimension
+    trans_im = t.transpose(image, dim, -2)
+    
+    fft_im = t.fft(trans_im, 1)
+    fft_kernel = t.fft(kernel, 1)
+    trans_conv = t.ifft(cmath.cmult(fft_im,fft_kernel), 1)
+
+    conv_im = t.transpose(trans_conv, dim, -2)
+
+    # If nothing was input as complex, the result should be returned as real
+    if complex_things == 0:
+        return conv_im[...,0]
+    else:
+        return conv_im

@@ -135,12 +135,13 @@ def get_sample_info(cxi_file):
                 metadata[attr] = str(s1[attr][()].decode())
             except AttributeError as e:
                 metadata[attr] = str(np.array(s1[attr][:])[0].decode())
-
+    
     float_attrs = ['concentration',
                    'mass',
                    'temperature',
                    'thickness',
                    'unit_cell_volume']
+    
     for attr in float_attrs:
         if attr in s1:
             metadata[attr] = np.float32(s1[attr][()])
@@ -148,11 +149,14 @@ def get_sample_info(cxi_file):
     if 'unit_cell' in s1:
         metadata['unit_cell'] = np.array(s1['unit_cell']).astype(np.float32)
 
-    # TODO: Add my nonstandard "surface normal" attribute here
 
-    # TODO: I should add the sample geometry as a valid metadata that can
-    # be copied over
-
+    if 'geometry_1/orientation' in s1:
+        orient = np.array(s1['geometry_1/orientation']).astype(np.float32)
+        xvec = orient[:3] / np.linalg.norm(orient[:3])
+        yvec = orient[3:] / np.linalg.norm(orient[3:])
+        metadata['orientation'] =  np.array([xvec,yvec,
+                                             np.cross(xvec,yvec)])
+        
     # Check if the metadata is empty
     if metadata == {}:
         metadata = None
@@ -444,7 +448,16 @@ def add_sample_info(cxi_file, metadata):
         cxi_file['entry_1'].create_group('sample_1')
     s1 = cxi_file['entry_1/sample_1']
 
+    if 'orientation' in metadata:
+        if 'geometry_1' not in s1:
+            s1.create_group('geometry_1')
+        # Only store the part of this matrix as defined in the CXI file spec
+        s1['geometry_1'].create_dataset('orientation',
+                                        data=metadata['orientation'].ravel()[:6])
+        
     for key, value in metadata.items():
+        if key == 'orientation':
+            continue # this is a special case
         if isinstance(value,(str,bytes)):
             s1[key] = np.string_(value)
         elif isinstance(value, datetime.datetime):

@@ -240,7 +240,10 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None):
     # to use the mask or not?
     intensities = np.zeros(shape)
     for params, im in dataset:
-        intensities[det_slice] += dataset.mask.cpu().numpy() * im.cpu().numpy()
+        if hasattr(dataset,'mask') and dataset.mask is not None:
+            intensities[det_slice] += dataset.mask.cpu().numpy() * im.cpu().numpy()
+        else:
+            intensities[det_slice] += im.cpu().numpy()         
     intensities /= len(dataset)
 
     # Subtract off a known background if it's stored
