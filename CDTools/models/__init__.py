@@ -168,10 +168,12 @@ class CDIModel(t.nn.Module):
     plot_list = []
     
     
-    def inspect(self, dataset=None):
+    def inspect(self, dataset=None, update=True):
         """Plots all the plots defined in the model's plot_list attribute
   
-        It will plot all the registered plots for this model in new figures.
+        If update is set to True, it will update any previously plotted set
+        of plots, if one exists, and then redraw them. Otherwise, it will
+        plot a new set, and any subsequent updates will update the new set
         
         Optionally, a dataset can be passed, which then will plot any
         registered plots which need to incorporate some information from
@@ -179,8 +181,29 @@ class CDIModel(t.nn.Module):
         
         Args:
             dataset (torch.Dataset): Optional, a dataset matched to the model type
+            update (bool) : Whether to update existing plots or plot new ones
+        
+        Returns:
+            list : A list of figure numbers noting where the plots were plotted
         """
-        for plots in self.plot_list:
+        first_update = False
+        if update and hasattr(self, 'figs') and self.figs:
+            figs = self.figs
+        elif update:
+            figs = None
+            self.figs = []
+            first_update = True
+        else:
+            figs = None
+            self.figs = []
+            
+        for idx, plots in enumerate(self.plot_list):
+            if figs is None:
+                fig = plt.figure()
+                self.figs.append(fig)
+            else:
+                fig = figs[idx]
+            
             name = plots[0]
             plotter = plots[1]
             # If a conditional is included in the plot
@@ -191,18 +214,24 @@ class CDIModel(t.nn.Module):
                 if len(plots) >= 3 and not plots[2](self, dataset):
                     continue
             try:
-                plotter(self)
+                plotter(self,fig)
                 plt.title(name)
             except TypeError as e:
                 if dataset is not None:
                     try:
-                        plotter(self, dataset)
+                        plotter(self, fig, dataset)
                         plt.title(name)
                     except (IndexError, KeyError, AttributeError) as e:
                         pass
             except (IndexError, KeyError, AttributeError) as e:
                 pass
-        
+            if update:
+                plt.draw()
+                fig.canvas.start_event_loop(0.001)
+
+        if first_update:
+            plt.pause(0.05 * len(self.figs))
+
 
 
 

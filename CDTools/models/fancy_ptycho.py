@@ -276,23 +276,23 @@ class FancyPtycho(CDIModel):
     # Needs to be updated to allow for plotting to an existing figure
     plot_list = [
         ('Dominant Probe Amplitude',
-         lambda self: p.plot_amplitude(self.probe[0], basis=self.probe_basis)),
+         lambda self, fig: p.plot_amplitude(self.probe[0], fig=fig, basis=self.probe_basis)),
         ('Dominant Probe Phase',
-         lambda self: p.plot_phase(self.probe[0], basis=self.probe_basis)),
+         lambda self, fig: p.plot_phase(self.probe[0], fig=fig, basis=self.probe_basis)),
         ('Subdominant Probe Amplitude',
-         lambda self: p.plot_amplitude(self.probe[1], basis=self.probe_basis),
+         lambda self, fig: p.plot_amplitude(self.probe[1], fig=fig, basis=self.probe_basis),
          lambda self: len(self.probe) >=1),
         ('Subdominant Probe Phase',
-         lambda self: p.plot_phase(self.probe[1], basis=self.probe_basis),
+         lambda self, fig: p.plot_phase(self.probe[1], fig=fig, basis=self.probe_basis),
          lambda self: len(self.probe) >=1),
         ('Object Amplitude', 
-         lambda self: p.plot_amplitude(self.obj, basis=self.probe_basis)),
+         lambda self, fig: p.plot_amplitude(self.obj, fig=fig, basis=self.probe_basis)),
         ('Object Phase',
-         lambda self: p.plot_phase(self.obj, basis=self.probe_basis)),
+         lambda self, fig: p.plot_phase(self.obj, fig=fig, basis=self.probe_basis)),
         ('Corrected Translations',
-         lambda self, dataset: p.plot_translations(self.corrected_translations(dataset))),
+         lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig)),
         ('Background',
-         lambda self: plt.figure() and plt.imshow(self.background.detach().cpu().numpy()**2))
+         lambda self, fig: plt.figure(fig.number) and plt.imshow(self.background.detach().cpu().numpy()**2))
     ]
 
     

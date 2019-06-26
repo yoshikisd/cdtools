@@ -31,12 +31,15 @@ dataset.get_as(device='cuda')
 #model.translation_offsets.requires_grad = False
 
 for i, loss in enumerate(model.Adam_optimize(30, dataset, batch_size=100)):
+    model.inspect(dataset)
     print(i,loss)
 
 for i, loss in enumerate(model.Adam_optimize(30, dataset, batch_size=100, lr=0.001)):
+    model.inspect(dataset)
     print(i,loss)
 
 for i, loss in enumerate(model.Adam_optimize(30, dataset, batch_size=100, lr=0.0001)):
+    model.inspect(dataset)
     print(i,loss)
 
 
