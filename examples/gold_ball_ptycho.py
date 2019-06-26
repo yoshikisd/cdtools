@@ -47,5 +47,6 @@ for i, loss in enumerate(model.Adam_optimize(30, dataset, batch_size=100, lr=0.0
 #    pickle.dump(model.save_results(dataset),f)
     
 model.inspect(dataset)
+model.compare(dataset)
 plt.show()
 exit()

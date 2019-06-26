@@ -3,6 +3,9 @@ from __future__ import division, print_function, absolute_import
 import torch as t
 from torch.utils import data as torchdata
 from matplotlib import pyplot as plt
+from matplotlib.widgets import Slider
+from matplotlib import ticker
+import numpy as np
 
 #
 # This is unrelated, but it will then be important to be able to save and load
@@ -93,10 +96,6 @@ class CDIModel(t.nn.Module):
 
     def simulate_to_dataset(self, args_list):
         raise NotImplementedError()
-
-
-    def inspect(self):
-        raise NotImplementedError()
     
 
     def AD_optimize(self, iterations, data_loader,  optimizer, scheduler=None):
@@ -180,11 +179,9 @@ class CDIModel(t.nn.Module):
         the dataset (such as geometry or a comparison with measured data).
         
         Args:
-            dataset (torch.Dataset): Optional, a dataset matched to the model type
+            dataset (CDataset): Optional, a dataset matched to the model type
             update (bool) : Whether to update existing plots or plot new ones
         
-        Returns:
-            list : A list of figure numbers noting where the plots were plotted
         """
         first_update = False
         if update and hasattr(self, 'figs') and self.figs:
@@ -233,6 +230,102 @@ class CDIModel(t.nn.Module):
             plt.pause(0.05 * len(self.figs))
 
 
+    def compare(self, dataset):
+        """Opens a tool for comparing simulated and measured diffraction patterns
+        
+        Args:
+            dataset (CDataset) : A dataset containing the simulated diffraction patterns to compare agains
+        """
+        fig, axes = plt.subplots(1,3,figsize=(12,5.3))
+        fig.tight_layout(rect=[0.02, 0.09, 0.98, 0.96])
+        axslider = plt.axes([0.15,0.06,0.75,0.03])
+
+        
+        def update_colorbar(im):
+            # If the update brought the colorbar out of whack
+            # (say, from clicking back in the navbar)
+            # Holy fuck this was annoying. Sorry future for how
+            # crappy this solution is.
+            #if not np.allclose(im.colorbar.ax.get_xlim(),
+            #                   (np.min(im.get_array()),
+            #                    np.max(im.get_array()))):
+            if hasattr(im, 'norecurse') and im.norecurse:
+                im.norecurse=False
+                return
+            
+            im.norecurse=True
+            im.colorbar.set_clim(vmin=np.min(im.get_array()),vmax=np.max(im.get_array()))
+            im.colorbar.ax.set_ylim(0,1)
+            im.colorbar.set_ticks(ticker.LinearLocator(numticks=5))
+            im.colorbar.draw_all()
+
+        
+        def update(idx):
+            idx = int(idx) % len(dataset)
+            fig.pattern_idx = idx
+            updating = True if len(axes[0].images) >= 1 else False
+            
+            inputs, output = dataset[idx]
+            sim_data = self.forward(*inputs).detach().cpu().numpy()
+            meas_data = output.detach().cpu().numpy()
+
+            if not updating:
+                axes[0].set_title('Simulated')
+                axes[1].set_title('Measured')
+                axes[2].set_title('Difference')
+
+                sim = axes[0].imshow(sim_data)
+                meas = axes[1].imshow(meas_data)
+                diff = axes[2].imshow(sim_data-meas_data)
+
+                cb1 = plt.colorbar(sim, ax=axes[0], orientation='horizontal',format='%.2e',ticks=ticker.LinearLocator(numticks=5),pad=0.1,fraction=0.1)
+                cb1.ax.tick_params(labelrotation=20)
+                cb1.ax.callbacks.connect('xlim_changed', lambda ax: update_colorbar(sim))
+                cb2 = plt.colorbar(meas, ax=axes[1], orientation='horizontal',format='%.2e',ticks=ticker.LinearLocator(numticks=5),pad=0.1,fraction=0.1)
+                cb2.ax.tick_params(labelrotation=20)
+                cb2.ax.callbacks.connect('xlim_changed', lambda ax: update_colorbar(meas))
+                cb3 = plt.colorbar(diff, ax=axes[2], orientation='horizontal',format='%.2e',ticks=ticker.LinearLocator(numticks=5),pad=0.1,fraction=0.1)
+                cb3.ax.tick_params(labelrotation=20)
+                cb3.ax.callbacks.connect('xlim_changed', lambda ax: update_colorbar(diff))
+                
+            else:
+                sim = axes[0].images[-1]
+                sim.set_data(sim_data)
+                update_colorbar(sim)
+
+                meas = axes[1].images[-1]
+                meas.set_data(meas_data)
+                update_colorbar(meas)
+
+                diff = axes[2].images[-1]
+                diff.set_data(sim_data-meas_data)
+                update_colorbar(diff)
+                
+                
+        # This is dumb but the slider doesn't work unless a reference to it is
+        # kept somewhere...
+        self.slider = Slider(axslider, 'Pattern #', 0, len(dataset)-1, valstep=1, valfmt="%d")
+        self.slider.on_changed(update)
+
+        def on_action(event):
+            if not hasattr(event, 'button'):
+                event.button = None
+            if not hasattr(event, 'key'):
+                event.key = None
+                
+            if event.key == 'up' or event.button == 'up':
+                update(fig.pattern_idx - 1)
+            elif event.key == 'down' or event.button == 'down':
+                update(fig.pattern_idx + 1)
+            self.slider.set_val(fig.pattern_idx)
+            plt.draw()
+
+        fig.canvas.mpl_connect('key_press_event',on_action)
+        fig.canvas.mpl_connect('scroll_event',on_action)
+        update(0)
+        
+        
+        pass
 
 
 
