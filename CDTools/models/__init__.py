@@ -236,6 +236,7 @@ class CDIModel(t.nn.Module):
         Args:
             dataset (CDataset) : A dataset containing the simulated diffraction patterns to compare agains
         """
+        
         fig, axes = plt.subplots(1,3,figsize=(12,5.3))
         fig.tight_layout(rect=[0.02, 0.09, 0.98, 0.96])
         axslider = plt.axes([0.15,0.06,0.75,0.03])
@@ -324,8 +325,6 @@ class CDIModel(t.nn.Module):
         fig.canvas.mpl_connect('scroll_event',on_action)
         update(0)
         
-        
-        pass
 
 
 
