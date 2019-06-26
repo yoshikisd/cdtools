@@ -2,7 +2,7 @@ from __future__ import division, print_function, absolute_import
 
 import torch as t
 from torch.utils import data as torchdata
-
+from matplotlib import pyplot as plt
 
 #
 # This is unrelated, but it will then be important to be able to save and load
@@ -162,6 +162,47 @@ class CDIModel(t.nn.Module):
                                   lr = lr, history_size=history_size)
 
         return self.AD_optimize(iterations, data_loader, optimizer)
+
+
+    # By default, the plot_list is empty
+    plot_list = []
+    
+    
+    def inspect(self, dataset=None):
+        """Plots all the plots defined in the model's plot_list attribute
+  
+        It will plot all the registered plots for this model in new figures.
+        
+        Optionally, a dataset can be passed, which then will plot any
+        registered plots which need to incorporate some information from
+        the dataset (such as geometry or a comparison with measured data).
+        
+        Args:
+            dataset (torch.Dataset): Optional, a dataset matched to the model type
+        """
+        for plots in self.plot_list:
+            name = plots[0]
+            plotter = plots[1]
+            # If a conditional is included in the plot
+            try:
+                if len(plots) >=3 and not plots[2](self):
+                    continue
+            except TypeError as e:
+                if len(plots) >= 3 and not plots[2](self, dataset):
+                    continue
+            try:
+                plotter(self)
+                plt.title(name)
+            except TypeError as e:
+                if dataset is not None:
+                    try:
+                        plotter(self, dataset)
+                        plt.title(name)
+                    except (IndexError, KeyError, AttributeError) as e:
+                        pass
+            except (IndexError, KeyError, AttributeError) as e:
+                pass
+        
 
 
 

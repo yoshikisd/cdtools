@@ -138,11 +138,16 @@ class SimplePtycho(CDIModel):
         raise NotImplementedError()
 
 
-    def inspect(self):
-        p.plot_amplitude(self.probe, basis=self.probe_basis, title = 'Probe Amplitude')
-        p.plot_phase(self.probe, basis=self.probe_basis, title = 'Probe Phase')
-        p.plot_amplitude(self.obj, basis=self.probe_basis, title = 'Object Amplitude')
-        p.plot_phase(self.obj, basis=self.probe_basis, title = 'Object Phase')
+    plot_list = [
+        ('Probe Amplitude',
+         lambda self: p.plot_amplitude(self.probe, basis=self.probe_basis)),
+        ('Probe Phase',
+         lambda self: p.plot_phase(self.probe, basis=self.probe_basis)),
+        ('Object Amplitude',
+         lambda self: p.plot_amplitude(self.obj, basis=self.probe_basis)),
+        ('Object Phase',
+         lambda self: p.plot_phase(self.obj, basis=self.probe_basis))
+    ]
 
 
     def save_results(self):

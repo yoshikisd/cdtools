@@ -271,33 +271,31 @@ class FancyPtycho(CDIModel):
         translations = dataset.translations.to(dtype=self.probe.dtype,device=self.probe.device)
         t_offset = tools.interactions.pixel_to_translations(self.probe_basis,self.translation_offsets*self.translation_scale,surface_normal=self.surface_normal)
         return translations + t_offset
+
+
+    # Needs to be updated to allow for plotting to an existing figure
+    plot_list = [
+        ('Dominant Probe Amplitude',
+         lambda self: p.plot_amplitude(self.probe[0], basis=self.probe_basis)),
+        ('Dominant Probe Phase',
+         lambda self: p.plot_phase(self.probe[0], basis=self.probe_basis)),
+        ('Subdominant Probe Amplitude',
+         lambda self: p.plot_amplitude(self.probe[1], basis=self.probe_basis),
+         lambda self: len(self.probe) >=1),
+        ('Subdominant Probe Phase',
+         lambda self: p.plot_phase(self.probe[1], basis=self.probe_basis),
+         lambda self: len(self.probe) >=1),
+        ('Object Amplitude', 
+         lambda self: p.plot_amplitude(self.obj, basis=self.probe_basis)),
+        ('Object Phase',
+         lambda self: p.plot_phase(self.obj, basis=self.probe_basis)),
+        ('Corrected Translations',
+         lambda self, dataset: p.plot_translations(self.corrected_translations(dataset))),
+        ('Background',
+         lambda self: plt.figure() and plt.imshow(self.background.detach().cpu().numpy()**2))
+    ]
+
     
-
-    def inspect(self, dataset=None):
-        p.plot_amplitude(self.probe[0], basis=self.probe_basis)
-        plt.title('Dominant Probe Amplitude')
-        p.plot_phase(self.probe[0], basis=self.probe_basis)
-        plt.title('Dominant Probe Phase')
-        
-        if len(self.probe) >=2:
-            p.plot_amplitude(self.probe[1], basis=self.probe_basis)
-            plt.title('Subdominant Probe Amplitude')
-            p.plot_phase(self.probe[1], basis=self.probe_basis)
-            plt.title('Subdominant Probe Phase')
-
-        p.plot_amplitude(self.obj, basis=self.probe_basis)
-        plt.title('Object Amplitude')
-        p.plot_phase(self.obj, basis=self.probe_basis)
-        plt.title('Object Phase')
-
-        if dataset is not None:
-            p.plot_translations(self.corrected_translations(dataset))
-
-        plt.figure()
-        plt.imshow(self.background.detach().cpu().numpy()**2)
-        plt.title('Background')
-        
-
     def save_results(self, dataset):
         basis = self.probe_basis.detach().cpu().numpy()
         translations = self.corrected_translations(dataset).detach().cpu().numpy()
