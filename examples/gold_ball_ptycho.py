@@ -11,7 +11,9 @@ filename = 'example_data/AuBalls_700ms_30nmStep_3_6SS_filter.cxi'
 with h5py.File(filename,'r') as f:
     dataset = CDTools.datasets.Ptycho_2D_Dataset.from_cxi(f)
 
+
 model = CDTools.models.FancyPtycho.from_dataset(dataset,n_modes=3,randomize_ang=0.1*np.pi)
+
 
 
 # default is CPU with 32-bit floats
@@ -24,7 +26,8 @@ for i, loss in enumerate(model.Adam_optimize(3, dataset, batch_size=100)):
     print(i,loss)
 
 
-#with open('test_results.pickle', 'wb') as f:
+
+#with open('example_reconstructions/Au_balls.pickle', 'wb') as f:
 #    pickle.dump(model.save_results(dataset),f)
     
 model.inspect(dataset)

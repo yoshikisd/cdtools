@@ -2,11 +2,13 @@ from __future__ import division, print_function, absolute_import
 
 import torch as t
 from CDTools.models import CDIModel
+from CDTools.datasets import Ptycho_2D_Dataset
 from CDTools import tools
 from CDTools.tools import plotting as p
 from copy import copy
 from torch.utils import data as torchdata
 from matplotlib import pyplot as plt
+from datetime import datetime
 import numpy as np
 
 class SimplePtycho(CDIModel):
@@ -135,7 +137,33 @@ class SimplePtycho(CDIModel):
 
 
     def sim_to_dataset(self, args_list):
-        raise NotImplementedError()
+        # In the future, potentially add more control
+        # over what metadata is saved (names, etc.)
+        
+        # First, I need to gather all the relevant data
+        # that needs to be added to the dataset
+        entry_info = {'program_name': 'CDTools',
+                      'instrument_n': 'Simulated Data',
+                      'start_time': datetime.now()}
+
+        sample_info = {'description': 'A simulated sample'}
+        
+        detector_geometry = self.detector_geometry
+        mask = self.mask
+        wavelength = self.wavelength
+        indices, translations = args_list
+        
+        # Then we simulate the results
+        data = self.forward(indices, translations)
+
+        # And finally, we make the dataset
+        return Ptycho_2D_Dataset(translations, data,
+                                 entry_info = entry_info,
+                                 sample_info = sample_info,
+                                 wavelength=wavelength,
+                                 detector_geometry=detector_geometry,
+                                 mask=mask)
+
 
 
     plot_list = [
