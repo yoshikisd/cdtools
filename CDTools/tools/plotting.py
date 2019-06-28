@@ -154,7 +154,6 @@ def plot_phase(im, fig=None, basis=None, units='um', cmap='auto', **kwargs):
         plt.figure(fig.number)
         plt.gcf().clear()
 
-    # If the user has matplotlib >=3.0, use the preferred colormap
     if isinstance(im, t.Tensor):
         phase = cmath.cphase(im).detach().cpu().numpy()
     else:
@@ -170,13 +169,15 @@ def plot_phase(im, fig=None, basis=None, units='um', cmap='auto', **kwargs):
     else:
         extent=None
 
+    
+    # If the user has matplotlib >=3.0, use the preferred colormap
     if cmap == 'auto':
         try:
             plt.imshow(phase, cmap = 'twilight', extent=extent)
         except:
             plt.imshow(phase, cmap = 'hsv', extent=extent)
     else:
-        plt.imshow(phase, cmap = cmap, extent=extent)
+        plt.imshow(phase)#, cmap = cmap, extent=extent)
         
     cbar = plt.colorbar()
     cbar.set_label('Phase (rad)')

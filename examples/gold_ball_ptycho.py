@@ -21,14 +21,15 @@ model.to(device='cuda')
 dataset.get_as(device='cuda')
 
 
-for i, loss in enumerate(model.Adam_optimize(3, dataset, batch_size=100)):
-    model.inspect(dataset)
+for i, loss in enumerate(model.Adam_optimize(30, dataset, batch_size=100)):
     print(i,loss)
+    # Here we see how to liveplot the results - this call will create
+    # or update a readout of the various parameters being reconstructed
+    model.inspect(dataset)
 
 
-
-#with open('example_reconstructions/Au_balls.pickle', 'wb') as f:
-#    pickle.dump(model.save_results(dataset),f)
+with open('example_reconstructions/gold_balls.pickle', 'wb') as f:
+    pickle.dump(model.save_results(dataset),f)
     
 model.inspect(dataset)
 model.compare(dataset)

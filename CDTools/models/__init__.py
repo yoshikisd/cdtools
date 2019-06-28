@@ -193,16 +193,9 @@ class CDIModel(t.nn.Module):
         else:
             figs = None
             self.figs = []
-            
-        for idx, plots in enumerate(self.plot_list):
-            if figs is None:
-                fig = plt.figure()
-                self.figs.append(fig)
-            else:
-                fig = figs[idx]
-            
-            name = plots[0]
-            plotter = plots[1]
+
+        idx = 0
+        for plots in self.plot_list:
             # If a conditional is included in the plot
             try:
                 if len(plots) >=3 and not plots[2](self):
@@ -210,6 +203,16 @@ class CDIModel(t.nn.Module):
             except TypeError as e:
                 if len(plots) >= 3 and not plots[2](self, dataset):
                     continue
+
+            name = plots[0]
+            plotter = plots[1]
+
+            if figs is None:
+                fig = plt.figure()
+                self.figs.append(fig)
+            else:
+                fig = figs[idx]
+
             try:
                 plotter(self,fig)
                 plt.title(name)
@@ -222,6 +225,9 @@ class CDIModel(t.nn.Module):
                         pass
             except (IndexError, KeyError, AttributeError) as e:
                 pass
+
+            idx += 1
+            
             if update:
                 plt.draw()
                 fig.canvas.start_event_loop(0.001)
@@ -268,16 +274,21 @@ class CDIModel(t.nn.Module):
             
             inputs, output = dataset[idx]
             sim_data = self.forward(*inputs).detach().cpu().numpy()
+            sim_data = sim_data
             meas_data = output.detach().cpu().numpy()
-
+            if hasattr(self, 'mask') and self.mask is not None:
+                mask = self.mask.detach().cpu().numpy()
+            else:
+                mask = 1
+                
             if not updating:
                 axes[0].set_title('Simulated')
                 axes[1].set_title('Measured')
                 axes[2].set_title('Difference')
 
                 sim = axes[0].imshow(sim_data)
-                meas = axes[1].imshow(meas_data)
-                diff = axes[2].imshow(sim_data-meas_data)
+                meas = axes[1].imshow(meas_data * mask)
+                diff = axes[2].imshow((sim_data-meas_data) * mask)
 
                 cb1 = plt.colorbar(sim, ax=axes[0], orientation='horizontal',format='%.2e',ticks=ticker.LinearLocator(numticks=5),pad=0.1,fraction=0.1)
                 cb1.ax.tick_params(labelrotation=20)
@@ -295,11 +306,11 @@ class CDIModel(t.nn.Module):
                 update_colorbar(sim)
 
                 meas = axes[1].images[-1]
-                meas.set_data(meas_data)
+                meas.set_data(meas_data * mask)
                 update_colorbar(meas)
 
                 diff = axes[2].images[-1]
-                diff.set_data(sim_data-meas_data)
+                diff.set_data((sim_data-meas_data) * mask)
                 update_colorbar(diff)
                 
                 

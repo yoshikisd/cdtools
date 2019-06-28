@@ -168,16 +168,17 @@ class SimplePtycho(CDIModel):
 
     plot_list = [
         ('Probe Amplitude',
-         lambda self: p.plot_amplitude(self.probe, basis=self.probe_basis)),
+         lambda self, fig: p.plot_amplitude(self.probe, fig=fig, basis=self.probe_basis)),
         ('Probe Phase',
-         lambda self: p.plot_phase(self.probe, basis=self.probe_basis)),
+         lambda self, fig: p.plot_phase(self.probe, fig=fig, basis=self.probe_basis)),
         ('Object Amplitude',
-         lambda self: p.plot_amplitude(self.obj, basis=self.probe_basis)),
+         lambda self, fig: p.plot_amplitude(self.obj, fig=fig, basis=self.probe_basis)),
         ('Object Phase',
-         lambda self: p.plot_phase(self.obj, basis=self.probe_basis))
+         lambda self, fig: p.plot_phase(self.obj, fig=fig, basis=self.probe_basis))
     ]
 
 
+    
     def save_results(self):
         probe = tools.cmath.torch_to_complex(self.probe.detach().cpu())
         probe = probe * self.probe_norm.detach().cpu().numpy()
@@ -231,7 +232,7 @@ class SimplePtycho(CDIModel):
                                                                          translations)
                     pix_trans -= self.min_translation
 
-                    pix_trans = t.round(pix_trans).to(dtype=t.int32).numpy()
+                    pix_trans = t.round(pix_trans).to(dtype=t.int32).detach().cpu().numpy()
 
                     object_slice = np.s_[pix_trans[0]:
                                       pix_trans[0]+probe_shape[0],
@@ -245,4 +246,4 @@ class SimplePtycho(CDIModel):
                     # Calculate loss
                     loss.append(self.loss(self.measurement(self.interaction(i, translations)), patterns))
 
-                yield it, t.mean(t.Tensor(loss)).cpu().numpy()
+                yield t.mean(t.Tensor(loss)).cpu().numpy()
