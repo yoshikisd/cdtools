@@ -17,7 +17,7 @@ setuptools.setup(
         "scipy",
         "matplotlib",
         "python-dateutil",
-        #"pytorch",
+        "torch",
         "h5py"],
     packages=setuptools.find_packages(),
     classifiers=[
