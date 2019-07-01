@@ -341,4 +341,3 @@ class CDIModel(t.nn.Module):
 
 from CDTools.models.simple_ptycho import SimplePtycho
 from CDTools.models.fancy_ptycho import FancyPtycho
-from CDTools.models.incoherent_ptycho import IncoherentPtycho
