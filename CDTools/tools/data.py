@@ -154,8 +154,16 @@ def get_sample_info(cxi_file):
         orient = np.array(s1['geometry_1/orientation']).astype(np.float32)
         xvec = orient[:3] / np.linalg.norm(orient[:3])
         yvec = orient[3:] / np.linalg.norm(orient[3:])
-        metadata['orientation'] =  np.array([xvec,yvec,
-                                             np.cross(xvec,yvec)])
+        metadata['orientation'] = np.array([xvec,yvec,
+                                            np.cross(xvec,yvec)])
+        
+    if 'geometry_1/surface_normal' in s1:
+        snorm = np.array(s1['geometry_1/surface_normal']).astype(np.float32)
+        xvec = np.cross(np.array([0.,1.,0.]), snorm)
+        xvec /= np.linalg.norm(xvec)
+        yvec = np.cross(snorm, xvec)
+        yvec /= np.linalg.norm(yvec)
+        metadata['orientation'] = np.array([xvec, yvec, snorm])
         
     # Check if the metadata is empty
     if metadata == {}:

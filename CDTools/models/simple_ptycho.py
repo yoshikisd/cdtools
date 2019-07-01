@@ -16,7 +16,7 @@ class SimplePtycho(CDIModel):
     def __init__(self, wavelength, detector_geometry,
                  probe_basis, detector_slice,
                  probe_guess, obj_guess, min_translation = [0,0],
-                 mask=None):
+                 surface_normal=np.array([0.,0.,1.]), mask=None):
 
         super(SimplePtycho,self).__init__()
         self.wavelength = t.Tensor([wavelength])
@@ -33,6 +33,9 @@ class SimplePtycho(CDIModel):
 
         self.probe_basis = t.Tensor(probe_basis)
         self.detector_slice = detector_slice
+
+        self.surface_normal = t.Tensor(surface_normal)
+        
         if mask is None:
             self.mask = None
         else:
@@ -71,9 +74,16 @@ class SimplePtycho(CDIModel):
                                                    distance,
                                                    center=center)
 
+        if hasattr(dataset, 'sample_info') and \
+           dataset.sample_info is not None and \
+           'orientation' in dataset.sample_info:
+            surface_normal = dataset.sample_info.orientation[2]
+        else:
+            surface_normal = np.array([0.,0.,1.])
+
         # Next generate the object geometry from the probe geometry and
         # the translations
-        pix_translations = tools.interactions.translations_to_pixel(probe_basis, translations)
+        pix_translations = tools.interactions.translations_to_pixel(probe_basis, translations, surface_normal=surface_normal)
         obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations)
 
         # Finally, initialize the probe and  object using this information
@@ -82,17 +92,19 @@ class SimplePtycho(CDIModel):
         obj = t.ones(obj_size+(2,))
         det_geo = dataset.detector_geometry
 
+
         if hasattr(dataset, 'mask') and dataset.mask is not None:
             mask = dataset.mask.to(t.uint8)
         else:
             mask = None
 
-        return cls(wavelength, det_geo, probe_basis, det_slice, probe, obj, min_translation=min_translation, mask=mask)
+        return cls(wavelength, det_geo, probe_basis, det_slice, probe, obj, min_translation=min_translation, mask=mask, surface_normal=surface_normal)
 
 
     def interaction(self, index, translations):
         pix_trans = tools.interactions.translations_to_pixel(self.probe_basis,
-                                                             translations)
+                                                             translations,
+                                            surface_normal=self.surface_normal)
         pix_trans -= self.min_translation
         return tools.interactions.ptycho_2D_round(self.probe_norm * self.probe,
                                                   self.obj,
@@ -130,11 +142,11 @@ class SimplePtycho(CDIModel):
 
         if self.mask is not None:
             self.mask = self.mask.to(*args, **kwargs)
-
+            
         self.min_translation = self.min_translation.to(*args,**kwargs)
         self.probe_basis = self.probe_basis.to(*args,**kwargs)
         self.probe_norm = self.probe_norm.to(*args,**kwargs)
-
+        self.surface_normal = self.surface_normal.to(*args, **kwargs)
 
     def sim_to_dataset(self, args_list):
         # In the future, potentially add more control
@@ -146,7 +158,15 @@ class SimplePtycho(CDIModel):
                       'instrument_n': 'Simulated Data',
                       'start_time': datetime.now()}
 
-        sample_info = {'description': 'A simulated sample'}
+        surface_normal = self.surface_normal.detach().cpu().numpy()
+        xsurfacevec = np.cross(np.array([0.,1.,0.]), surface_normal)
+        xsurfacevec /= np.linalg.norm(xsurfacevec)
+        ysurfacevec = np.cross(surface_normal, xsurfacevec)
+        ysurfacevec /= np.linalg.norm(ysurfacevec)
+        orientation = np.array([xsurfacevec, ysurfacevec, surface_normal])
+        
+        sample_info = {'description': 'A simulated sample',
+                       'orientation': orientation}
         
         detector_geometry = self.detector_geometry
         mask = self.mask

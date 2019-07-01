@@ -15,7 +15,7 @@ __all__ = ['translations_to_pixel', 'pixel_to_translations',
 #
 
 
-def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0,0,1])):
+def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0.,0.,1.])):
     """Takes real space translations and outputs them in pixel space
     
     This works for any 2D ptychography geometry. It takes in

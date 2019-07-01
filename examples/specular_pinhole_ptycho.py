@@ -22,11 +22,11 @@ with h5py.File(filename,'r') as f:
     dataset = CDTools.datasets.Ptycho_2D_Dataset.from_cxi(f)
 
 
-# A hack for the specular geometry
-dataset.detector_geometry['basis'] = np.array([[0,-30e-6],[30e-6,0],[0,0]])
-
-# Figure out why the padding doesn't work here
-model = CDTools.models.FancyPtycho.from_dataset(dataset,randomize_ang = np.pi/4, padding=0, translation_scale=10)#, n_modes=2, propagation_distance=-5e-4)
+model = CDTools.models.FancyPtycho.from_dataset(dataset,
+                                                randomize_ang = np.pi/4,
+                                                padding=0,
+                                                translation_scale=10,
+                                                scattering_mode='reflection')
 
 
 # Uncomment these to use on the CPU

@@ -90,7 +90,7 @@ class FancyPtycho(CDIModel):
         
         
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -123,7 +123,19 @@ class FancyPtycho(CDIModel):
             surface_normal = dataset.sample_info['orientation'][2]
         else:
             surface_normal = np.array([0.,0.,1.])
-        
+
+
+        # If this information is supplied when the function is called,
+        # then we override the information in the .cxi file
+        if scattering_mode in {'t', 'transmission'}:
+            surface_normal = np.array([0.,0.,1.])
+        elif scattering_mode in {'r', 'reflection'}:
+            outgoing_dir = np.cross(det_basis[:,0], det_basis[:,1])
+            outgoing_dir /= np.linalg.norm(outgoing_dir)
+            surface_normal = outgoing_dir + np.array([0.,0.,1.])
+            surface_normal /= np.linalg.norm(outgoing_dir)
+
+            
         # Next generate the object geometry from the probe geometry and
         # the translations
         pix_translations = tools.interactions.translations_to_pixel(probe_basis, translations, surface_normal=surface_normal)
@@ -202,9 +214,6 @@ class FancyPtycho(CDIModel):
         all_exit_waves = []
         for i in range(self.probe.shape[0]):
             pr = self.probe[i] * self.probe_support
-            #exit_waves = self.probe_norm * tools.interactions.ptycho_2D_round(self.probe[i],
-            #                                                self.obj,
-            #                                                pix_trans)
             exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(pr,
                                                            self.obj_support * self.obj,
                                                            pix_trans,
@@ -263,8 +272,9 @@ class FancyPtycho(CDIModel):
         self.probe_norm = self.probe_norm.to(*args,**kwargs)
         self.probe_support = self.probe_support.to(*args,**kwargs)
         self.obj_support = self.obj_support.to(*args,**kwargs)
-        
+        self.surface_normal = self.surface_normal.to(*args, **kwargs)
 
+        
     def sim_to_dataset(self, args_list):
         # In the future, potentially add more control
         # over what metadata is saved (names, etc.)
@@ -275,7 +285,16 @@ class FancyPtycho(CDIModel):
                       'instrument_n': 'Simulated Data',
                       'start_time': datetime.now()}
 
-        sample_info = {'description': 'A simulated sample'}
+        surface_normal = self.surface_normal.detach().cpu().numpy()
+        xsurfacevec = np.cross(np.array([0.,1.,0.]), surface_normal)
+        xsurfacevec /= np.linalg.norm(xsurfacevec)
+        ysurfacevec = np.cross(surface_normal, xsurfacevec)
+        ysurfacevec /= np.linalg.norm(ysurfacevec)
+        orientation = np.array([xsurfacevec, ysurfacevec, surface_normal])
+        
+        sample_info = {'description': 'A simulated sample',
+                       'orientation': orientation}
+
         
         detector_geometry = self.detector_geometry
         mask = self.mask
