@@ -74,6 +74,7 @@ def sinc_subpixel_shift(im, shift):
     Returns:
         (torch.Tensor) : The subpixel shifted tensor
     """
+
     i = t.arange(im.shape[0]) - im.shape[0]//2
     j = t.arange(im.shape[1]) - im.shape[1]//2
     I,J = t.meshgrid(i,j)
@@ -231,23 +232,29 @@ def convolve_1d(image, kernel, dim=0, fftshift_kernel=True):
     """
 
     complex_things = 2
+    im_complex = True
     if image.shape[-1] != 2:
         image = t.stack((image,t.zeros_like(image)),dim=-1)
         complex_things -= 1
+        im_complex = False
         
     if kernel.shape[-1] != 2:
         kernel = t.stack((kernel,t.zeros_like(kernel)),dim=-1)
         complex_things -= 1
 
-    # Take a correlation
     if fftshift_kernel:
         kernel = cmath.ifftshift(kernel)
 
+    # If the image wasn't originally complex, and the dimension
+    # was passed with the nexative-indexing convention
+    if not im_complex and dim < 0:
+        dim = dim-1
 
     # We have to transpose the relevant dimension to -2 before using the fft,
     # which expects to operate on the final non-complex dimension
     trans_im = t.transpose(image, dim, -2)
-    
+        
+    # Take a correlation
     fft_im = t.fft(trans_im, 1)
     fft_kernel = t.fft(kernel, 1)
     trans_conv = t.ifft(cmath.cmult(fft_im,fft_kernel), 1)

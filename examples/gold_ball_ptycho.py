@@ -12,7 +12,7 @@ with h5py.File(filename,'r') as f:
     dataset = CDTools.datasets.Ptycho_2D_Dataset.from_cxi(f)
 
 
-model = CDTools.models.FancyPtycho.from_dataset(dataset,n_modes=3,randomize_ang=0.1*np.pi)
+model = CDTools.models.FancyPtycho.from_dataset(dataset, n_modes=2)
 
 
 

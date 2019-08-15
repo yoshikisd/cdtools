@@ -138,7 +138,7 @@ class CDIModel(t.nn.Module):
 
         # Define the scheduler
         if schedule:
-            scheduler = t.optim.ReduceLROnPlateau(optimizer, factor=0.2)
+            scheduler = t.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2,threshold=1e-9)
         else:
             scheduler = None
 

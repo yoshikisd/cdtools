@@ -37,12 +37,13 @@ def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0.,0.,1.
     
     projection_1 = t.Tensor([[1,0,0],
                              [0,1,0],
-                             [0,0,0]]).to(device=basis.device,dtype=basis.dtype)
+                             [0,0,0]]).to(device=translations.device,dtype=translations.dtype)
     projection_2 = t.inverse(t.Tensor([[1,0,0],
                                        [0,1,0],
                                        -surface_normal/
-                                       surface_normal[2]])).to(device=basis.device,dtype=basis.dtype)
-    basis_vectors_inv = t.pinverse(basis)
+                                       surface_normal[2]])).to(device=translations.device,dtype=translations.dtype)
+    basis_vectors_inv = t.pinverse(basis).to(device=translations.device,
+                                             dtype=translations.dtype)
     projection = t.mm(basis_vectors_inv,
                       t.mm(projection_2,projection_1))
     projection = projection.t()

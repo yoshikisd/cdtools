@@ -15,13 +15,14 @@ from copy import copy
 class FancyPtycho(CDIModel):
 
     def __init__(self, wavelength, detector_geometry,
-                 probe_basis, detector_slice,
+                 probe_basis,
                  probe_guess, obj_guess,
+                 detector_slice=None,
                  surface_normal=np.array([0.,0.,1.]),
                  min_translation = t.Tensor([0,0]),
                  background = None, translation_offsets=None, mask=None,
                  weights = None, translation_scale = 1, saturation=None,
-                 probe_support = None, obj_support=None):
+                 probe_support = None, obj_support=None, oversampling=1):
         
         super(FancyPtycho,self).__init__()
         self.wavelength = t.Tensor([wavelength])
@@ -60,7 +61,10 @@ class FancyPtycho(CDIModel):
         self.obj = t.nn.Parameter(obj_guess.to(t.float32))
         
         if background is None:
-            background = 1e-6 * t.ones(self.probe[0][self.detector_slice].shape[:-1])
+            if detector_slice is not None:
+                background = 1e-6 * t.ones(self.probe[0][self.detector_slice].shape[:-1])
+            else:
+                background = 1e-6 * t.ones(self.probe[0].shape[:-1])
 
                 
         self.background = t.nn.Parameter(t.Tensor(background).to(t.float32))
@@ -87,10 +91,12 @@ class FancyPtycho(CDIModel):
             self.obj.data = self.obj * obj_support
         else:
             self.obj_support = t.ones_like(self.obj)
+
+        self.oversampling = oversampling
         
         
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -114,7 +120,8 @@ class FancyPtycho(CDIModel):
                                                    distance,
                                                    center=center,
                                                    padding=padding,
-                                                   opt_for_fft=False)
+                                                   opt_for_fft=False,
+                                                   oversampling=oversampling)
 
 
         if hasattr(dataset, 'sample_info') and \
@@ -139,8 +146,8 @@ class FancyPtycho(CDIModel):
         # Next generate the object geometry from the probe geometry and
         # the translations
         pix_translations = tools.interactions.translations_to_pixel(probe_basis, translations, surface_normal=surface_normal)
-        
-        obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=50)
+
+        obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=200)
 
         if hasattr(dataset, 'background') and dataset.background is not None:
             background = t.sqrt(dataset.background)
@@ -149,7 +156,7 @@ class FancyPtycho(CDIModel):
 
         # Finally, initialize the probe and  object using this information
         if probe_size is None:
-            probe = tools.initializers.SHARP_style_probe(dataset, probe_shape, det_slice, propagation_distance=propagation_distance)
+            probe = tools.initializers.SHARP_style_probe(dataset, probe_shape, det_slice, propagation_distance=propagation_distance, oversampling=oversampling)
         else:
             probe = tools.initializers.gaussian_probe(dataset, probe_basis, probe_shape, probe_size, propagation_distance=propagation_distance)
 
@@ -191,7 +198,8 @@ class FancyPtycho(CDIModel):
         else:
             obj_support = None
 
-        return cls(wavelength, det_geo, probe_basis, det_slice, probe, obj,
+        return cls(wavelength, det_geo, probe_basis, probe, obj,
+                   detector_slice=det_slice,
                    surface_normal=surface_normal,
                    min_translation=min_translation,
                    translation_offsets = translation_offsets,
@@ -199,7 +207,8 @@ class FancyPtycho(CDIModel):
                    translation_scale=translation_scale,
                    saturation=saturation,
                    probe_support=probe_support,
-                   obj_support=obj_support)
+                   obj_support=obj_support,
+                   oversampling=oversampling)
                    
     
     def interaction(self, index, translations):
@@ -225,9 +234,10 @@ class FancyPtycho(CDIModel):
                 exit_waves =  self.weights[index][:,None,None,None] * exit_waves
             else:
                 exit_waves =  self.weights[index] * exit_waves
-
+                
             all_exit_waves.append(exit_waves)
 
+        
         return t.stack(all_exit_waves)
     
         
@@ -244,7 +254,8 @@ class FancyPtycho(CDIModel):
                             self.background,
                             detector_slice=self.detector_slice,
                             measurement=tools.measurements.incoherent_sum,
-                            saturation=self.saturation )
+                            saturation=self.saturation,
+                            oversampling=self.oversampling)
 
     
     def loss(self, sim_data, real_data, mask=None):

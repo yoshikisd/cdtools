@@ -48,21 +48,23 @@ dataset.get_as(device='cuda')
 
 # We can run the first phase of phase retrieval while leaving
 # the probe positions fixed (whether this is good is debatable)
-model.translation_offsets.requires_grad = False
+# model.translation_offsets.requires_grad = False
 
-for i, loss in enumerate(model.Adam_optimize(10, dataset, batch_size=15)):
+for i, loss in enumerate(model.Adam_optimize(15, dataset, batch_size=15)):
     print(i,loss)
+    model.inspect(dataset)
 
 # And we turn it on for the second phase, as we also lower the learning rate
-model.translation_offsets.requires_grad = True
+# model.translation_offsets.requires_grad = True
 
-for i, loss in enumerate(model.Adam_optimize(10, dataset, batch_size=15, lr=0.0005)):
+for i, loss in enumerate(model.Adam_optimize(15, dataset, batch_size=15, lr=0.0005)):
     print(i,loss)
+    model.inspect(dataset)
 
 # The third phase lowers the rate further
 for i, loss in enumerate(model.Adam_optimize(10, dataset, batch_size=15, lr=0.00005)):
     print(i,loss)
-
+    model.inspect(dataset)
 
 model.inspect(dataset)
 model.compare(dataset)

@@ -199,15 +199,19 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None,
         objects = [cmath.complex_to_torch(obj).to(t.float32) for obj in objects]
         obj_np = True
 
+    obj_shape = np.min(np.array([obj.shape[:-1] for obj in objects]),axis=0)
+    objects = [obj[:obj_shape[0],:obj_shape[1]] for obj in objects]
     
     if obj_slice is None:
         obj_slice = np.s_[(objects[0].shape[0]//8)*3:(objects[0].shape[0]//8)*5,
                           (objects[0].shape[1]//8)*3:(objects[0].shape[1]//8)*5]
+        
     
     
     synth_probe, synth_obj = standardize(probes[0].clone(), objects[0].clone(), obj_slice=obj_slice,correct_ramp=correct_ramp)
-    obj_stack = [synth_obj]
     
+    obj_stack = [synth_obj]
+
     for i, (probe, obj) in enumerate(zip(probes[1:],objects[1:])):
         probe, obj = standardize(probe.clone(), obj.clone(), obj_slice=obj_slice,correct_ramp=correct_ramp)
         if use_probe:
@@ -218,6 +222,7 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None,
 
         obj = ip.sinc_subpixel_shift(obj,np.array(shift))
 
+        
         if len(probe.shape) == 4:
             probe = t.stack([ip.sinc_subpixel_shift(p,tuple(shift))
                              for p in probe],dim=0)

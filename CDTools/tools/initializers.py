@@ -11,7 +11,7 @@ from scipy.fftpack import next_fast_len
 import numpy as np
 
 
-def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, opt_for_fft=True, padding=0):
+def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, opt_for_fft=True, padding=0, oversampling=1):
     """Returns an exit wave basis and shape, as well as a detector slice for the given detector geometry
     
     It takes in the parameters for a given detector - the basis defining
@@ -28,7 +28,8 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
         distance (float) : The sample-detector distance, in m
         center (torch.Tensor) : If defined, the location of the zero frequency pixel
         opt_for_fft (bool) : Default is true, whether to increase detector size to improve fft performance
-        padding (int) : Default is 0, an extra border to allow for subpixel shifting later
+        padding (int) : Default is 0, the size of an extra border of nonphysical pixels around the detector
+        oversampling (int) : Default is 1, the amount to multiply the exit wave shape by.
     
     Returns:
         torch.Tensor : The exit wave basis
@@ -44,7 +45,7 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
         center = det_shape // 2
     else:
         center = t.Tensor(center).to(t.int32)
-    
+        
     # Then, calculate the required detector size from the centering
     # This is a bit opaque but was worth doing accurately
     min_left = center * 2
@@ -76,7 +77,7 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
         (full_shape.to(t.float32) * t.norm(det_basis,dim=0))
     
     # Finally, convert the shape back to a torch.Size
-    full_shape = t.Size([dim for dim in full_shape])
+    full_shape = t.Size([dim * oversampling for dim in full_shape]) 
 
 
     return real_space_basis, full_shape, det_slice
@@ -101,7 +102,7 @@ def calc_object_setup(probe_shape, translations, padding=0):
         torch.Size : required size of object array
         torch.Tensor : minimum pixel-valued translation
     """
-    
+
     # First we look at the translations to find the minimum translation
     # and the range of translations
     min_translation = t.min(translations, dim=0)[0]
@@ -211,7 +212,7 @@ def gaussian_probe(dataset, basis, shape, sigma, propagation_distance=0):
     return avg_intensity / probe_intensity * probe
     
 
-def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None):
+def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, oversampling=1):
     """Generates a SHARP style probe guess from a dataset
 
     What we call the "SHARP" style probe guess is to take a mean of all
@@ -233,12 +234,13 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None):
         dataset (Ptycho_2D_Dataset) : The dataset to work from
         shape (torch.Size) : The size of the probe array to simulate
         det_slice (slice) : A slice or tuple of slices corresponding to the detector region in Fourier space
-        propagatioin_distance (float) : Default is no propagation, an amount to propagate the guessed probe from it's focal point
+        propagation_distance (float) : Default is no propagation, an amount to propagate the guessed probe from it's focal point
+        oversampling (int) : Default 1, the width of the region of pixels in the wavefield to bin into a single detector pixel
     """
 
 
     # to use the mask or not?
-    intensities = np.zeros(shape)
+    intensities = np.zeros([dim // oversampling for dim in shape])
     for params, im in dataset:
         if hasattr(dataset,'mask') and dataset.mask is not None:
             intensities[det_slice] += dataset.mask.cpu().numpy() * im.cpu().numpy()
@@ -255,9 +257,7 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None):
     probe_guess = cmath.torch_to_complex(inverse_far_field(probe_fft))
     
     # Now we remove the central pixel
-    
     center = np.array(probe_guess.shape) // 2
-
     
     # I'm always divided on whether to use this modification:
     
@@ -267,13 +267,12 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None):
         probe_guess[center[0], center[1]-1],
         probe_guess[center[0], center[1]+1]])
 
-
     probe_guess = cmath.complex_to_torch(probe_guess)
     
     if propagation_distance is not None:
         # First generate the propagation array
 
-        probe_shape = t.Tensor(tuple(shape))
+        probe_shape = t.Tensor(tuple(probe_guess.shape))[:-1]
 
         # Start by recalculating the probe basis from the given information
         det_basis = t.Tensor(dataset.detector_geometry['basis'])
@@ -291,7 +290,15 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None):
         AS_prop = generate_angular_spectrum_propagator(probe_shape, probe_spacing, dataset.wavelength, propagation_distance)
 
         probe_guess = near_field(probe_guess,AS_prop)
+
     
-    return probe_guess
+    # Finally, place this probe in a full-sized array if there is oversampling
+    final_probe = t.zeros([dim for dim in shape] + [2])
+    left = shape[0]//2 - probe_guess.shape[0] // 2
+    top = shape[1]//2 - probe_guess.shape[1] // 2 
+    final_probe[left:left+probe_guess.shape[0],
+                top:top+probe_guess.shape[1],:] = probe_guess
+    
+    return final_probe
 
     
