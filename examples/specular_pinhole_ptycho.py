@@ -41,5 +41,6 @@ for i, loss in enumerate(model.Adam_optimize(250, dataset,batch_size=5)):
 
 
 model.inspect(dataset)
+dataset.inspect()
 model.compare(dataset)
 plt.show()

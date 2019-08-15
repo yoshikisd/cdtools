@@ -32,5 +32,6 @@ with open('example_reconstructions/gold_balls.pickle', 'wb') as f:
     pickle.dump(model.save_results(dataset),f)
     
 model.inspect(dataset)
+dataset.inspect()
 model.compare(dataset)
 plt.show()
