@@ -7,7 +7,8 @@ from CDTools.tools import image_processing as ip
 from scipy import fftpack
 
 __all__ = ['orthogonalize_probes','standardize', 'synthesize_reconstructions',
-           'calc_consistency_prtf']
+           'calc_consistency_prtf', 'calc_deconvolved_cross_correlation',
+           'calc_frc']
 
 
 from matplotlib import pyplot as plt
@@ -315,5 +316,465 @@ def calc_consistency_prtf(synth_obj, objects, basis, obj_slice=None,nbins=None):
         prtfs = t.Tensor(prtfs)
         
     return bins[:-1], np.mean(prtfs,axis=0)
-        
 
+
+
+def calc_deconvolved_cross_correlation(im1, im2):
+    """Calculates a cross-correlation between two images with their autocorrelations deconvolved.
+    
+    This can also be thought of as the inverse Fourier transform of the
+    object from which the Fourier Ring Correlation is defined.
+
+    Args:
+        im1 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
+        im2 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
+
+    Returns:
+        (t.Tensor) : The deconvolved cross-correlation, in real space
+    
+    """
+    #
+    # Here's my approach, perhaps it's a little unconventional. I will first
+    # calculate the phase correlation function as found in ____ (cite a paper
+    # defining it). This is strongly peaked, so I can take a small window
+    # of say, 10x10 pixels, and then do a sinc interpolation of that area
+    # using an FFT with upsampling by a factor of resolution in reciprocal
+    # space
+    #
+
+    im_np = False
+    if isinstance(im1, np.ndarray):
+        im1 = cmath.complex_to_torch(im1)
+        im_np = True
+    if isinstance(im2, np.ndarray):
+        im2 = cmath.complex_to_torch(im2)
+        im_np = True
+        
+    # If last dimension is not 2, then convert to a complex tensor now
+    if im1.shape[-1] != 2:
+        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
+    if im2.shape[-1] != 2:
+        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
+
+
+    cor_fft = cmath.cmult(t.fft(im1,2),cmath.cconj(t.fft(im2,2)))
+
+    # Not sure if this is more or less stable than just the correlation
+    # maximum - requires some testing
+    cor = t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2)
+    
+    if im_np:
+        cor = cmath.torch_to_complex(cor)
+
+    return cor
+        
+    
+def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1):
+    im_np = False
+    if isinstance(im1, np.ndarray):
+        im1 = cmath.complex_to_torch(im1)
+        im_np = True
+    if isinstance(im2, np.ndarray):
+        im2 = cmath.complex_to_torch(im2)
+        im_np = True
+
+        # If last dimension is not 2, then convert to a complex tensor now
+    if im1.shape[-1] != 2:
+        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
+    if im2.shape[-1] != 2:
+        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
+
+        
+    if im_slice is None:
+        im_slice = np.s_[(im1.shape[0]//8)*3:(im1.shape[0]//8)*5,
+                          (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
+        im_slice = np.s_[300:-300,300:-300]
+
+    if nbins is None:
+        nbins = np.max(synth_obj[im_slice].shape) // 4
+
+    
+    cor_fft = cmath.cmult(cmath.fftshift(t.fft(synth_obj[obj_slice],2))).numpy()
+
+    
+    di = np.linalg.norm(basis[:,0]) 
+    dj = np.linalg.norm(basis[:,1])
+    
+    i_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[0],d=di))
+    j_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[1],d=dj))
+    
+    Js,Is = np.meshgrid(j_freqs,i_freqs)
+    Rs = np.sqrt(Is**2+Js**2)
+    
+    
+    synth_ints, bins = np.histogram(Rs,bins=nbins,weights=synth_fft)
+
+    prtfs = []
+    for obj in objects:
+        obj = obj[obj_slice]
+        single_fft = cmath.cabssq(cmath.fftshift(t.fft(obj,2))).numpy() 
+        single_ints, bins = np.histogram(Rs,bins=nbins,weights=single_fft)
+
+        prtfs.append(synth_ints/single_ints)
+
+
+    if not obj_np:
+        bins = t.Tensor(bins)
+        prtfs = t.Tensor(prtfs)
+        
+    return bins[:-1], np.mean(prtfs,axis=0)
+
+
+
+def calc_deconvolved_cross_correlation(im1, im2):
+    """Calculates a cross-correlation between two images with their autocorrelations deconvolved.
+    
+    This can also be thought of as the inverse Fourier transform of the
+    object from which the Fourier Ring Correlation is defined.
+
+    Args:
+        im1 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
+        im2 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
+
+    Returns:
+        (t.Tensor) : The deconvolved cross-correlation, in real space
+    
+    """
+    #
+    # Here's my approach, perhaps it's a little unconventional. I will first
+    # calculate the phase correlation function as found in ____ (cite a paper
+    # defining it). This is strongly peaked, so I can take a small window
+    # of say, 10x10 pixels, and then do a sinc interpolation of that area
+    # using an FFT with upsampling by a factor of resolution in reciprocal
+    # space
+    #
+
+    im_np = False
+    if isinstance(im1, np.ndarray):
+        im1 = cmath.complex_to_torch(im1)
+        im_np = True
+    if isinstance(im2, np.ndarray):
+        im2 = cmath.complex_to_torch(im2)
+        im_np = True
+        
+    # If last dimension is not 2, then convert to a complex tensor now
+    if im1.shape[-1] != 2:
+        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
+    if im2.shape[-1] != 2:
+        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
+
+
+    cor_fft = cmath.cmult(t.fft(im1,2),cmath.cconj(t.fft(im2,2)))
+
+    # Not sure if this is more or less stable than just the correlation
+    # maximum - requires some testing
+    cor = t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2)
+    
+    if im_np:
+        cor = cmath.torch_to_complex(cor)
+
+    return cor
+        
+    
+def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1):
+    im_np = False
+    if isinstance(im1, np.ndarray):
+        im1 = cmath.complex_to_torch(im1)
+        im_np = True
+    if isinstance(im2, np.ndarray):
+        im2 = cmath.complex_to_torch(im2)
+        im_np = True
+
+        # If last dimension is not 2, then convert to a complex tensor now
+    if im1.shape[-1] != 2:
+        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
+    if im2.shape[-1] != 2:
+        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
+
+        
+    if im_slice is None:
+        im_slice = np.s_[(im1.shape[0]//8)*3:(im1.shape[0]//8)*5,
+                          (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
+        im_slice = np.s_[300:-300,300:-300]
+
+    if nbins is None:
+        nbins = np.max(synth_obj[im_slice].shape) // 4
+
+    
+    cor_fft = cmath.cmult(cmath.fftshift(t.fft(synth_obj[obj_slice],2))).numpy()
+
+    
+    di = np.linalg.norm(basis[:,0]) 
+    dj = np.linalg.norm(basis[:,1])
+    
+    i_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[0],d=di))
+    j_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[1],d=dj))
+    
+    Js,Is = np.meshgrid(j_freqs,i_freqs)
+    Rs = np.sqrt(Is**2+Js**2)
+    
+    
+    synth_ints, bins = np.histogram(Rs,bins=nbins,weights=synth_fft)
+
+    prtfs = []
+    for obj in objects:
+        obj = obj[obj_slice]
+        single_fft = cmath.cabssq(cmath.fftshift(t.fft(obj,2))).numpy() 
+        single_ints, bins = np.histogram(Rs,bins=nbins,weights=single_fft)
+
+        prtfs.append(synth_ints/single_ints)
+
+
+    if not obj_np:
+        bins = t.Tensor(bins)
+        prtfs = t.Tensor(prtfs)
+        
+    return bins[:-1], np.mean(prtfs,axis=0)
+
+
+
+def calc_deconvolved_cross_correlation(im1, im2):
+    """Calculates a cross-correlation between two images with their autocorrelations deconvolved.
+    
+    This can also be thought of as the inverse Fourier transform of the
+    object from which the Fourier Ring Correlation is defined.
+
+    Args:
+        im1 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
+        im2 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
+
+    Returns:
+        (t.Tensor) : The deconvolved cross-correlation, in real space
+    
+    """
+    #
+    # Here's my approach, perhaps it's a little unconventional. I will first
+    # calculate the phase correlation function as found in ____ (cite a paper
+    # defining it). This is strongly peaked, so I can take a small window
+    # of say, 10x10 pixels, and then do a sinc interpolation of that area
+    # using an FFT with upsampling by a factor of resolution in reciprocal
+    # space
+    #
+
+    im_np = False
+    if isinstance(im1, np.ndarray):
+        im1 = cmath.complex_to_torch(im1)
+        im_np = True
+    if isinstance(im2, np.ndarray):
+        im2 = cmath.complex_to_torch(im2)
+        im_np = True
+        
+    # If last dimension is not 2, then convert to a complex tensor now
+    if im1.shape[-1] != 2:
+        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
+    if im2.shape[-1] != 2:
+        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
+
+
+    cor_fft = cmath.cmult(t.fft(im1,2),cmath.cconj(t.fft(im2,2)))
+
+    # Not sure if this is more or less stable than just the correlation
+    # maximum - requires some testing
+    cor = t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2)
+    
+    if im_np:
+        cor = cmath.torch_to_complex(cor)
+
+    return cor
+        
+    
+def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1):
+    im_np = False
+    if isinstance(im1, np.ndarray):
+        im1 = cmath.complex_to_torch(im1)
+        im_np = True
+    if isinstance(im2, np.ndarray):
+        im2 = cmath.complex_to_torch(im2)
+        im_np = True
+
+        # If last dimension is not 2, then convert to a complex tensor now
+    if im1.shape[-1] != 2:
+        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
+    if im2.shape[-1] != 2:
+        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
+
+        
+    if im_slice is None:
+        im_slice = np.s_[(im1.shape[0]//8)*3:(im1.shape[0]//8)*5,
+                          (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
+        im_slice = np.s_[300:-300,300:-300]
+
+    if nbins is None:
+        nbins = np.max(synth_obj[im_slice].shape) // 4
+
+    
+    cor_fft = cmath.cmult(cmath.fftshift(t.fft(synth_obj[obj_slice],2))).numpy()
+
+    
+    di = np.linalg.norm(basis[:,0]) 
+    dj = np.linalg.norm(basis[:,1])
+    
+    i_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[0],d=di))
+    j_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[1],d=dj))
+    
+    Js,Is = np.meshgrid(j_freqs,i_freqs)
+    Rs = np.sqrt(Is**2+Js**2)
+    
+    
+    synth_ints, bins = np.histogram(Rs,bins=nbins,weights=synth_fft)
+
+    prtfs = []
+    for obj in objects:
+        obj = obj[obj_slice]
+        single_fft = cmath.cabssq(cmath.fftshift(t.fft(obj,2))).numpy() 
+        single_ints, bins = np.histogram(Rs,bins=nbins,weights=single_fft)
+
+        prtfs.append(synth_ints/single_ints)
+
+
+    if not obj_np:
+        bins = t.Tensor(bins)
+        prtfs = t.Tensor(prtfs)
+        
+    return bins[:-1], np.mean(prtfs,axis=0)
+
+
+
+def calc_deconvolved_cross_correlation(im1, im2, im_slice=None):
+    """Calculates a cross-correlation between two images with their autocorrelations deconvolved.
+    
+    This can also be thought of as the inverse Fourier transform of the
+    object from which the Fourier Ring Correlation is defined.
+
+    Args:
+        im1 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
+        im2 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
+        im_slice (slice) : Default is from 3/8 to 5/8 across the image, a slice to use in the processing.
+
+    Returns:
+        (t.Tensor) : The deconvolved cross-correlation, in real space
+    
+    """
+
+
+    im_np = False
+    if isinstance(im1, np.ndarray):
+        im1 = cmath.complex_to_torch(im1)
+        im_np = True
+    if isinstance(im2, np.ndarray):
+        im2 = cmath.complex_to_torch(im2)
+        im_np = True
+        
+    # If last dimension is not 2, then convert to a complex tensor now
+    if im1.shape[-1] != 2:
+        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
+    if im2.shape[-1] != 2:
+        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
+
+    if im_slice is None:
+        im_slice = np.s_[(im1.shape[0]//8)*3:(im1.shape[0]//8)*5,
+                          (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
+
+
+    cor_fft = cmath.cmult(t.fft(im1[im_slice],2),
+                          cmath.cconj(t.fft(im2[im_slice],2)))
+
+    # Not sure if this is more or less stable than just the correlation
+    # maximum - requires some testing
+    cor = t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2)
+    
+    if im_np:
+        cor = cmath.torch_to_complex(cor)
+
+    return cor
+        
+    
+def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
+    """Calculates a Fourier ring correlation between two images
+    
+    This function requires an input of a basis to allow for FRC calculations
+    to be related to physical units.
+
+    Like other analysis functions, this can take input in numpy or pytorch,
+    and will return output in the respective format.
+
+    Args:
+        im1 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
+        im2 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
+        basis (t.Tensor) : The basis for the images, defined as is standard for datasets
+        im_slice (slice) : Default is from 3/8 to 5/8 across the image, a slice to use in the processing.
+        nbins (int) : Number of bins to break the FRC up into
+        snr (float) : The signal to noise ratio (for the combined information in both images) to return a threshold curve for.
+
+    Returns:
+        (t.Tensor) : The frequencies associated with each FRC value
+        (t.Tensor) : The FRC values
+        (t.Tensor) : The threshold curve for comparison
+    
+    """
+
+
+
+    im_np = False
+    if isinstance(im1, np.ndarray):
+        im1 = cmath.complex_to_torch(im1)
+        im_np = True
+    if isinstance(im2, np.ndarray):
+        im2 = cmath.complex_to_torch(im2)
+        im_np = True
+
+    if isinstance(basis, np.ndarray):
+        basis = t.tensor(basis)
+    
+        # If last dimension is not 2, then convert to a complex tensor now
+    if im1.shape[-1] != 2:
+        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
+    if im2.shape[-1] != 2:
+        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
+
+        
+    if im_slice is None:
+        im_slice = np.s_[(im1.shape[0]//8)*3:(im1.shape[0]//8)*5,
+                          (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
+
+    if nbins is None:
+        nbins = np.max(synth_obj[im_slice].shape) // 4
+
+    
+    cor_fft = cmath.cmult(cmath.fftshift(t.fft(im1[im_slice],2)),
+                          cmath.fftshift(cmath.cconj(t.fft(im2[im_slice],2))))
+    
+    F1 = cmath.cabs(cmath.fftshift(t.fft(im1[im_slice],2)))**2
+    F2 = cmath.cabs(cmath.fftshift(t.fft(im2[im_slice],2)))**2
+    
+
+    di = np.linalg.norm(basis[:,0]) 
+    dj = np.linalg.norm(basis[:,1])
+    
+    i_freqs = fftpack.fftshift(fftpack.fftfreq(cor_fft.shape[0],d=di))
+    j_freqs = fftpack.fftshift(fftpack.fftfreq(cor_fft.shape[1],d=dj))
+    
+    Js,Is = np.meshgrid(j_freqs,i_freqs)
+    Rs = np.sqrt(Is**2+Js**2)
+    
+
+
+    numerator, bins = np.histogram(Rs,bins=nbins,weights=cmath.torch_to_complex(cor_fft))
+    denominator_F1, bins = np.histogram(Rs,bins=nbins,weights=F1.detach().cpu().numpy())
+    denominator_F2, bins = np.histogram(Rs,bins=nbins,weights=F2.detach().cpu().numpy())
+    n_pix, bins = np.histogram(Rs,bins=nbins)
+
+    frc = np.abs(numerator / np.sqrt(denominator_F1*denominator_F2))
+
+    # This moves from combined-image SNR to single-image SNR
+    snr /= 2
+    
+    threshold = (snr + (2 * snr + 1) / np.sqrt(n_pix)) / \
+        (1 + snr + (2 * np.sqrt(snr)) / np.sqrt(n_pix))
+    
+    if not im_np:
+        bins = t.tensor(bins)
+        frc = t.tensor(frc)
+        threshold = t.tensor(threshold)
+    
+    return bins[:-1], frc, threshold

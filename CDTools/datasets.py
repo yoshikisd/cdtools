@@ -221,7 +221,6 @@ class Ptycho_2D_Dataset(CDataset):
                 mask = 1
                 
             if not updating:
-                print('hi')
                 axes[0].set_title('Nanomap')
                 axes[1].set_title('Pattern')
 

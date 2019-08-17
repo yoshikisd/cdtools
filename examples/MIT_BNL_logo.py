@@ -60,6 +60,7 @@ for i, loss in enumerate(model.Adam_optimize(15, dataset, batch_size=15)):
 for i, loss in enumerate(model.Adam_optimize(15, dataset, batch_size=15, lr=0.0005)):
     print(i,loss)
     model.inspect(dataset)
+    
 
 # The third phase lowers the rate further
 for i, loss in enumerate(model.Adam_optimize(10, dataset, batch_size=15, lr=0.00005)):

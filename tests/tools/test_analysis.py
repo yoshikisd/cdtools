@@ -2,6 +2,7 @@ from __future__ import division, print_function, absolute_import
 
 import pytest
 import numpy as np
+from scipy import fftpack as ffts
 import torch as t
 from itertools import combinations
 
@@ -179,3 +180,87 @@ def test_calc_consistency_prtf():
     # Check that the maximum frequency is correct for the basis
     assert np.isclose(freqs[-1]-freqs[-2] + freqs[-1], np.sqrt(1/4**2 + 1/6**2))
     
+
+def test_calc_deconvolved_cross_correlation():
+
+    obj1 = np.random.rand(200,300) + 1j * np.random.rand(200,300)
+    obj2 = np.random.rand(200,300) + 1j * np.random.rand(200,300)
+    
+    cor_fft = np.fft.fft2(obj1) * np.conj(np.fft.fft2(obj2))
+    
+    # Not sure if this is more or less stable than just the correlation
+    # maximum - requires some testing
+    np_cor = np.fft.ifft2(cor_fft / np.abs(cor_fft))
+    # test with numpy inputs
+    test_cor = analysis.calc_deconvolved_cross_correlation(obj1,obj2, im_slice=np.s_[:,:])
+    assert np.allclose(test_cor, np_cor)
+    
+    # test with pytorch inputs
+    obj1_t = cmath.complex_to_torch(obj1)
+    obj2_t = cmath.complex_to_torch(obj2)
+    test_cor_t = analysis.calc_deconvolved_cross_correlation(obj1_t,obj2_t, im_slice=np.s_[:,:])
+    
+    assert np.allclose(cmath.torch_to_complex(test_cor_t), np_cor)
+
+    
+
+def test_calc_frc():
+
+    obj1 = np.random.rand(270,230) + 1j * np.random.rand(270,230)
+    obj2 = np.random.rand(270,230) + 1j * np.random.rand(270,230)
+
+    basis = np.array([[0,2,0],
+                      [3,0,0]])
+
+    nbins = 100
+    snr = 2
+    
+    cor_fft = ffts.fftshift(ffts.fft2(obj1[10:-10,20:-20])) * \
+        ffts.fftshift(np.conj(ffts.fft2(obj2[10:-10,20:-20])))
+    
+    F1 = np.abs(ffts.fftshift(ffts.fft2(obj1[10:-10,20:-20])))**2
+    F2 = np.abs(ffts.fftshift(ffts.fft2(obj2[10:-10,20:-20])))**2
+    
+
+    di = np.linalg.norm(basis[:,0]) 
+    dj = np.linalg.norm(basis[:,1])
+    
+    i_freqs = ffts.fftshift(ffts.fftfreq(cor_fft.shape[0],d=di))
+    j_freqs = ffts.fftshift(ffts.fftfreq(cor_fft.shape[1],d=dj))
+    
+    Js,Is = np.meshgrid(j_freqs,i_freqs)
+    Rs = np.sqrt(Is**2+Js**2)
+
+    numerator, bins = np.histogram(Rs,bins=nbins,weights=cor_fft)
+    denominator_F1, bins = np.histogram(Rs,bins=nbins,weights=F1)
+    denominator_F2, bins = np.histogram(Rs,bins=nbins,weights=F2)
+    n_pix, bins = np.histogram(Rs,bins=nbins)
+    bins = bins[:-1]
+    
+    frc = np.abs(numerator / np.sqrt(denominator_F1*denominator_F2))
+        # This moves from combined-image SNR to single-image SNR
+    snr /= 2
+    
+    threshold = (snr + (2 * snr + 1) / np.sqrt(n_pix)) / \
+        (1 + snr + (2 * np.sqrt(snr)) / np.sqrt(n_pix))
+
+    test_bins, test_frc, test_threshold = analysis.calc_frc(obj1, obj2,
+                    basis, im_slice=np.s_[10:-10,20:-20], nbins=100, snr=2)
+    
+    assert np.allclose(bins, test_bins)
+    assert np.allclose(frc, test_frc)
+    assert np.allclose(threshold, test_threshold)
+
+    # try again with complex
+    obj1_torch = cmath.complex_to_torch(obj1)
+    obj2_torch = cmath.complex_to_torch(obj2)
+    basis_torch = t.tensor(basis)
+
+    test_bins_t, test_frc_t, test_threshold_t = analysis.calc_frc(obj1_torch,
+                                                                  obj2_torch,
+                                                                  basis_torch,
+                            im_slice=np.s_[10:-10,20:-20], nbins=100, snr=2)
+
+    assert np.allclose(bins, test_bins_t.numpy())
+    assert np.allclose(frc, test_frc_t.numpy())
+    assert np.allclose(threshold, test_threshold_t.numpy())
