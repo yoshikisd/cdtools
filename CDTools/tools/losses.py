@@ -27,16 +27,21 @@ def amplitude_mse(intensities, sim_intensities, mask=None):
     as long as their shapes match, and the provided mask array can be
     broadcast correctly along them.
 
-    This is empirically the most useful loss function
+    This is empirically the most useful loss function for most cases
 
-    Args:
-        intensities (torch.Tensor) : A tensor with measured detector values
-        sim_intensities (torch.Tensor) : A tensor of simulated detector intensities
-        mask (torch.Tensor) : A mask with ones for pixels to include and zeros for pixels to exclude
+    Parameters
+    ----------
+    intensities : torch.Tensor
+        A tensor with measured detector values
+    sim_intensities : torch.Tensor
+        A tensor of simulated detector intensities
+    mask : torch.Tensor
+        A mask with ones for pixels to include and zeros for pixels to exclude
 
-    Returns:
-        loss (torch.Tensor) : A single value for the summed mse
-
+    Returns
+    -------
+    loss : torch.Tensor
+        A single value for the mean amplitude mse
     """
 
     # I know it would be more efficient if this function took in the
@@ -65,13 +70,19 @@ def intensity_mse(intensities, sim_intensities, mask=None):
     as long as their shapes match, and the provided mask array can be
     broadcast correctly along them.
 
-    Args:
-        intensities (torch.Tensor) : A tensor with measured detector intensities.
-        sim_intensities (torch.Tensor) : A tensor of simulated detector intensities
-        mask (torch.Tensor) : A mask with ones for pixels to include and zeros for pixels to exclude
+    Parameters
+    ----------
+    intensities : torch.Tensor
+        A tensor with measured detector intensities.
+    sim_intensities : torch.Tensor
+        A tensor of simulated detector intensities
+    mask : torch.Tensor
+        A mask with ones for pixels to include and zeros for pixels to exclude
 
-    Returns:
-        loss (torch.Tensor) : A single value for the summed mse
+    Returns
+    -------
+    loss : torch.Tensor
+        A single value for the mean intensity mse
 
     """
     if mask is None:
@@ -102,13 +113,19 @@ def poisson_nll(intensities, sim_intensities, mask=None):
     as long as their shapes match, and the provided mask array can be
     broadcast correctly along them.
 
-    Args:
-        intensities (torch.Tensor) : A tensor with measured detector intensities.
-        sim_intensities (torch.Tensor) : A tensor of simulated detector intensities
-        mask (torch.Tensor) : A mask with ones for pixels to include and zeros for pixels to exclude
+    Parameters
+    ----------
+    intensities : torch.Tensor
+        A tensor with measured detector intensities.
+    sim_intensities : torch.Tensor
+        A tensor of simulated detector intensities
+    mask : torch.Tensor
+        A mask with ones for pixels to include and zeros for pixels to exclude
 
-    Returns:
-        loss (torch.Tensor) : A single value for the poisson ML metric
+    Returns
+    -------
+    loss : torch.Tensor
+        A single value for the poisson negative log likelihood
 
     """
     if mask is None:

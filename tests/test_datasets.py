@@ -197,7 +197,9 @@ def test_Ptycho_2D_Dataset_from_cxi(test_ptycho_cxis):
             
 def test_Ptycho_2D_Dataset_to_cxi(test_ptycho_cxis, tmp_path):
     for cxi, expected in test_ptycho_cxis:
+        print('loading dataset')
         dataset = Ptycho_2D_Dataset.from_cxi(cxi)
+        print('dataset mask is type', dataset.mask.dtype)
         with cdtdata.create_cxi(tmp_path / 'test_Ptycho_2D_Dataset_to_cxi.cxi') as f:
             dataset.to_cxi(f)
 
@@ -223,6 +225,7 @@ def test_Ptycho_2D_Dataset_to_cxi(test_ptycho_cxis, tmp_path):
         if dataset.detector_geometry['corner'] is not None:
             assert 'corner' in read_dataset.detector_geometry
             
+
         
         if dataset.mask is not None:
             assert t.all(t.eq(dataset.mask,read_dataset.mask))

@@ -1,3 +1,10 @@
+""" This module contains various to simulate stages in the probe-sample interaction
+
+All the tools here are designed to work with automatic differentiation. Each
+function simulates some aspect of an interaction model that can be used
+for ptychographic reconstruction.
+"""
+
 from __future__ import division, print_function, absolute_import
 
 from CDTools.tools.cmath import *
@@ -8,11 +15,6 @@ import numpy as np
 __all__ = ['translations_to_pixel', 'pixel_to_translations',
            'ptycho_2D_round','ptycho_2D_linear','ptycho_2D_sinc']
 
-#
-# This file will host tools to turn various kinds of model information
-# (probe, 2D object, 3D object, etc) into exit waves leaving the sample
-# area.
-#
 
 
 def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0.,0.,1.])):
@@ -29,10 +31,19 @@ def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0.,0.,1.
     to the +z axis, [0,0,1]. The default sample orientation has a surface
     normal parallel to this direction
 
-    Args:
-        basis (torch.Tensor) : The real space basis the wavefields are defined in
-        translations (torch.Tensor) : A Jx3 stack of real-space translations
-        surface_normal (torch.Tensor) : Optional, the sample's surface normal
+    Parameters
+    ----------
+    basis : torch.Tensor
+        The real space basis the wavefields are defined in
+    translations : torch.Tensor 
+        A Jx3 stack of real-space translations, or a single translation
+    surface_normal : torch.Tensor
+        Optional, the sample's surface normal
+
+    Returns
+    -------
+    pixel_translations : torch.Tensor
+        A Jx2 stack of translations in internal (i,j) pixel-space, or a single translation
     """
     
     projection_1 = t.Tensor([[1,0,0],
@@ -76,10 +87,19 @@ def pixel_to_translations(basis, pixel_translations, surface_normal=t.Tensor([0,
     normal parallel to this direction. Because of this, the z direction
     translation is always set to zero in the conversion
 
-    Args:
-        basis (torch.Tensor) : The real space basis the wavefields are defined in
-        translations (torch.Tensor) : A Jx2 stack of pixel-space translations
-        surface_normal (torch.Tensor) : Optional, the sample's surface normal
+    Parameters
+    ----------
+    basis : torch.Tensor
+        The real space basis the wavefields are defined in
+    translations : torch.Tensor
+        A Jx2 stack of pixel-space translations, or a single translation
+    surface_normal : torch.Tensor
+        Optional, the sample's surface normal
+
+    Returns
+    -------
+    real_translations : torch.Tensor 
+        A Jx3 stack of real-space translations, or a single translation
     """
     projection_1 = t.Tensor([[1,0,0],
                              [0,1,0],
@@ -116,13 +136,19 @@ def ptycho_2D_round(probe, obj, translations):
     corresponding to the detector. The exit waves are calculated by
     shifting the probe by the rounded value of the translation
     
-    Args:
-        probe (torch.Tensor) : An MxL probe function for the exit waves
-        object (torch.Tensor) : The object function to be probed
-        translations (torch.Tensor) : The Nx2 array of (i,j) translations to simulate
+    Parameters
+    ----------
+    probe : torch.Tensor
+        An MxL probe function for the exit waves
+    object : torch.Tensor
+        The object function to be probed
+    translations : torch.Tensor
+        The Nx2 array of (i,j) translations to simulate
     
-    Returns:
-        torch.Tensor : An NxMxL tensor of the calculated exit waves
+    Returns
+    -------
+    exit_waves : torch.Tensor 
+        An NxMxL tensor of the calculated exit waves
     """
     single_translation = False
     if translations.dim() == 1:
@@ -153,13 +179,21 @@ def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
     If shift_probe is True, it applies the subpixel shift to the probe,
     otherwise the subpixel shift is applied to the object
 
-    Args:
-        probe (torch.Tensor) : An MxL probe function for the exit waves
-        object (torch.Tensor) : The object function to be probed
-        translations (torch.Tensor) : The Nx2 array of translations to simulate
-        shift_probe (bool) : Whether to subpixel shift the probe or object
-    Returns:
-        torch.Tensor : An NxMxL tensor of the calculated exit waves
+    Parameters
+    ----------
+    probe : torch.Tensor
+        An MxL probe function for the exit waves
+    object : torch.Tensor
+        The object function to be probed
+    translations : torch.Tensor
+        The Nx2 array of translations to simulate
+    shift_probe : bool
+        Default True, Whether to subpixel shift the probe or object
+
+    Returns
+    -------
+    exit_waves : torch.Tensor
+        An NxMxL tensor of the calculated exit waves
     """
     single_translation = False
     if translations.dim() == 1:
@@ -243,14 +277,23 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10):
     If shift_probe is True, it applies the subpixel shift to the probe,
     otherwise the subpixel shift is applied to the object
 
-    Args:
-        probe (torch.Tensor) : An MxL probe function for the exit waves
-        object (torch.Tensor) : The object function to be probed
-        translations (torch.Tensor) : The Nx2 array of translations to simulate
-        shift_probe (bool) : Whether to subpixel shift the probe or object
-        padding (int) : Default 10, if shifting the object, the padding to apply to the object to avoid circular shift effects
-    Returns:
-        torch.Tensor : An NxMxL tensor of the calculated exit waves
+    Parameters
+    ----------
+    probe : torch.Tensor
+        An MxL probe function for the exit waves
+    object : torch.Tensor
+        The object function to be probed
+    translations : torch.Tensor
+        The Nx2 array of translations to simulate
+    shift_probe : bool
+        Default True, Whether to subpixel shift the probe or object
+    padding : int
+         Default 10, if shifting the object, the padding to apply to the object to avoid circular shift effects
+
+    Returns
+    -------
+    exit_waves : torch.Tensor
+        An NxMxL tensor of the calculated exit waves
     """
     single_translation = False
     if translations.dim() == 1:

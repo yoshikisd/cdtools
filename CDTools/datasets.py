@@ -2,6 +2,8 @@ from __future__ import division, print_function, absolute_import
 import numpy as np
 import torch as t
 from copy import copy
+import h5py
+import pathlib
 
 from CDTools.tools import data as cdtdata
 from CDTools.tools import plotting
@@ -86,6 +88,12 @@ class CDataset(torchdata.Dataset):
             
     @classmethod
     def from_cxi(cls, cxi_file):
+
+        # If a bare string is passed
+        if isinstance(cxi_file, str) or isinstance(cxi_file, pathlib.Path):
+            with h5py.File(cxi_file,'r') as f:
+                return cls.from_cxi(f)
+        
         entry_info = cdtdata.get_entry_info(cxi_file)
         sample_info = cdtdata.get_sample_info(cxi_file)
         wavelength = cdtdata.get_wavelength(cxi_file)
@@ -139,6 +147,11 @@ class Ptycho_2D_Dataset(CDataset):
         self.axes = copy(axes)
         self.translations = t.tensor(translations)
         self.patterns = t.tensor(patterns)
+        if self.mask is None:
+            self.mask = t.ones(self.patterns.shape[-2:]).to(dtype=t.uint8)
+        self.mask.masked_fill_(t.isnan(t.sum(self.patterns,dim=(0,))),0)
+        self.patterns.masked_fill_(t.isnan(self.patterns),0)
+
         
 
     def __len__(self):
@@ -158,6 +171,11 @@ class Ptycho_2D_Dataset(CDataset):
     # perhaps there is a way but I couldn't figure it out.
     @classmethod
     def from_cxi(cls, cxi_file):
+        # If a bare string is passed
+        if isinstance(cxi_file, str) or isinstance(cxi_file, pathlib.Path):
+            with h5py.File(cxi_file,'r') as f:
+                return cls.from_cxi(f)
+
         entry_info = cdtdata.get_entry_info(cxi_file)
         sample_info = cdtdata.get_sample_info(cxi_file)
         wavelength = cdtdata.get_wavelength(cxi_file)
@@ -166,6 +184,7 @@ class Ptycho_2D_Dataset(CDataset):
                              'basis'    : basis,
                              'corner'   : corner}
         mask = cdtdata.get_mask(cxi_file)
+
         dark = cdtdata.get_dark(cxi_file)
         patterns, axes = cdtdata.get_data(cxi_file)
 
@@ -190,7 +209,7 @@ class Ptycho_2D_Dataset(CDataset):
         axslider = plt.axes([0.15,0.06,0.75,0.03])
 
         translations = self.translations.detach().cpu().numpy()
-        nanomap_values = self.patterns.sum(dim=(1,2)).detach().cpu().numpy()
+        nanomap_values = (self.mask.to(t.float32) * self.patterns).sum(dim=(1,2)).detach().cpu().numpy()
         
         def update_colorbar(im):
             # If the update brought the colorbar out of whack
@@ -207,6 +226,9 @@ class Ptycho_2D_Dataset(CDataset):
             im.colorbar.set_ticks(ticker.LinearLocator(numticks=5))
             im.colorbar.draw_all()
 
+        def on_pick(event):
+            update(event.ind[0])
+            plt.draw()
         
         def update(idx):
             idx = int(idx) % len(self)
@@ -226,14 +248,15 @@ class Ptycho_2D_Dataset(CDataset):
 
                 bbox = axes[0].get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                 
-                s = bbox.width * bbox.height / translations.shape[0] * 72**2 #72 is points per inch
-                s /= 4 # A rough value to make the size work out
-                s = np.ones(len(nanomap_values)) * s
+                s0 = bbox.width * bbox.height / translations.shape[0] * 72**2 #72 is points per inch
+                s0 /= 4 # A rough value to make the size work out
+                s = np.ones(len(nanomap_values)) * s0
 
                 s[idx] *= 4
     
-                nanomap = axes[0].scatter(1e6 * translations[:,0],1e6 * translations[:,1],s=s,c=nanomap_values)
-    
+                nanomap = axes[0].scatter(1e6 * translations[:,0],1e6 * translations[:,1],s=s,c=nanomap_values, picker=True)
+                fig.canvas.mpl_connect('pick_event',on_pick)
+
                 axes[0].invert_xaxis()
                 axes[0].set_facecolor('k')
                 axes[0].set_xlabel('Translation x (um)')
@@ -251,13 +274,15 @@ class Ptycho_2D_Dataset(CDataset):
                 axes[0].set_title('Nanomap')
                 bbox = axes[0].get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                 
-                s = bbox.width * bbox.height / translations.shape[0] * 72**2 #72 is points per inch
-                s /= 4 # A rough value to make the size work out
-                s = np.ones(len(nanomap_values)) * s
+                s0 = bbox.width * bbox.height / translations.shape[0] * 72**2 #72 is points per inch
+                s0 /= 4 # A rough value to make the size work out
+                s = np.ones(len(nanomap_values)) * s0
                 s[idx] *= 4
     
                 axes[0].clear()
-                nanomap = axes[0].scatter(1e6 * translations[:,0],1e6 * translations[:,1],s=s,c=nanomap_values)
+                nanomap = axes[0].scatter(1e6 * translations[:,0],1e6 * translations[:,1],s=s,c=nanomap_values, picker=True)
+                fig.canvas.mpl_connect('pick_event',on_pick)
+
                 axes[0].invert_xaxis()
                 axes[0].set_facecolor('k')
                 axes[0].set_xlabel('Translation x (um)')

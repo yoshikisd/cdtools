@@ -1,3 +1,8 @@
+"""This module contains various propagators for light fields
+
+All the functions here are designed for use in an automatic differentiation
+ptychography model. Each function implements a different propagator.
+"""
 from __future__ import division, print_function, absolute_import
 
 from CDTools.tools.cmath import *
@@ -27,10 +32,15 @@ def far_field(wavefront):
     upper right. The zero frequency component of the propagated wavefield is
     shifted to the center of the array.
 
-    Args:
-        wavefront (torch.Tensor) : The JxNxMx2 stack of complex wavefronts to be propagated
-    Returns:
-        torch.Tensor : The JxNxMx2 propagated wavefield
+    Parameters
+    ----------
+    wavefront : torch.Tensor
+        The JxNxMx2 stack of complex wavefronts to be propagated
+    
+    Returns
+    -------
+    propagated : torch.Tensor
+        The JxNxMx2 propagated wavefield
     """
 
     return fftshift(t.fft(ifftshift(wavefront), 2, normalized=True))
@@ -49,10 +59,15 @@ def inverse_far_field(wavefront):
     upper right. The zero frequency component of the propagated wavefield is
     assumed to be the center of the array.
 
-    Args:
-        wavefront (torch.Tensor) : The JxNxMx2 stack of complex wavefronts propagated to the far-field
-    Returns:
-        torch.Tensor : The JxNxMx2 exit wavefield
+    Parameters
+    ----------
+    wavefront : torch.Tensor
+        The JxNxMx2 stack of complex wavefronts propagated to the far-field
+    
+    Returns
+    -------
+    propagated : torch.Tensor
+        The JxNxMx2 exit wavefield
     """
     return fftshift(t.ifft(ifftshift(wavefront), 2, normalized=True))
 
@@ -71,14 +86,21 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, *
     transform of the convolution kernel for light propagation in free
     space
 
-    Args:
-        shape (iterable) : The shape of the arrays to be propagated
-        spacing (iterable) : The pixel size in each dimension of the arrays to be propagated
-        wavelength (float) : The wavelength of light to simulate propagation of
-        z (float) : The distance to simulate propagation over
+    Parameters
+    ----------
+    shape : array
+        The shape of the arrays to be propagated
+    spacing : array
+        The pixel size in each dimension of the arrays to be propagated
+    wavelength : float
+        The wavelength of light to simulate propagation of
+    z : float
+        The distance to simulate propagation over
 
-    Returns:
-        torch.Tensor : A phase mask which accounts for the phase change that each plane wave will undergo.
+    Returns
+    -------
+    propagator : torch.Tensor
+        A phase mask which accounts for the phase change that each plane wave will undergo.
     """
 
     ki = 2 * np.pi * fftpack.fftfreq(shape[0],spacing[0])
@@ -109,19 +131,24 @@ def near_field(wavefront, angular_spectrum_propagator):
     phase mask.
 
 
-    Args:
-        wavefront (torch.Tensor) : The JxNxMx2 stack of complex wavefronts to be propagated
-        angular_spectrum_propagator (torch.Tensor) : The NxM phase mask to be applied during propagation
+    Parameters
+    ----------
+    wavefront : torch.Tensor
+        The JxNxMx2 stack of complex wavefronts to be propagated
+    angular_spectrum_propagator : torch.Tensor
+        The NxM phase mask to be applied during propagation
 
-    Returns:
-        torch.Tensor : The propagated wavefront 
+    Returns
+    -------
+    propagated : torch.Tensor
+        The propagated wavefront 
     """
     return t.ifft(cmult(angular_spectrum_propagator,t.fft(wavefront,2)), 2)
 
 
 
 def inverse_near_field(wavefront, angular_spectrum_propagator):
-    """ Inverse ropagates a wavefront via the angular spectrum method
+    """ Inverse propagates a wavefront via the angular spectrum method
 
     This function accepts an 3D torch tensor, where the last dimension
     represents the real and imaginary components of the wavefield, and
@@ -133,12 +160,17 @@ def inverse_near_field(wavefront, angular_spectrum_propagator):
     which corresponds to the inverse propagation problem.
 
 
-    Args:
-        wavefront (torch.Tensor) : The JxNxMx2 stack of complex wavefronts to be propagated
-        angular_spectrum_propagator (torch.Tensor) : The NxM phase mask to be applied during propagation
+    Parameters
+    ----------
+    wavefront : torch.Tensor
+        The JxNxMx2 stack of complex wavefronts to be propagated
+    angular_spectrum_propagator : torch.Tensor
+        The NxM phase mask to be applied during propagation
 
-    Returns:
-        torch.Tensor : The inverse propagated wavefront
+    Returns
+    -------
+    propagated : torch.Tensor
+        The inverse propagated wavefront
     """
     return t.ifft(cmult(t.fft(wavefront,2), cconj(angular_spectrum_propagator)), 2)
 

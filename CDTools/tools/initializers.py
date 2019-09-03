@@ -1,3 +1,9 @@
+"""Contains functions to sensibly initialize reconstructions
+
+The functions in this module both do the geometric calculations needed to
+initialize the reconstrucions, and the heuristic calculations for
+geierating sensible initializations for the probe guess.
+"""
 from __future__ import division, print_function, absolute_import
 import numpy as np
 import torch as t
@@ -21,20 +27,33 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
     if necessary, define the exit wave basis associated with a far-field
     diffraction experiment, and return that basis, shape, and detector slice
     
-    Args:
-        det_basis (torch.Tensor) : The detector basis, as defined elsewhere
-        det_shape (torch.Size) : The (i,j) shape of the detector
-        wavelength (float) : The wavelength of light for the experiment, in m
-        distance (float) : The sample-detector distance, in m
-        center (torch.Tensor) : If defined, the location of the zero frequency pixel
-        opt_for_fft (bool) : Default is true, whether to increase detector size to improve fft performance
-        padding (int) : Default is 0, the size of an extra border of nonphysical pixels around the detector
-        oversampling (int) : Default is 1, the amount to multiply the exit wave shape by.
+    Parameters
+    ----------
+    det_basis : torch.Tensor
+        The detector basis, as defined elsewhere
+    det_shape : torch.Size
+        The (i,j) shape of the detector
+    wavelength : float)
+        The wavelength of light for the experiment, in m
+    distance : float
+        The sample-detector distance, in m
+    center : torch.Tensor
+        If defined, the location of the zero frequency pixel
+    opt_for_fft : bool
+        Default is true, whether to increase detector size to improve fft performance
+    padding : int
+        Default is 0, the size of an extra border of nonphysical pixels around the detector
+    oversampling : int
+        Default is 1, the amount to multiply the exit wave shape by.
     
-    Returns:
-        torch.Tensor : The exit wave basis
-        torch.Tensor : The exit wave's shape
-        tuple(slice) : The slice corresponding to the physical detector
+    Returns
+    -------
+    basis : torch.Tensor
+        The exit wave basis
+    shape : torch.Tensor
+        The exit wave's shape
+    slice : slice
+        The slice corresponding to the physical detector
     """
     
     det_shape = t.Tensor(tuple(det_shape)).to(t.int32)
@@ -94,13 +113,21 @@ def calc_object_setup(probe_shape, translations, padding=0):
     attribute. If this is done, the calculated pixel translation will
     correspond to (padding,padding)
     
-    Args:
-        probe_shape (torch.Size) : The size of the probe array
-        translations (torch.Tensor) : Jx2 stack of pixel-valued (i,j) translations
-        padding (int) : Optional, the size of an extra border to include
-    Returns:
-        torch.Size : required size of object array
-        torch.Tensor : minimum pixel-valued translation
+    Parameters
+    ----------
+    probe_shape : torch.Size
+        The size of the probe array
+    translations : torch.Tensor
+        A Jx2 stack of pixel-valued (i,j) translations
+    padding : int
+        Optional, the size of an extra border to include
+    
+    Returns
+    -------
+    obj_shape : torch.Size
+        The minimum required size of the object array
+    min_translation : torch.Tensor
+        The minimum pixel-valued translation
     """
 
     # First we look at the translations to find the minimum translation
@@ -134,15 +161,23 @@ def gaussian(shape, sigma, amplitude=1, center = None, curvature=[0,0]):
     from it's focal point. The curvature is implemented by adding a quadratic
     phase phi = exp(i*curvature/2 r^2) to the Gaussian
 
-    Args:
-        shape (array_like) : A 1x2 array-like object specifying the dimensions of the output array in the form (i shape, j shape)
-        sigma (array_like): A 1x2 array-like object specifying the i- and j- standard deviation of the gaussian in the form (i stdev, j stdev)
-        amplitude (float or int): Default 1, the amplitude the gaussian to simulate
-        center (array_like) : Optional 1x2 array-like object specifying the location of the center of the gaussian (i center, j center)
-        curvature (array_like) : Optional complex part to add to the gaussian coefficient
+    Parameters
+    ----------
+    shape : array
+        A 1x2 array specifying the dimensions of the output array in the form (i shape, j shape)
+    sigma : array
+        A 1x2 array specifying the i- and j- standard deviation of the gaussian in the form (i stdev, j stdev)
+    amplitude : float
+        Default 1, the amplitude the gaussian to simulate
+    center : array
+        Optional, a 1x2 array specifying the location of the center of the gaussian (i center, j center)
+    curvature : array
+        Optional, a complex part to add to the gaussian coefficient
 
-    Returns:
-        torch.Tensor : The complex-style tensor storing the Gaussian
+    Returns
+    -------
+    torch.Tensor 
+        The complex-style tensor storing the Gaussian
     """
     if center is None:
         center = ((shape[0]-1)/2, (shape[1]-1)/2)
@@ -175,15 +210,23 @@ def gaussian_probe(dataset, basis, shape, sigma, propagation_distance=0):
     of sigma in the directions parallel to the i and j basis vectors of
     the probe basis
     
-    Args:
-        dataset (Ptycho_2D_Dataset) : The dataset whose intensity we want to match
-        basis (array_like) : The real space basis for exit waves in our experiment
-        shape (array_like): The shape of the simulated real space arrays
-        sigma (array_like): The standard deviation of the probe at it's focus
-        propagation_distance (float) : Optional, a distance to propagate the gaussian from it's focus
+    Parameters
+    ----------
+    dataset : Ptycho_2D_Dataset
+        The dataset whose intensity we want to match
+    basis : array
+        The real space basis for exit waves in our experiment
+    shape : array
+        The shape of the simulated real space arrays
+    sigma : array
+        The standard deviation of the probe at it's focus
+    propagation_distance : float
+        Default 0, a distance to propagate the gaussian from it's focus
     
-    Returns:
-        torch.Tensor : The complex-style tensor storing the Gaussian
+    Returns
+    -------
+    torch.Tensor
+        The complex-style tensor storing the Gaussian
     """
     # First, we want to generate the parameters (sigma and curvature) for the
     # propagated gaussian. Ignore the purely z-dependent phases
@@ -230,12 +273,23 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, over
     the probe generated this way, which can often overwhelm the rest of the
     probe if there is significant noise on the detector
         
-    Args:
-        dataset (Ptycho_2D_Dataset) : The dataset to work from
-        shape (torch.Size) : The size of the probe array to simulate
-        det_slice (slice) : A slice or tuple of slices corresponding to the detector region in Fourier space
-        propagation_distance (float) : Default is no propagation, an amount to propagate the guessed probe from it's focal point
-        oversampling (int) : Default 1, the width of the region of pixels in the wavefield to bin into a single detector pixel
+    Parameters
+    ----------
+    dataset : Ptycho_2D_Dataset
+        The dataset to work from
+    shape : torch.Size
+        The size of the probe array to simulate
+    det_slice : slice
+        A slice or tuple of slices corresponding to the detector region in Fourier space
+    propagation_distance : float
+        Default is no propagation, an amount to propagate the guessed probe from it's focal point
+    oversampling : int 
+        Default 1, the width of the region of pixels in the wavefield to bin into a single detector pixel
+ 
+    Returns
+    -------
+    torch.Tensor
+        The complex-style tensor storing the probe guess
     """
 
 

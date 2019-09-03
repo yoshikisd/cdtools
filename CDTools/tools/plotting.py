@@ -1,3 +1,11 @@
+"""This module contains functions for plotting various important metrics
+
+All the plotting functions here can accept torch input or numpy input,
+to facilitate their use both for live inspection of running reconstructions
+and for after-the-fact analysis. Utilities for plotting complex valued
+images exist, as well as plotting scan patterns and nanomaps
+"""
+
 from __future__ import division, print_function, absolute_import
 
 from CDTools.tools import cmath
@@ -7,8 +15,8 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import hsv_to_rgb
 
 
-__all__ = ['colorize','plot_1D','plot_amplitude','plot_phase',
-           'plot_colorized', 'plot_translations','get_units_factor',
+__all__ = ['colorize', 'plot_amplitude', 'plot_phase',
+           'plot_colorized', 'plot_translations', 'get_units_factor',
            'plot_nanomap']
 
 
@@ -18,11 +26,14 @@ def colorize(z):
     in a call to imshow based on an input complex numpy array (not a
     torch tensor representing a complex field)
 
-    Args:
-        z (array_like) : A complex-valued array
-    Returns:
-        list : A list of arrays for R,G, and B channels of an image.
-
+    Parameters
+    ----------
+    z : array
+        A complex-valued array
+    Returns
+    -------
+    rgb : list(array) 
+        A list of arrays for the R,G, and B channels of an image
     """
 
     amp = np.abs(z)
@@ -42,11 +53,15 @@ def colorize(z):
 def get_units_factor(units):
     """Gets the multiplicative factor associated with a length unit
 
-    Args:
-        units (str) : The abbreviation for the unit type
+    Parameters
+    ----------
+    units : str
+        The abbreviation for the unit type
     
-    Returns:
-        (float) : The factor meters / (unit)
+    Returns
+    -------
+    factor : float
+        The factor meters / (unit)
     """
     
     u = units.lower()
@@ -66,38 +81,35 @@ def get_units_factor(units):
         factor=1e12
     return factor
 
-
-def plot_1D(arr, fig = None, **kwargs):
-    """Simple 1D plotter
-
-    Args:
-        im (numpy array) : A 1D array with dimensions (,N)
-        fig (matplotlib.figure.Figure) : A matplotlib figure to use to plot. If None,
-        a new figure is created with an Axes subplot at 111.
-        **kwargs: Can be used to set any keyword arguments for the matplotlib.axes.Axes class
-        (see https://matplotlib.org/api/axes_api.html#the-axes-class)
-    """
-    if fig is None:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, **kwargs)
-    else:
-        plt.figure(fig.number)
-        plt.gcf().clear()
-
-    plt.scatter(np.arange(arr.shape[-1]), arr)
-
     
 def plot_amplitude(im, fig = None, basis=None, units='um', cmap='viridis', **kwargs):
-    """ Plots the amplitude of a complex Tensor or numpy array with dimensions NxMx2.
-    Args:
-        im (t.Tensor) : An image with dimensions NxMx2.
-        fig (matplotlib.figure.Figure) : A matplotlib figure to use to plot. If None,
-        a new figure is created with an Axes subplot at 111.
-        basis (numpy array) : Optional, the 3x2 probe basis, used to put the axis labels in real space units.
-        units (str) : The units to convert the basis to
-        cmap (str) : Default is 'viridis', the colormap to plot with
-        **kwargs: Can be used to set any keyword arguments for the matplotlib.axes.Axes class
-        (see https://matplotlib.org/api/axes_api.html#the-axes-class)
+    """Plots the amplitude of a complex array with dimensions NxM
+    
+    If a figure is given explicitly, it will clear that existing figure and
+    plot over it. Otherwise, it will generate a new figure.
+
+    If a basis is explicitly passed, the image will be plotted in real-space
+    coordinates
+    
+    Parameters
+    ----------
+    im : array
+        An complex array with dimensions NxM
+    fig : matplotlib.figure.Figure
+        Default is a new figure, a matplotlib figure to use to plot
+    basis : np.array
+        Optional, the 3x2 probe basis
+    units : str
+        The length units to mark on the plot, default is um
+    cmap : str
+        Default is 'viridis', the colormap to plot with
+    **kwargs
+        All other args are passed to fig.add_subplot(111, **kwargs)
+
+    Returns
+    -------
+    used_fig : matplotlib.figure.Figure
+        The figure object that was actually plotted to.
     """
     if fig is None:
         fig = plt.figure()
@@ -137,15 +149,33 @@ def plot_amplitude(im, fig = None, basis=None, units='um', cmap='viridis', **kwa
 
 
 def plot_phase(im, fig=None, basis=None, units='um', cmap='auto', **kwargs):
-    """ Plots the phase of a complex Tensor or numpy array with dimensions NxMx2.
-    Args:
-        im (t.Tensor) : An image with dimensions NxMx2.
-        fig (matplotlib.figure.Figure) : A matplotlib figure to use to plot. If None,
-        a new figure is created with an Axes subplot at 111.
-        basis (numpy array) : Optional, the 3x2 probe basis, used to put the axis labels in real space units.
-        cmap (str) : Default is 'auto', which chooses between twilight and hsv based on availability.
-        **kwargs: Can be used to set any keyword arguments for the matplotlib.axes.Axes class
-        (see https://matplotlib.org/api/axes_api.html#the-axes-class)
+    """ Plots the phase of a complex array with dimensions NxMx2
+
+    If a figure is given explicitly, it will clear that existing figure and
+    plot over it. Otherwise, it will generate a new figure.
+
+    If a basis is explicitly passed, the image will be plotted in real-space
+    coordinates
+    
+    Parameters
+    ----------
+    im : array
+        An complex array with dimensions NxM
+    fig : matplotlib.figure.Figure
+        Default is a new figure, a matplotlib figure to use to plot
+    basis : np.array
+        Optional, the 3x2 probe basis
+    units : str
+        The length units to mark on the plot, default is um
+    cmap : str
+        Default is 'viridis', the colormap to plot with
+    **kwargs
+        All other args are passed to fig.add_subplot(111, **kwargs)
+
+    Returns
+    -------
+    used_fig : matplotlib.figure.Figure
+        The figure object that was actually plotted to.
     """
     if fig is None:
         fig = plt.figure()
@@ -188,23 +218,39 @@ def plot_phase(im, fig=None, basis=None, units='um', cmap='auto', **kwargs):
     else:
         plt.xlabel('j (pixels)')
         plt.ylabel('i (pixels)')
-
         
     return fig
 
 
 def plot_colorized(im, fig=None, basis=None, units='um', **kwargs):
-    """ Plots the colorized version of a complex Tensor or numpy array with dimensions NxMx2.
-    The darkness corresponds to the intensity of the image, and the color corresponds
-    to the phase.
+    """ Plots the colorized version of a complex array with dimensions NxM
 
-    Args:
-        im (t.Tensor) : An image with dimensions NxMx2.
-        fig (matplotlib.figure.Figure) : A matplotlib figure to use to plot. If None,
-        a new figure is created with an Axes subplot at 111.
-        basis (numpy array) : Optional, the 3x2 probe basis, used to put the axis labels in real space units.
-        **kwargs: Can be used to set any keyword arguments for the matplotlib.axes.Axes class
-        (see https://matplotlib.org/api/axes_api.html#the-axes-class)
+    The darkness corresponds to the intensity of the image, and the color
+    corresponds to the phase.
+
+    If a figure is given explicitly, it will clear that existing figure and
+    plot over it. Otherwise, it will generate a new figure.
+
+    If a basis is explicitly passed, the image will be plotted in real-space
+    coordinates
+    
+    Parameters
+    ----------
+    im : array
+        An complex array with dimensions NxM
+    fig : matplotlib.figure.Figure
+        Default is a new figure, a matplotlib figure to use to plot
+    basis : np.array
+        Optional, the 3x2 probe basis
+    units : str
+        The length units to mark on the plot, default is um
+    **kwargs
+        All other args are passed to fig.add_subplot(111, **kwargs)
+
+    Returns
+    -------
+    used_fig : matplotlib.figure.Figure
+        The figure object that was actually plotted to.
     """
     if fig is None:
         fig = plt.figure()
@@ -240,24 +286,34 @@ def plot_colorized(im, fig=None, basis=None, units='um', **kwargs):
 
 
 
-def plot_translations(translations, fig=None, units='um', lines=True):
+def plot_translations(translations, fig=None, units='um', lines=True, **kwargs):
     """Plots a set of probe translations in a nicely formatted way
     
-    Args:
-        translations: An Nx2 or Nx3 set of translations in real space
-        fig : Optional, a figure to plot into
-        units : Default is um, units to report in (assuming input in m)
-        lines : Whether to plot the lines indicating the path
+    Parameters
+    ----------
+    translations : array
+        An Nx2 or Nx3 set of translations in real space
+    fig : matplotlib.figure.Figure
+        Default is a new figure, a matplotlib figure to use to plot
+    units : str
+        Default is um, units to report in (assuming input in m)
+    lines : bool
+        Whether to plot lines indicating the path taken
+    **kwargs
+        All other args are passed to fig.add_subplot(111, **kwargs)
 
-    Returns:
-        None
+
+    Returns
+    -------
+    used_fig : matplotlib.figure.Figure
+        The figure object that was actually plotted to.
     """
     
     factor = get_units_factor(units)
     
     if fig is None:
         fig = plt.figure()
-        ax = fig.add_subplot(111)
+        ax = fig.add_subplot(111, **kwargs)
     else:
         plt.figure(fig.number)
         plt.gcf().clear()
@@ -272,21 +328,29 @@ def plot_translations(translations, fig=None, units='um', lines=True):
     plt.xlabel('X (' + units + ')')
     plt.ylabel('Y (' + units + ')')
 
+    return fig
 
     
 def plot_nanomap(translations, values, fig=None, units='um', convention='probe'):
     """Plots a set of nanomap data in a flexible way
     
-    Args:
-        translations : An Nx2 or Nx3 set of translations in real space
-        values : a length-N object of values associated with the translations
-        fig : Optional, a figure to plot into
-        units : Default is um, units to report in (assuming input in m)
-        lines : Whether to plot the lines indicating the path
-        convention : 'probe' if the translations refer to probe translations, 'obj' if they refer to object translations
+    Parameters
+    ----------
+    translations : array
+        An Nx2 or Nx3 set of translations in real space
+    values : array
+        A length-N object of values associated with the translations
+    fig : matplotlib.figure.Figure
+        Default is a new figure, a matplotlib figure to use to plot
+    units : str
+        Default is um, units to report in (assuming input in m)
+    convention : str
+        Default is 'probe', alternative is 'obj'. Whether the translations refer to the probe or object.
 
-    Returns:
-        None
+    Returns
+    -------
+    used_fig : matplotlib.figure.Figure
+        The figure object that was actually plotted to.
     """
 
     if fig is None:
@@ -316,10 +380,9 @@ def plot_nanomap(translations, values, fig=None, units='um', convention='probe')
     
     plt.scatter(factor * trans[:,0],factor * trans[:,1],s=s,c=values)
     
-    plt.gca().invert_xaxis()
     plt.gca().set_facecolor('k')
     plt.xlabel('Translation x (' + units + ')')
     plt.ylabel('Translation y (' + units + ')')
     plt.colorbar()
 
-
+    return fig

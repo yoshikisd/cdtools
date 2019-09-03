@@ -27,11 +27,15 @@ def complex_to_torch(x):
     complex numbers. This maps a complex type numpy array to a torch
     tensor following this convention
 
-    Args:
-        x (array_like): A numpy array to convert
+    Parameters
+    ----------
+    x : np.ndarray
+        A numpy array to convert
 
-    Returns:
-        torch.Tensor : A torch tensor representation of that array
+    Returns
+    -------
+    torch.Tensor
+        A torch tensor representation of that array
 
     """
     return t.from_numpy(np.stack((np.real(x),np.imag(x)),axis=-1))
@@ -42,13 +46,19 @@ def torch_to_complex(x):
 
     Pytorch uses tensors with a final dimension of 2 to represent
     complex numbers. This maps a torch tensor following that convention
-    to the appropriate numpy complex array
+    to the appropriate numpy complex array. Note that, in order for this
+    function to work, the tensor must be detached from any parameters and
+    living on the CPU.
 
-    Args:
-        x (torch.Tensor): A tensor to convert
+    Parameters
+    ----------
+    x : torch.Tensor
+        A tensor to convert
 
-    Returns:
-        np.array : A complex typed numpy array corresponding to the input
+    Returns
+    -------
+    np.array
+        A complex typed numpy array corresponding to the input
 
     """
     x = np.array(x)
@@ -63,72 +73,88 @@ def torch_to_complex(x):
 # and thus doesn't need it's own function
 #
 
-def cabssq(a):
+def cabssq(x):
     """Returns the square of the absolute value of a complex torch tensor
 
     Pytorch uses tensors with a final dimension of 2 to represent
     complex numbers. This calculates the elementwise absolute value
     squared of any toch tensor following that standard.
 
-    Args:
-        x (torch.Tensor): An input tensor
+    Parameters
+    ----------
+    x : torch.Tensor
+        An input tensor
 
-    Returns:
-        array_like : A tensor storing the elementwise absolute value squared
+    Returns
+    -------
+    torch.Tensor
+        A tensor storing the elementwise absolute value squared
 
     """
-    return a[...,0]**2 + a[...,1]**2
+    return x[...,0]**2 + x[...,1]**2
 
 
-def cabs(a):
+def cabs(x):
     """Returns the absolute value of a complex torch tensor
 
     Pytorch uses tensors with a final dimension of 2 to represent
     complex numbers. This calculates the elementwise absolute value
     of any torch tensor following that standard.
 
-    Args:
-        x (torch.Tensor): An input tensor
+    Parameters
+    ----------
+    x : torch.Tensor
+        An input tensor
 
-    Returns:
-        array_like : A tensor storing the elementwise absolute value
+    Returns
+    -------
+    torch.Tensor
+        A tensor storing the elementwise absolute value
 
     """
-    return t.sqrt(cabssq(a))
+    return t.sqrt(cabssq(x))
 
 
-def cphase(a):
+def cphase(x):
     """Returns the phase of a complex torch tensor
 
     Pytorch uses tensors with a final dimension of 2 to represent
     complex numbers. This calculates the elementwise complex phase
     of any torch tensor following that standard.
 
-    Args:
-        x (torch.Tensor): An input tensor
+    Parameters
+    ----------
+    x : torch.Tensor
+        An input tensor
 
-    Returns:
-        array_like : A tensor storing the elementwise phase
+    Returns
+    -------
+    torch.Tensor
+        A tensor storing the elementwise phase
 
     """
-    return t.atan2(a[...,1],a[...,0])
+    return t.atan2(x[...,1],x[...,0])
 
 
-def cconj(a):
+def cconj(x):
     """Returns the complex conjugate of a complex torch tensor
 
     Pytorch uses tensors with a final dimension of 2 to represent
     complex numbers. This calculates the elementwise complex conjugate
     of any torch tensor following that standard.
 
-    Args:
-        x (torch.Tensor): An input tensor
+    Parameters
+    ----------
+    x : torch.Tensor
+        An input tensor
 
-    Returns:
-        array_like : A tensor storing the elementwise complex conjugate
+    Returns
+    -------
+    torch.Tensor
+        A tensor storing the elementwise complex conjugate
 
     """
-    return t.stack((a[...,0],-a[...,1]),dim=-1)
+    return t.stack((x[...,0],-x[...,1]),dim=-1)
 
 
 
@@ -139,12 +165,17 @@ def cmult(a,b):
     complex numbers. This calculates the elementwise product
     of two torch tensors following that standard.
 
-    Args:
-        a (torch.Tensor): An input tensor
-        b (torch.Tensor): A second input tensor
+    Parameters
+    ----------
+    a : torch.Tensor
+        An input tensor
+    b : torch.Tensor
+        A second input tensor
 
-    Returns:
-        torch.Tensor : A tensor storing the elementwise product
+    Returns
+    -------
+    torch.Tensor
+        A tensor storing the elementwise product
 
     """
 
@@ -160,12 +191,17 @@ def cdiv(a,b):
     complex numbers. This calculates the elementwise quotient
     of two torch tensors following that standard.
 
-    Args:
-        a (torch.Tensor): An input tensor
-        b (torch.Tensor): A second input tensor
+    Parameters
+    ----------
+    a : torch.Tensor
+        An input tensor
+    b : torch.Tensor
+        A second input tensor
 
-    Returns:
-        torch.Tensor : A tensor storing the elementwise complex quotient
+    Returns
+    -------
+    torch.Tensor
+        A tensor storing the elementwise complex quotient
 
     """
     return cmult(a, cconj(b)) / t.unsqueeze(cabssq(b),-1)
@@ -188,12 +224,17 @@ def fftshift(array,dims=None):
     represent the complex number and be of dimension 2), but can shift
     any arbitrary set of dimensions.
 
-    Args:
-        array (torch.Tensor) : An array of data to be fftshifted
-        dims (iterable) : A list of all dimensions to shift
+    Parameters
+    ----------
+    array : torch.Tensor
+        An array of data to be fftshifted
+    dims : iterable
+        A list of all dimensions to shift
 
-    Returns:
-        torch.Tensor : fftshifted tensor
+    Returns
+    -------
+    torch.Tensor
+        The fftshifted tensor
 
     """
 
@@ -220,12 +261,17 @@ def ifftshift(array,dims=None):
     represent the complex number and be of dimension 2), but can shift
     any arbitrary set of dimensions.
 
-    Args:
-        array (torch.Tensor) : An array of data to be ifftshifted
-        dims (iterable) : A list of all dimensions to shift
+    Parameters
+    ----------
+    array : torch.Tensor
+        An array of data to be ifftshifted
+    dims : list(int)
+        A list of all dimensions to shift
 
-    Returns:
-        torch.Tensor : ifftshifted tensor
+    Returns
+    -------
+    torch.Tensor 
+        The ifftshifted tensor
 
     """
 
@@ -241,15 +287,20 @@ def ifftshift(array,dims=None):
     return array
 
 
-def expi(array):
-    """Returns a complex-format array for exp(i* (real array))
+def expi(x):
+    """Returns a complex-format tensor for exp(i* (x))
     
-    Expects the input to be in the form of a real-valued array
+    Expects the input to be in the form of a real-valued tensor
 
-    Args:
-        array (torch.Tensor) : An array to be exponentiated
+    Parameters
+    ----------
+    x : torch.Tensor
+        An array to be exponentiated
     
-    Returns:
-        torch.Tensor : A complex-format array
+    Returns
+    -------
+    torch.Tensor
+        A complex-format tensor
+
     """
-    return t.stack((t.cos(array),t.sin(array)),dim=-1)
+    return t.stack((t.cos(x),t.sin(x)),dim=-1)

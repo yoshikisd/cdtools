@@ -1,3 +1,12 @@
+"""Contains functions for basic image processing needs
+
+This module contains two kinds of image processing tools. The first type
+is specific tools for calculating commonly needed metrics (such as the
+centroid of an image), directly on complex-valued torch tensors. The second
+kind of tools perform common image manipulations on torch tensors, in such
+a way that it is safe to include them in automatic differentiation models.
+"""
+
 from __future__ import division, print_function, absolute_import
 import numpy as np
 import torch as t
@@ -17,12 +26,17 @@ def centroid(im, dims=2):
     Beware that the meaning of the centroid is not well defined if your
     image contains values less than 0
 
-    Args:
-        im (t.Tensor) : An image or stack of images to calculate from
-        dims (int) : Default 2, how many trailing dimensions to calculate for
-
-    Returns:
-        t.Tensor : An (i,j) index or stack of indices
+    Parameters
+    ----------
+    im : torch.Tensor
+        An image or stack of images to calculate from
+    dims : int 
+        Default 2, how many trailing dimensions to calculate with
+    
+    Returns
+    -------
+    centroid : torch.Tensor
+        An (i,j) index or stack of indices
     """
     # For some reason this needs to be a list
     indices = [t.arange(im.shape[-dims+i]).to(t.float32) for i in range(dims)]
@@ -46,12 +60,19 @@ def centroid_sq(im, dims=2, comp=False):
     represents the real and imaginary part of a complex number, and the
     centroid will be calculated for the magnitude squared of those numbers
 
-    Args:
-        im (t.Tensor) : An image or stack of images to calculate from
-        dims (int) : Default 2, how many trailing dimensions to calculate for
-        comp (bool) : Default is False, whether the data represents complex numbers
-    Returns:
-        t.Tensor : An (i,j) index or stack of indices
+    Parameters
+    ----------
+    im : torch.Tensor
+        An image or stack of images to calculate from
+    dims : int 
+        Default 2, how many trailing dimensions to calculate for
+    comp : bool
+        Default is False, whether the data represents complex numbers
+
+    Returns
+    -------
+    centroid: torch.Tensor
+        An (i,j) index or stack of indices
     """
     if comp:
         im_sq = cmath.cabssq(im)
@@ -67,12 +88,17 @@ def sinc_subpixel_shift(im, shift):
     The subpixel shift is done circularly via a multiplication with a linear
     phase mask in Fourier space.
 
-    Args:
-        im (torch.Tensor) : A complex-valued tensor to perform the subpixel shift on
-        shift (array_like) : A length-2 array_like object describing the shift to perform, in pixels
+    Parameters
+    ----------
+    im : torch.Tensor
+        A complex-valued tensor to perform the subpixel shift on
+    shift : array
+        A length-2 array describing the shift to perform, in pixels
 
-    Returns:
-        (torch.Tensor) : The subpixel shifted tensor
+    Returns
+    -------
+    shifted_im : torch.Tensor
+        The subpixel shifted tensor
     """
 
     i = t.arange(im.shape[0]) - im.shape[0]//2
@@ -97,11 +123,21 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
     approach outlined in "Efficient subpixel image registration algorithms",
     Optics Express (2008) by Manual Guizar-Sicarios et al.
 
-    Args:
-        im1 (t.Tensor): The first real or complex-valued torch tensor
-        im2 (t.Tensor): The second real or complex-valued torch tensor
-        search_around (array_like) : Default (0,0), the shift to search in the vicinity of
-        resolution (int): Default is 10, the resolution to calculate to in units of 1/n
+    Parameters
+    ----------
+    im1 : torch.Tensor
+        The first real or complex-valued torch tensor
+    im2 : torch.Tensor
+        The second real or complex-valued torch tensor
+    search_around : array
+        Default (0,0), the shift to search in the vicinity of
+    resolution : int
+        Default is 10, the fraction of a pixel to calculate to
+
+    Returns
+    -------
+    shift : torch.Tensor
+        The relative shift (i,j) needed to best map im1 onto im2
     """
     #
     # Here's my approach, perhaps it's a little unconventional. I will first
@@ -111,7 +147,8 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
     # using an FFT with upsampling by a factor of resolution in reciprocal
     # space
     #
-        # If last dimension is not 2, then convert to a complex tensor now
+    
+    # If last dimension is not 2, then convert to a complex tensor now
     if im1.shape[-1] != 2:
         im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
     if im2.shape[-1] != 2:
@@ -164,11 +201,17 @@ def find_pixel_shift(im1, im2):
     to the amount that im1 would have to be shifted by to line up best with
     im2
 
-    Args:
-        im1 (t.Tensor): The first real or complex-valued torch tensor
-        im2 (t.Tensor): The second real or complex-valued torch tensor
-        search_around (array_like) : Default (0,0), the shift to search in the vicinity of
-        resolution (int): Default is 10, the resolution to calculate to in units of 1/n
+    Parameters
+    ----------
+    im1 : torch.Tensor
+        The first real or complex-valued torch tensor
+    im2 : torch.Tensor
+        The second real or complex-valued torch tensor
+
+    Returns
+    -------
+    shift : torch.Tensor
+        The integer-valued shift (i,j) that best maps im1 onto im2 
     """
     # If last dimension is not 2, then convert to a complex tensor now
     if im1.shape[-1] != 2:
@@ -198,10 +241,19 @@ def find_shift(im1, im2, resolution=10):
     pixel resolution, and then searchers the nearby area to calculate a
     subpixel shift
 
-    Args:
-        im1 (t.Tensor): The first real or complex-valued torch tensor
-        im2 (t.Tensor): The second real or complex-valued torch tensor
-        resolution (int): Default is 10, the resolution to calculate to in units of 1/n
+    Parameters
+    ----------
+    im1 : torch.Tensor
+        The first real or complex-valued torch tensor
+    im2 : torch.Tensor
+        The second real or complex-valued torch tensor
+    resolution : int
+        Default is 10, the fraction of a pixel to calculate to
+
+    Returns
+    -------
+    shift : torch.Tensor
+        The relative shift (i,j) needed to best map im1 onto im2
     """
     integer_shift = find_pixel_shift(im1,im2)
     subpixel_shift = find_subpixel_shift(im1, im2, search_around=integer_shift,
@@ -221,14 +273,21 @@ def convolve_1d(image, kernel, dim=0, fftshift_kernel=True):
     Otherwise, the image is assumed to be real. The image and kernel
     must either both be real or both be complex.
     
-    Args:
-        image (torch.Tensor) : The image to convolve
-        kernel (torch.Tensor) : The 1d kernel to convolve with
-        dim (int) : Default 0, the dimension to convolve along
-        fftshift_kernel (bool) : Default True, whether to fftshift the kernel first.
+    Parameters
+    ----------
+    image : torch.Tensor
+        The image to convolve
+    kernel : torch.Tensor
+        The 1d kernel to convolve with
+    dim : int
+        Default 0, the dimension to convolve along
+    fftshift_kernel : bool
+        Default True, whether to fftshift the kernel first.
     
-    Returns:
-        (torch.Tensor) : The convolved image
+    Returns
+    -------
+    convolved_im : torch.Tensor
+        The convolved image
     """
 
     complex_things = 2

@@ -18,9 +18,7 @@ import numpy as np
 # Please contact Abe Levitan (alevitan@mit) if you would like access
 filename = '/media/Data Bank/CSX_10_18/Processed_CXIs/110531_p.cxi'
 
-with h5py.File(filename,'r') as f:
-    dataset = CDTools.datasets.Ptycho_2D_Dataset.from_cxi(f)
-
+dataset = CDTools.datasets.Ptycho_2D_Dataset.from_cxi(filename)
 
 model = CDTools.models.FancyPtycho.from_dataset(dataset,
                                                 randomize_ang = np.pi/4,

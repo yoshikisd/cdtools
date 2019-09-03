@@ -1,16 +1,13 @@
 from __future__ import division, print_function, absolute_import
 
 import CDTools
-import h5py
 import numpy as np
 import pickle
 from matplotlib import pyplot as plt
 
 filename = 'example_data/AuBalls_700ms_30nmStep_3_6SS_filter.cxi'
 
-with h5py.File(filename,'r') as f:
-    dataset = CDTools.datasets.Ptycho_2D_Dataset.from_cxi(f)
-
+dataset = CDTools.datasets.Ptycho_2D_Dataset.from_cxi(filename)
 
 results = []
 

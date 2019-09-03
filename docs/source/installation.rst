@@ -1,5 +1,5 @@
-How to Get
-==========
+Installation
+============
 
 CDTools can be downloaded from it's `MIT github page`_, and the relevant prerequisites can be downloaded via pip, conda, or most python package managers.
 
@@ -20,7 +20,7 @@ CDTools has the following prerequisites:
    * `python-dateutil <https://github.com/dateutil/dateutil/>`_
    * `h5py <https://www.h5py.org/>`_
 
-All of these can be installed via pip or conda. It is required that pytorch is ilt with MKL, as that enables FFTs. Additionally, CUDA support in pytorch is recommended for running any serious reconstructions with the package. The code is written to be python 2.7+ compatible, although it is only tested in python 3.
+All of these can be installed via pip or conda. It is required that pytorch is ilt with MKL, as that enables FFTs. Additionally, installing pytorch with CUDA support is recommended for running any serious reconstructions with the package. The code is written to be python 2.7+ compatible, although it is only tested in python 3.
 
 Finally, to run the tests, pytest is required, and to build the docs, sphinx and sphinx-argparse are required.
 

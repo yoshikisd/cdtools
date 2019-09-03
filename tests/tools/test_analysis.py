@@ -173,6 +173,19 @@ def test_calc_consistency_prtf():
     freqs, prtf = analysis.calc_consistency_prtf(synth_obj, obj_stack, basis, nbins=30)
     assert np.allclose(prtf, 0.7)
 
+    # Check that it also works with torch input
+    t_synth_obj = cmath.complex_to_torch(synth_obj)
+    t_obj_stack = [cmath.complex_to_torch(obj) for obj in obj_stack]
+    freqs, prtf = analysis.calc_consistency_prtf(t_synth_obj, t_obj_stack, basis, nbins=30)
+    assert np.allclose(prtf.numpy(), 0.7)
+
+    # And also when the basis is in torch
+    t_synth_obj = cmath.complex_to_torch(synth_obj)
+    t_obj_stack = [cmath.complex_to_torch(obj) for obj in obj_stack]
+    freqs, prtf = analysis.calc_consistency_prtf(t_synth_obj, t_obj_stack, t.Tensor(basis), nbins=30)
+    assert np.allclose(prtf.numpy(), 0.7)
+
+    
     # Check that is uses the right number of bins
     assert len(prtf) == 30
     assert len(freqs) == 30

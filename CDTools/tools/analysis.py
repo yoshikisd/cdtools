@@ -1,3 +1,10 @@
+"""Contains basic functions for analyzing the results of reconstructions
+
+The functions in this module are designed to work either with pytorch tensors
+or numpy arrays, so they can be used either directly after reconstructions
+on the attributes of the models themselves, or after-the-fact once the
+data has been stored in numpy arrays. 
+"""
 from __future__ import division, print_function
 
 import torch as t
@@ -20,11 +27,15 @@ def orthogonalize_probes(probes):
     defined by the probes in that basis. After diagonalization, the
     eigenvectors can be recast into the original basis and returned
     
-    Args:
-        probes (t.Tensor) : n x (image) size tensor, a stack of probes
+    Parameters
+    ----------
+    probes : array
+        An l x n x m complex array representing  a stack of probes
     
-    Returns:
-        (t.Tensor) : n x (image) size tensor, a stack of probes
+    Returns
+    -------
+    ortho_probes: array
+        An l x n x m complex array representing a stack of probes
     """
 
     try:
@@ -74,12 +85,13 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
     these ambiguities for real differences between the reconstructions.
 
     The ambiguities and standardizations are:
-    * Probe and object can be scaled inversely to one another
-        * So we set the probe intensity to an average per-pixel value of 1
-    * The probe and object can aquire equal and opposite phase ramps
-        * So we set the centroid of the FFT of the probe to zero frequency
-    * The probe and object can each acquire an arbitrary overall phase
-        * So we set the phase of the sum of all values of both the probe and object to 0
+
+    1) a. Probe and object can be scaled inversely to one another
+       b. So we set the probe intensity to an average per-pixel value of 1
+    2) a. The probe and object can aquire equal and opposite phase ramps
+       b. So we set the centroid of the FFT of the probe to zero frequency
+    3) a. The probe and object can each acquire an arbitrary overall phase
+       b. So we set the phase of the sum of all values of both the probe and object to 0
 
     When dealing with the properties of the object, a slice is used by
     default as the edges of the object often are dominated by unphysical
@@ -88,15 +100,23 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
     dominant probe mode (assumed to be the first in the list) is used, but
     all the probes are updated with the same factors.
 
-    Args:
-        probe (t.tensor) : tensor or numpy array storing a retrieved probe or stack of incoherently mixed probes
-        obj (t.tensor) : tensor or numpy array storing a retrieved probe
-        obj_slice (slice) : optional, a slice to take from the object for calculating normalizations
-        correct_ramp (bool) : Default False, whether to correct for the relative phase ramps
+    Parameters
+    ----------
+    probe : array
+        A complex array storing a retrieved probe or stack of incoherently mixed probes
+    obj : array
+        A complex array storing a retrieved probe
+    obj_slice : slice
+        Optional, a slice to take from the object for calculating normalizations
+    correct_ramp : bool
+        Default False, whether to correct for the relative phase ramps
 
-    Returns:
-        (t.tensor) : The standardized probe
-        (t.tensor) : The standardized object
+    Returns
+    -------
+    standardized_probe : array
+        The standardized probe
+    standardized_obj : array
+        The standardized object
 
     """
     # First, we normalize the probe intensity to a fixed value.
@@ -177,18 +197,27 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None,
     precision and uses a sinc interpolation to shift all the probes and objects
     to a common frame. Then the images are summed.
     
-    Args:
-        probes (list) : A list of probes or stacks of probe modes
-        objects (list) : A list of objects
-        use_probe (bool) : Default False, whether to use the probe or object for alignment
-        obj_slice (slice) : Optional, A slice of the object to use for alignment and normalization
-        correct_ramp (bool) : Default False, whether to correct for a relative phase ramp in the probe and object
+    Parameters
+    ----------
+    probes : list(array)
+        A list of probes or stacks of probe modes
+    objects : list(array)
+        A list of objects
+    use_probe : bool
+        Default False, whether to use the probe or object for alignment
+    obj_slice : slice
+        Optional, A slice of the object to use for alignment and normalization
+    correct_ramp : bool
+        Default False, whether to correct for a relative phase ramp in the probe and object
 
-    Returns:
-        (array_like) : The synthesized probe
-        (array_like) : The synthesized object
-        (list) : a list of standardized objects, for further processing
-    
+    Returns
+    -------
+    synth_probe : array
+        The synthesized probe
+    synth_obj : array
+        The synthesized object
+    obj_stack : list(array)
+        A list of standardized objects, for further processing
     """
     
     probe_np = False
@@ -252,7 +281,7 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None,
 
 
 def calc_consistency_prtf(synth_obj, objects, basis, obj_slice=None,nbins=None):
-    """Calculates a PRTF between each the individual objects and an averaged one
+    """Calculates a PRTF between each the individual objects and a synthesized one
     
     The consistency PRTF at any given spatial frequency is defined as the ratio
     between the intensity of any given reconstruction and the intensity
@@ -260,16 +289,25 @@ def calc_consistency_prtf(synth_obj, objects, basis, obj_slice=None,nbins=None):
     Typically, the PRTF is averaged over spatial frequencies with the same
     magnitude.
     
-    Args:
-        synth_obj (t.Tensor) : The synthesized object in the numerator of the PRTF
-        objects (list): A list of objects or diffraction patterns for the denomenator of the PRTF
-        basis (array_like) : The basis for the reconstruction array to allow output in physical unit
-        obj_slice : Optional, a slice of the objects to use for calculating the PRTF
-        nbinbs (int) : Optional, number of bins to use in the histogram. Defaults to a sensible value
+    Parameters
+    ----------
+    synth_obj : array
+        The synthesized object in the numerator of the PRTF
+    objects : list(array)
+        A list of objects or diffraction patterns for the denomenator of the PRTF
+    basis : array
+        The basis for the reconstruction array to allow output in physical unit
+    obj_slice : slice
+        Optional, a slice of the objects to use for calculating the PRTF
+    nbins : int
+        Optional, number of bins to use in the histogram. Defaults to a sensible value
 
-    Returns:
-        (t.Tensor) : The frequencies for the PRTF
-        (t.Tensor) : The values of the PRTF
+    Returns
+    -------
+    freqs : array
+        The frequencies for the PRTF
+    PRTF : array
+        The values of the PRTF
     """
 
     obj_np = False
@@ -279,7 +317,9 @@ def calc_consistency_prtf(synth_obj, objects, basis, obj_slice=None,nbins=None):
     if isinstance(synth_obj, np.ndarray):
         synth_obj = cmath.complex_to_torch(synth_obj).to(t.float32)
 
-        
+    if isinstance(basis, t.Tensor):
+        basis = basis.detach().cpu().numpy()
+    
     if obj_slice is None:
         obj_slice = np.s_[(objects[0].shape[0]//8)*3:(objects[0].shape[0]//8)*5,
                           (objects[0].shape[1]//8)*3:(objects[0].shape[1]//8)*5]
@@ -311,351 +351,39 @@ def calc_consistency_prtf(synth_obj, objects, basis, obj_slice=None,nbins=None):
         prtfs.append(synth_ints/single_ints)
 
 
+    prtf = np.mean(prtfs,axis=0)
+    
     if not obj_np:
         bins = t.Tensor(bins)
-        prtfs = t.Tensor(prtfs)
+        prtf = t.Tensor(prtf)
         
-    return bins[:-1], np.mean(prtfs,axis=0)
-
-
-
-def calc_deconvolved_cross_correlation(im1, im2):
-    """Calculates a cross-correlation between two images with their autocorrelations deconvolved.
-    
-    This can also be thought of as the inverse Fourier transform of the
-    object from which the Fourier Ring Correlation is defined.
-
-    Args:
-        im1 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
-        im2 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
-
-    Returns:
-        (t.Tensor) : The deconvolved cross-correlation, in real space
-    
-    """
-    #
-    # Here's my approach, perhaps it's a little unconventional. I will first
-    # calculate the phase correlation function as found in ____ (cite a paper
-    # defining it). This is strongly peaked, so I can take a small window
-    # of say, 10x10 pixels, and then do a sinc interpolation of that area
-    # using an FFT with upsampling by a factor of resolution in reciprocal
-    # space
-    #
-
-    im_np = False
-    if isinstance(im1, np.ndarray):
-        im1 = cmath.complex_to_torch(im1)
-        im_np = True
-    if isinstance(im2, np.ndarray):
-        im2 = cmath.complex_to_torch(im2)
-        im_np = True
-        
-    # If last dimension is not 2, then convert to a complex tensor now
-    if im1.shape[-1] != 2:
-        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
-    if im2.shape[-1] != 2:
-        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
-
-
-    cor_fft = cmath.cmult(t.fft(im1,2),cmath.cconj(t.fft(im2,2)))
-
-    # Not sure if this is more or less stable than just the correlation
-    # maximum - requires some testing
-    cor = t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2)
-    
-    if im_np:
-        cor = cmath.torch_to_complex(cor)
-
-    return cor
-        
-    
-def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1):
-    im_np = False
-    if isinstance(im1, np.ndarray):
-        im1 = cmath.complex_to_torch(im1)
-        im_np = True
-    if isinstance(im2, np.ndarray):
-        im2 = cmath.complex_to_torch(im2)
-        im_np = True
-
-        # If last dimension is not 2, then convert to a complex tensor now
-    if im1.shape[-1] != 2:
-        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
-    if im2.shape[-1] != 2:
-        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
-
-        
-    if im_slice is None:
-        im_slice = np.s_[(im1.shape[0]//8)*3:(im1.shape[0]//8)*5,
-                          (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
-        im_slice = np.s_[300:-300,300:-300]
-
-    if nbins is None:
-        nbins = np.max(synth_obj[im_slice].shape) // 4
-
-    
-    cor_fft = cmath.cmult(cmath.fftshift(t.fft(synth_obj[obj_slice],2))).numpy()
-
-    
-    di = np.linalg.norm(basis[:,0]) 
-    dj = np.linalg.norm(basis[:,1])
-    
-    i_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[0],d=di))
-    j_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[1],d=dj))
-    
-    Js,Is = np.meshgrid(j_freqs,i_freqs)
-    Rs = np.sqrt(Is**2+Js**2)
-    
-    
-    synth_ints, bins = np.histogram(Rs,bins=nbins,weights=synth_fft)
-
-    prtfs = []
-    for obj in objects:
-        obj = obj[obj_slice]
-        single_fft = cmath.cabssq(cmath.fftshift(t.fft(obj,2))).numpy() 
-        single_ints, bins = np.histogram(Rs,bins=nbins,weights=single_fft)
-
-        prtfs.append(synth_ints/single_ints)
-
-
-    if not obj_np:
-        bins = t.Tensor(bins)
-        prtfs = t.Tensor(prtfs)
-        
-    return bins[:-1], np.mean(prtfs,axis=0)
-
-
-
-def calc_deconvolved_cross_correlation(im1, im2):
-    """Calculates a cross-correlation between two images with their autocorrelations deconvolved.
-    
-    This can also be thought of as the inverse Fourier transform of the
-    object from which the Fourier Ring Correlation is defined.
-
-    Args:
-        im1 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
-        im2 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
-
-    Returns:
-        (t.Tensor) : The deconvolved cross-correlation, in real space
-    
-    """
-    #
-    # Here's my approach, perhaps it's a little unconventional. I will first
-    # calculate the phase correlation function as found in ____ (cite a paper
-    # defining it). This is strongly peaked, so I can take a small window
-    # of say, 10x10 pixels, and then do a sinc interpolation of that area
-    # using an FFT with upsampling by a factor of resolution in reciprocal
-    # space
-    #
-
-    im_np = False
-    if isinstance(im1, np.ndarray):
-        im1 = cmath.complex_to_torch(im1)
-        im_np = True
-    if isinstance(im2, np.ndarray):
-        im2 = cmath.complex_to_torch(im2)
-        im_np = True
-        
-    # If last dimension is not 2, then convert to a complex tensor now
-    if im1.shape[-1] != 2:
-        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
-    if im2.shape[-1] != 2:
-        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
-
-
-    cor_fft = cmath.cmult(t.fft(im1,2),cmath.cconj(t.fft(im2,2)))
-
-    # Not sure if this is more or less stable than just the correlation
-    # maximum - requires some testing
-    cor = t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2)
-    
-    if im_np:
-        cor = cmath.torch_to_complex(cor)
-
-    return cor
-        
-    
-def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1):
-    im_np = False
-    if isinstance(im1, np.ndarray):
-        im1 = cmath.complex_to_torch(im1)
-        im_np = True
-    if isinstance(im2, np.ndarray):
-        im2 = cmath.complex_to_torch(im2)
-        im_np = True
-
-        # If last dimension is not 2, then convert to a complex tensor now
-    if im1.shape[-1] != 2:
-        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
-    if im2.shape[-1] != 2:
-        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
-
-        
-    if im_slice is None:
-        im_slice = np.s_[(im1.shape[0]//8)*3:(im1.shape[0]//8)*5,
-                          (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
-        im_slice = np.s_[300:-300,300:-300]
-
-    if nbins is None:
-        nbins = np.max(synth_obj[im_slice].shape) // 4
-
-    
-    cor_fft = cmath.cmult(cmath.fftshift(t.fft(synth_obj[obj_slice],2))).numpy()
-
-    
-    di = np.linalg.norm(basis[:,0]) 
-    dj = np.linalg.norm(basis[:,1])
-    
-    i_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[0],d=di))
-    j_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[1],d=dj))
-    
-    Js,Is = np.meshgrid(j_freqs,i_freqs)
-    Rs = np.sqrt(Is**2+Js**2)
-    
-    
-    synth_ints, bins = np.histogram(Rs,bins=nbins,weights=synth_fft)
-
-    prtfs = []
-    for obj in objects:
-        obj = obj[obj_slice]
-        single_fft = cmath.cabssq(cmath.fftshift(t.fft(obj,2))).numpy() 
-        single_ints, bins = np.histogram(Rs,bins=nbins,weights=single_fft)
-
-        prtfs.append(synth_ints/single_ints)
-
-
-    if not obj_np:
-        bins = t.Tensor(bins)
-        prtfs = t.Tensor(prtfs)
-        
-    return bins[:-1], np.mean(prtfs,axis=0)
-
-
-
-def calc_deconvolved_cross_correlation(im1, im2):
-    """Calculates a cross-correlation between two images with their autocorrelations deconvolved.
-    
-    This can also be thought of as the inverse Fourier transform of the
-    object from which the Fourier Ring Correlation is defined.
-
-    Args:
-        im1 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
-        im2 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
-
-    Returns:
-        (t.Tensor) : The deconvolved cross-correlation, in real space
-    
-    """
-    #
-    # Here's my approach, perhaps it's a little unconventional. I will first
-    # calculate the phase correlation function as found in ____ (cite a paper
-    # defining it). This is strongly peaked, so I can take a small window
-    # of say, 10x10 pixels, and then do a sinc interpolation of that area
-    # using an FFT with upsampling by a factor of resolution in reciprocal
-    # space
-    #
-
-    im_np = False
-    if isinstance(im1, np.ndarray):
-        im1 = cmath.complex_to_torch(im1)
-        im_np = True
-    if isinstance(im2, np.ndarray):
-        im2 = cmath.complex_to_torch(im2)
-        im_np = True
-        
-    # If last dimension is not 2, then convert to a complex tensor now
-    if im1.shape[-1] != 2:
-        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
-    if im2.shape[-1] != 2:
-        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
-
-
-    cor_fft = cmath.cmult(t.fft(im1,2),cmath.cconj(t.fft(im2,2)))
-
-    # Not sure if this is more or less stable than just the correlation
-    # maximum - requires some testing
-    cor = t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2)
-    
-    if im_np:
-        cor = cmath.torch_to_complex(cor)
-
-    return cor
-        
-    
-def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1):
-    im_np = False
-    if isinstance(im1, np.ndarray):
-        im1 = cmath.complex_to_torch(im1)
-        im_np = True
-    if isinstance(im2, np.ndarray):
-        im2 = cmath.complex_to_torch(im2)
-        im_np = True
-
-        # If last dimension is not 2, then convert to a complex tensor now
-    if im1.shape[-1] != 2:
-        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
-    if im2.shape[-1] != 2:
-        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
-
-        
-    if im_slice is None:
-        im_slice = np.s_[(im1.shape[0]//8)*3:(im1.shape[0]//8)*5,
-                          (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
-        im_slice = np.s_[300:-300,300:-300]
-
-    if nbins is None:
-        nbins = np.max(synth_obj[im_slice].shape) // 4
-
-    
-    cor_fft = cmath.cmult(cmath.fftshift(t.fft(synth_obj[obj_slice],2))).numpy()
-
-    
-    di = np.linalg.norm(basis[:,0]) 
-    dj = np.linalg.norm(basis[:,1])
-    
-    i_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[0],d=di))
-    j_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[1],d=dj))
-    
-    Js,Is = np.meshgrid(j_freqs,i_freqs)
-    Rs = np.sqrt(Is**2+Js**2)
-    
-    
-    synth_ints, bins = np.histogram(Rs,bins=nbins,weights=synth_fft)
-
-    prtfs = []
-    for obj in objects:
-        obj = obj[obj_slice]
-        single_fft = cmath.cabssq(cmath.fftshift(t.fft(obj,2))).numpy() 
-        single_ints, bins = np.histogram(Rs,bins=nbins,weights=single_fft)
-
-        prtfs.append(synth_ints/single_ints)
-
-
-    if not obj_np:
-        bins = t.Tensor(bins)
-        prtfs = t.Tensor(prtfs)
-        
-    return bins[:-1], np.mean(prtfs,axis=0)
+    return bins[:-1], prtf
 
 
 
 def calc_deconvolved_cross_correlation(im1, im2, im_slice=None):
     """Calculates a cross-correlation between two images with their autocorrelations deconvolved.
     
-    This can also be thought of as the inverse Fourier transform of the
-    object from which the Fourier Ring Correlation is defined.
+    This is formally defined as the inverse Fourier transform of the normalized
+    product of the Fourier transforms of the two images. It results in a
+    kernel, whose characteristic size is related to the exactness of the
+    possible alignment between the two images, on top of a random background
 
-    Args:
-        im1 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
-        im2 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
-        im_slice (slice) : Default is from 3/8 to 5/8 across the image, a slice to use in the processing.
+    Parameters
+    ----------
+    im1 : array
+        The first image, as a complex or real valued array
+    im2 : array
+        The first image, as a complex or real valued array
+    im_slice : slice
+        Default is from 3/8 to 5/8 across the image, a slice to use in the processing.
 
-    Returns:
-        (t.Tensor) : The deconvolved cross-correlation, in real space
+    Returns
+    -------
+    corr : array
+        The complex-valued deconvolved cross-correlation, in real space
     
     """
-
 
     im_np = False
     if isinstance(im1, np.ndarray):
@@ -698,22 +426,31 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
     Like other analysis functions, this can take input in numpy or pytorch,
     and will return output in the respective format.
 
-    Args:
-        im1 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
-        im2 (t.Tensor) : The first image, as a complex or real valued pytorch tensor or numpy array
-        basis (t.Tensor) : The basis for the images, defined as is standard for datasets
-        im_slice (slice) : Default is from 3/8 to 5/8 across the image, a slice to use in the processing.
-        nbins (int) : Number of bins to break the FRC up into
-        snr (float) : The signal to noise ratio (for the combined information in both images) to return a threshold curve for.
+    Parameters
+    ----------
+    im1 : array
+        The first image, a complex or real valued array
+    im2 : array
+        The first image, a complex or real valued array
+    basis : array
+        The basis for the images, defined as is standard for datasets
+    im_slice : slice
+        Default is from 3/8 to 5/8 across the image, a slice to use in the processing.
+    nbins : int
+        Number of bins to break the FRC up into
+    snr : float
+        The signal to noise ratio (for the combined information in both images) to return a threshold curve for.
 
-    Returns:
-        (t.Tensor) : The frequencies associated with each FRC value
-        (t.Tensor) : The FRC values
-        (t.Tensor) : The threshold curve for comparison
+    Returns
+    -------
+    freqs : array
+        The frequencies associated with each FRC value
+    FRC : array
+        The FRC values
+    threshold : array
+        The threshold curve for comparison
     
     """
-
-
 
     im_np = False
     if isinstance(im1, np.ndarray):

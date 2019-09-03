@@ -9,7 +9,6 @@ import pickle
 from time import time
 import datetime
 
-import h5py
 import torch as t
 import numpy as np
 
@@ -18,8 +17,7 @@ import numpy as np
 # Please contact Abe Levitan (alevitan@mit) if you would like access
 filename = '/media/Data Bank/CSX_6_17/Processed_CXIs/79511_p.cxi'
 
-with h5py.File(filename,'r') as f:
-    dataset = CDTools.datasets.Ptycho_2D_Dataset.from_cxi(f)
+dataset = CDTools.datasets.Ptycho_2D_Dataset.from_cxi(filename)
 
 # In this dataset, the edges of the patterns are too noisy and are
 # masked off anyway. We can easily just remove this data instead of

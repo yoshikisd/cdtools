@@ -1,3 +1,10 @@
+"""This module contains tools to simulate various measurement models
+
+All the measurements here are safe to use in an automatic differentiation
+model. There exist tools to simulate detectors with finite saturation
+thresholds, backgrounds, and more.
+"""
+
 from __future__ import division, print_function, absolute_import
 
 from CDTools.tools import cmath
@@ -10,7 +17,7 @@ from torch.nn.functional import avg_pool2d
 # intensity pattern on a detector
 #
 
-__all__ = ['intensity', 'incoherent sum', 'quadratic_background']
+__all__ = ['intensity', 'incoherent_sum', 'quadratic_background']
 
 
 def intensity(wavefield, detector_slice=None, epsilon=1e-7, saturation=None, oversampling=1):
@@ -20,14 +27,21 @@ def intensity(wavefield, detector_slice=None, epsilon=1e-7, saturation=None, ove
     wavefront. If a detector slice is given, the returned array
     will only include that slice from the simulated wavefront.
     
-    Args:
-        wavefield (torch.Tensor) : A JxMxNx2 stack of complex wavefields
-        detector_slice (slice) : Optional, a slice or tuple of slices defining a section of the simulation to return
-        saturation (float) : Optional, a maximum saturation value to clamp the resulting intensities to
-        oversampling (int) : Default 1, the width of the region pixels in the wavefield to bin into a single detector pixel
+    Parameters
+    ----------
+    wavefield : torch.Tensor
+        A JxMxNx2 stack of complex wavefields
+    detector_slice : slice
+        Optional, a slice or tuple of slices defining a section of the simulation to return
+    saturation : float
+        Optional, a maximum saturation value to clamp the resulting intensities to
+    oversampling : int
+        Default 1, the width of the region pixels in the wavefield to bin into a single detector pixel
 
-    Returns:
-        torch.Tensor : A real MxN array storing the wavefield's intensities
+    Returns
+    -------
+    sim_patterns : torch.Tensor
+        A real MxN array storing the wavefield's intensities
     """
     output = cmath.cabssq(wavefield) + epsilon
 
@@ -70,13 +84,21 @@ def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=Non
     The next two indices index the wavefield. The final index is the complex
     index.
     
-    Args:
-        wavefields (torch.Tensor) : An LxJxMxNx2 stack of complex wavefields
-        detector_slice (slice) : Optional, a slice or tuple of slices defining a section of the simulation to return
-        saturation (float) : Optional, a maximum saturation value to clamp the resulting intensities to
-        oversampling (int) : Default 1, the width of the region pixels in the wavefield to bin into a single detector pixel
-    Returns:
-        torch.Tensor : A real JXMxN array storing the incoherently summed intensities
+    Parameters
+    ----------
+    wavefields : torch.Tensor
+        An LxJxMxNx2 stack of complex wavefields
+    detector_slice : slice
+        Optional, a slice or tuple of slices defining a section of the simulation to return
+    saturation : float
+        Optional, a maximum saturation value to clamp the resulting intensities to
+    oversampling : int
+        Default 1, the width of the region pixels in the wavefield to bin into a single detector pixel
+
+    Returns
+    -------
+    sim_patterns : torch.Tensor 
+        A real JXMxN array storing the incoherently summed intensities
     """
     # This syntax just adds an axis to the slice to preserve the J direction
 
@@ -116,15 +138,25 @@ def quadratic_background(wavefield, background, detector_slice=None, measurement
     of background model is commonly used to enforce positivity of the
     background model.
 
-    Args:
-        wavefield (torch.Tensor) : A JxMxNx2 stack of complex wavefields
-        background (torch.Tensor) : An tensor storing the square root of the detector background
-        detector_slice (slice) : Optional, a slice or tuple of slices defining a section of the simulation to return
-        measurement (function) : Optional, the measurement function to use. The default is measurements.intensity
-        saturation (float) : Optional, a maximum saturation value to clamp the resulting intensities to
-        oversampling (int) : Default 1, the width of the region pixels in the wavefield to bin into a single detector pixel
-    Returns:
-        torch.Tensor : A real MxN array storing the wavefield's intensities
+    Parameters
+    ----------
+    wavefield : torch.Tensor
+        A JxMxNx2 stack of complex wavefields
+    background : torch.Tensor
+        An tensor storing the square root of the detector background
+    detector_slice : slice
+        Optional, a slice or tuple of slices defining a section of the simulation to return
+    measurement : function
+        Default is measurements.intensity, the measurement function to use.
+    saturation : float
+        Optional, a maximum saturation value to clamp the resulting intensities to
+    oversampling : int
+        Default 1, the width of the region pixels in the wavefield to bin into a single detector pixel
+
+    Returns
+    -------
+    sim_patterns : torch.Tensor
+        A real MxN array storing the wavefield's intensities
     """
     
     if detector_slice is None:
