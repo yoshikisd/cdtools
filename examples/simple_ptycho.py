@@ -1,27 +1,21 @@
 from __future__ import division, print_function, absolute_import
 
 import CDTools
-from CDTools.tools import cmath
-from CDTools.tools.plotting import *
 from matplotlib import pyplot as plt
-import pickle
 
+# First, we load an example dataset from a .cxi file
 filename = 'example_data/AuBalls_700ms_30nmStep_3_6SS_filter.cxi'
-
 dataset = CDTools.datasets.Ptycho_2D_Dataset.from_cxi(filename)
 
+# Next, we create a ptychography model from the dataset
 model = CDTools.models.SimplePtycho.from_dataset(dataset)
 
+# Now, we run a short reconstruction from the dataset!
 for i, loss in enumerate(model.Adam_optimize(10, dataset)):
+    model.inspect(dataset)
     print(i, loss)
 
-for i, loss in enumerate(model.Adam_optimize(10, dataset, lr=0.001)):
-    print(i, loss)
-
-model.inspect(update=False)
+# Finally, we plot the results
+model.inspect(dataset)
 model.compare(dataset)
-
-#with open('test_results.pickle', 'wb') as f:
-#    pickle.dump(model.save_results(),f)
-
 plt.show()

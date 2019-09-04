@@ -1,3 +1,16 @@
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   self
+   installation
+   examples
+   tutorial
+   general
+   datasets
+   models
+   tools/index
+   indices_tables
 
 Introduction to CDTools
 =======================
@@ -32,27 +45,3 @@ CDTools makes it simple to load and inspect from data stored in .cxi files using
 The high-level interface to CDTools is built on a lower level "three-legged stool". This consists of tools to access stored data, tools to visualize data and reconstructions, and tools that implement basic operations relevant to coherent diffraction. All of these tools can be used directly alongside the high-level interface, when needed.
 
 Enough blabber. If you're interested, read the docs!
-
-
-Documentation Overview
-======================
-
-.. toctree::
-   :maxdepth: 1
-
-   installation
-   examples
-   tutorial
-   general
-   datasets
-   models
-   tools/index
-
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
