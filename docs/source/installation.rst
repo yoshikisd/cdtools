@@ -30,7 +30,7 @@ And has optional dependencies on
      
 All of these can be installed via pip or conda. Finally, CDTools is written to be python 2.7+ compatible, but is only actively tested on python 3.
 
-*It is required that pytorch is built with MKL*, as that enables FFTs. Additionally, installing pytorch *with CUDA support* is recommended, if you intend to run any serious reconstructions with the package.
+**It is required that pytorch is built with MKL**, as that enables FFTs. Additionally, installing pytorch **with CUDA support** is recommended, if you intend to run any serious reconstructions with the package.
 
 Finally, the optional depencency on pytest enables the tests to be run to confirm a successful installation. Sphinx and sphinx-argparse are only required if you plan on building the documentation.
 

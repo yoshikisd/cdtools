@@ -12,7 +12,6 @@ model = CDTools.models.SimplePtycho.from_dataset(dataset)
 
 # Now, we run a short reconstruction from the dataset!
 for i, loss in enumerate(model.Adam_optimize(10, dataset)):
-    model.inspect(dataset)
     print(i, loss)
 
 # Finally, we plot the results

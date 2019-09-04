@@ -1,22 +1,11 @@
 from __future__ import division, print_function, absolute_import
 
-import numpy as np
 from matplotlib import pyplot as plt
 import pickle
 
-from CDTools.tools import cmath, plotting
-from CDTools.tools.analysis import *
+from CDTools.tools import plotting
+from CDTools.tools import analysis
 
-
-#
-# Note that much of this functionality is duplicated by the convenience
-# script. Try running:
-#
-# python -m CDTools.scripts.synthesize example_reconstructions/gold_balls_ensemble.pickle
-#
-# Which will perform much of the same analysis on any saved reconstruction
-# ensemble
-#
 
 
 with open('example_reconstructions/gold_balls_ensemble.pickle', 'rb') as f:
@@ -29,12 +18,13 @@ if type(dataset) == type([]):
                for key in dataset[0]}
 
 
-# Now we synthesize the object using the tool from CDTools
-synth_probe, synth_obj, aligned_objs = synthesize_reconstructions(
+# Now we synthesize an average reconstruction
+synth_probe, synth_obj, aligned_objs = analysis.synthesize_reconstructions(
     dataset['probe'], dataset['obj'])
 
 # And then we calculate the consistency PRTF from this
-freqs, prtf = calc_consistency_prtf(synth_obj, aligned_objs, dataset['basis'][0])
+freqs, prtf = analysis.calc_consistency_prtf(synth_obj, aligned_objs, dataset['basis'][0])
+
 
 # Plot the first mode in detail
 plotting.plot_phase(synth_probe[0],basis=dataset['basis'][0])
@@ -44,12 +34,13 @@ plotting.plot_colorized(synth_probe[0],basis=dataset['basis'][0])
 # Just plot the colorized version of the subdominant modes
 plotting.plot_colorized(synth_probe[1],basis=dataset['basis'][0])
 plotting.plot_colorized(synth_probe[2],basis=dataset['basis'][0])
-      
+
+# And now we plot the object
 plotting.plot_amplitude(synth_obj,basis=dataset['basis'][0])
 plotting.plot_colorized(synth_obj,basis=dataset['basis'][0])
 plotting.plot_phase(synth_obj,basis=dataset['basis'][0])
     
-# Now plot the PRTF
+# Finally, plot the consistency PRTF
 plt.figure()
 plt.plot(freqs*1e-6, prtf)
 plt.xlabel('Spatial Frequency (cycles/um)')

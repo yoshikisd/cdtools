@@ -103,8 +103,8 @@ def plot_amplitude(im, fig = None, basis=None, units='um', cmap='viridis', **kwa
         The length units to mark on the plot, default is um
     cmap : str
         Default is 'viridis', the colormap to plot with
-    **kwargs
-        All other args are passed to fig.add_subplot(111, **kwargs)
+    \\**kwargs
+        All other args are passed to fig.add_subplot(111, \\**kwargs)
 
     Returns
     -------
@@ -169,8 +169,8 @@ def plot_phase(im, fig=None, basis=None, units='um', cmap='auto', **kwargs):
         The length units to mark on the plot, default is um
     cmap : str
         Default is 'viridis', the colormap to plot with
-    **kwargs
-        All other args are passed to fig.add_subplot(111, **kwargs)
+    \\**kwargs
+        All other args are passed to fig.add_subplot(111, \\**kwargs)
 
     Returns
     -------
@@ -244,8 +244,8 @@ def plot_colorized(im, fig=None, basis=None, units='um', **kwargs):
         Optional, the 3x2 probe basis
     units : str
         The length units to mark on the plot, default is um
-    **kwargs
-        All other args are passed to fig.add_subplot(111, **kwargs)
+    \\**kwargs
+        All other args are passed to fig.add_subplot(111, \\**kwargs)
 
     Returns
     -------
@@ -299,8 +299,8 @@ def plot_translations(translations, fig=None, units='um', lines=True, **kwargs):
         Default is um, units to report in (assuming input in m)
     lines : bool
         Whether to plot lines indicating the path taken
-    **kwargs
-        All other args are passed to fig.add_subplot(111, **kwargs)
+    \\**kwargs
+        All other args are passed to fig.add_subplot(111, \\**kwargs)
 
 
     Returns
