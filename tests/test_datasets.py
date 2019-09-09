@@ -125,7 +125,7 @@ def test_CDataset_to(ptycho_cxi_1):
 #
 
 
-def test_Ptycho_2D_Dataset_init():
+def test_Ptycho2DDataset_init():
     entry_info = {'start_time': datetime.datetime.now(),
                   'title' : 'A simple test'}
     sample_info = {'name': 'A test sample',
@@ -140,7 +140,7 @@ def test_Ptycho_2D_Dataset_init():
     patterns = np.random.rand(20,256,256)
     translations = np.random.rand(20,3)
     
-    dataset = Ptycho_2D_Dataset(translations, patterns,
+    dataset = Ptycho2DDataset(translations, patterns,
                                 entry_info=entry_info,
                                 sample_info=sample_info,
                                 wavelength=wavelength,
@@ -157,9 +157,9 @@ def test_Ptycho_2D_Dataset_init():
 
 
 
-def test_Ptycho_2D_Dataset_from_cxi(test_ptycho_cxis):
+def test_Ptycho2DDataset_from_cxi(test_ptycho_cxis):
     for cxi, expected in test_ptycho_cxis:
-        dataset = Ptycho_2D_Dataset.from_cxi(cxi)
+        dataset = Ptycho2DDataset.from_cxi(cxi)
 
         # The entry metadata loaded
         for key in expected['entry metadata']:
@@ -195,17 +195,17 @@ def test_Ptycho_2D_Dataset_from_cxi(test_ptycho_cxis):
 
 
             
-def test_Ptycho_2D_Dataset_to_cxi(test_ptycho_cxis, tmp_path):
+def test_Ptycho2DDataset_to_cxi(test_ptycho_cxis, tmp_path):
     for cxi, expected in test_ptycho_cxis:
         print('loading dataset')
-        dataset = Ptycho_2D_Dataset.from_cxi(cxi)
+        dataset = Ptycho2DDataset.from_cxi(cxi)
         print('dataset mask is type', dataset.mask.dtype)
-        with cdtdata.create_cxi(tmp_path / 'test_Ptycho_2D_Dataset_to_cxi.cxi') as f:
+        with cdtdata.create_cxi(tmp_path / 'test_Ptycho2DDataset_to_cxi.cxi') as f:
             dataset.to_cxi(f)
 
         # Now we have to check that all the stuff was written
-        with h5py.File(tmp_path / 'test_Ptycho_2D_Dataset_to_cxi.cxi', 'r') as f:
-            read_dataset = Ptycho_2D_Dataset.from_cxi(f)
+        with h5py.File(tmp_path / 'test_Ptycho2DDataset_to_cxi.cxi', 'r') as f:
+            read_dataset = Ptycho2DDataset.from_cxi(f)
 
         assert dataset.entry_info == read_dataset.entry_info
 
@@ -237,8 +237,8 @@ def test_Ptycho_2D_Dataset_to_cxi(test_ptycho_cxis, tmp_path):
         assert t.allclose(dataset.translations, read_dataset.translations)
 
     
-def test_Ptycho_2D_Dataset_to(ptycho_cxi_1):
-    dataset = Ptycho_2D_Dataset.from_cxi(ptycho_cxi_1[0])
+def test_Ptycho2DDataset_to(ptycho_cxi_1):
+    dataset = Ptycho2DDataset.from_cxi(ptycho_cxi_1[0])
     
     dataset.to(dtype=t.float64)
     assert dataset.mask.dtype == t.uint8
@@ -254,9 +254,9 @@ def test_Ptycho_2D_Dataset_to(ptycho_cxi_1):
 
 
         
-def test_Ptycho_2D_Dataset_ops(ptycho_cxi_1):
+def test_Ptycho2DDataset_ops(ptycho_cxi_1):
     cxi, expected = ptycho_cxi_1
-    dataset = Ptycho_2D_Dataset.from_cxi(cxi)
+    dataset = Ptycho2DDataset.from_cxi(cxi)
     dataset.get_as('cpu')
 
     assert len(dataset) == expected['data'].shape[0]
@@ -266,9 +266,9 @@ def test_Ptycho_2D_Dataset_ops(ptycho_cxi_1):
     assert t.allclose(pattern, t.tensor(expected['data'][3,:,:]))
 
 
-def test_Ptycho_2D_Dataset_get_as(ptycho_cxi_1):
+def test_Ptycho2DDataset_get_as(ptycho_cxi_1):
     cxi, expected = ptycho_cxi_1
-    dataset = Ptycho_2D_Dataset.from_cxi(cxi)
+    dataset = Ptycho2DDataset.from_cxi(cxi)
     if t.cuda.is_available():
         dataset.get_as('cuda:0')
         assert len(dataset) == expected['data'].shape[0]

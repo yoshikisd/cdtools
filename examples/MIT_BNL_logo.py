@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 # This file is too large to be distributed via Github.
 # Please contact Abe Levitan (alevitan@mit) if you would like access
 filename = '/media/Data Bank/CSX_6_17/Processed_CXIs/79511_p.cxi'
-dataset = CDTools.datasets.Ptycho_2D_Dataset.from_cxi(filename)
+dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
 
 # In this dataset, the edges of the patterns are masked off anyway
 # We can easily just remove this data instead of leaving it to float.

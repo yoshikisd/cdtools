@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 # This file is too large to be distributed via Github.
 # Please contact Abe Levitan (alevitan@mit) if you would like access
 filename = '/media/Data Bank/CSX_10_18/Processed_CXIs/110531_p.cxi'
-dataset = CDTools.datasets.Ptycho_2D_Dataset.from_cxi(filename)
+dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
 
 
 # This model definition includes lots of tweaks, described below.

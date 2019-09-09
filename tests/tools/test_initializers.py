@@ -2,7 +2,7 @@ from __future__ import division, print_function, absolute_import
 
 from CDTools.tools import initializers
 from CDTools.tools import cmath
-from CDTools.datasets import Ptycho_2D_Dataset
+from CDTools.datasets import Ptycho2DDataset
 import numpy as np
 import torch as t
 
@@ -112,7 +112,7 @@ def test_gaussian():
 
 def test_gaussian_probe(ptycho_cxi_1):
     
-    dataset = Ptycho_2D_Dataset.from_cxi(ptycho_cxi_1[0])
+    dataset = Ptycho2DDataset.from_cxi(ptycho_cxi_1[0])
 
     det_basis = t.Tensor(dataset.detector_geometry['basis'])
     det_shape = t.Size(dataset.patterns.shape[-2:])
@@ -173,7 +173,7 @@ def test_SHARP_style_probe(ptycho_cxi_1):
     # This code will probably change and honestly it doesn't need to
     # be exactly the final thing. So just test that the function doesn't
     # throw an error.
-    dataset = Ptycho_2D_Dataset.from_cxi(ptycho_cxi_1[0])
+    dataset = Ptycho2DDataset.from_cxi(ptycho_cxi_1[0])
     det_basis = t.Tensor(dataset.detector_geometry['basis'])
     det_shape = t.Size(dataset.patterns.shape[-2:])
     wavelength = dataset.wavelength

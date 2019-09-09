@@ -2,7 +2,7 @@ from __future__ import division, print_function, absolute_import
 
 import torch as t
 from CDTools.models import CDIModel
-from CDTools.datasets import Ptycho_2D_Dataset
+from CDTools.datasets import Ptycho2DDataset
 from CDTools import tools
 from CDTools.tools import cmath
 from CDTools.tools import plotting as p
@@ -316,7 +316,7 @@ class FancyPtycho(CDIModel):
         data = self.forward(indices, translations)
 
         # And finally, we make the dataset
-        return Ptycho_2D_Dataset(translations, data,
+        return Ptycho2DDataset(translations, data,
                                  entry_info = entry_info,
                                  sample_info = sample_info,
                                  wavelength=wavelength,
