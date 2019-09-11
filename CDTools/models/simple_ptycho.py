@@ -12,7 +12,11 @@ from datetime import datetime
 import numpy as np
 
 class SimplePtycho(CDIModel):
+    """A simple ptychography model for exploring ideas and extensions
+    
+    
 
+    """
     def __init__(self, wavelength, detector_geometry,
                  probe_basis, detector_slice,
                  probe_guess, obj_guess, min_translation = [0,0],

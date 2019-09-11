@@ -15,15 +15,47 @@ from matplotlib import ticker
 
 __all__ = ['Ptycho2DDataset']
 
-#
-# This is the standard dataset for a 2D ptychography experiment,
-# which saves and loads files compatible with most reconstruction
-# programs (only tested against SHARP)
-#
 
 class Ptycho2DDataset(CDataset):
+    """The standard dataset for a 2D ptychography scan
 
+    Subclasses datasets.CDataset
+
+    This class loads and saves 2D ptychography scan data from .cxi files.
+    It should save and load files compatible with most reconstruction
+    programs, although it is only tested against SHARP.
+    """
     def __init__(self, translations, patterns, axes=None, *args, **kwargs):
+        """The __init__ function allows construction from python objects.
+
+
+        The detector_geometry dictionary is defined to have the 
+        entries defined by the outputs of data.get_detector_geometry.
+        
+
+        Parameters
+        ----------
+        translations : array
+            An nx3 array containing the probe translations at each scan point
+        patterns : array
+            An nxmxl array containing the full stack of measured diffraction patterns
+        entry_info : dict
+            A dictionary containing the entry_info metadata
+        sample_info : dict
+            A dictionary containing the sample_info metadata
+        wavelength : float
+            The wavelength of light used in the experiment
+        detector_geometry : dict
+            A dictionary containing the various detector geometry
+            parameters
+        mask : array
+            A mask for the detector, defined as 1 for live pixels, 0 
+            for dead
+        background : array
+            An initial guess for the not-previously-subtracted 
+            detector background
+        """
+        
 
         super(Ptycho2DDataset,self).__init__(*args, **kwargs)
         self.axes = copy(axes)
@@ -40,10 +72,41 @@ class Ptycho2DDataset(CDataset):
         return self.patterns.shape[0]
 
     def _load(self, index):
+        """ Internal function to load data
+        
+        This function is used internally by the global __getitem__ function
+        defined in the base class, which handles moving data around when
+        the dataset is (for example) storing the data on the CPU but 
+        getting data as GPU tensors.
+
+        The inputs for a 2D ptychogaphy data set are:
+        
+        1) The indices of the patterns to use
+        2) The recorded probe positions associated with those points
+        
+        Parameters
+        ----------
+        index : int or slice
+             The index or indices of the scan points to use
+
+        Returns
+        -------
+        inputs : tuple
+             A tuple of the inputs to the related forward models
+        outputs : tuple
+             The output pattern or stack of output patterns
+        """    
         return (index, self.translations[index]), self.patterns[index]
 
 
     def to(self, *args, **kwargs):
+        """Sends the relevant data to the given device and dtype
+
+        This function sends the stored translations, patterns,
+        mask and background to the specified device and dtype
+        
+        Accepts the same parameters as torch.Tensor.to
+        """
         super(Ptycho2DDataset,self).to(*args,**kwargs)
         self.translations = self.translations.to(*args, **kwargs)
         self.patterns = self.patterns.to(*args, **kwargs)
@@ -53,6 +116,21 @@ class Ptycho2DDataset(CDataset):
     # perhaps there is a way but I couldn't figure it out.
     @classmethod
     def from_cxi(cls, cxi_file):
+        """Generates a new CDataset from a .cxi file directly
+
+        This generates a new Ptycho2DDataset from a .cxi file storing
+        a 2D ptychography scan.
+
+        Parameters
+        ----------
+        file : str, pathlib.Path, or h5py.File
+            The .cxi file to load from
+
+        Returns
+        -------
+        dataset : Ptycho2DDataset
+            The constructed dataset object
+        """
         # If a bare string is passed
         if isinstance(cxi_file, str) or isinstance(cxi_file, pathlib.Path):
             with h5py.File(cxi_file,'r') as f:
@@ -80,12 +158,38 @@ class Ptycho2DDataset(CDataset):
     
 
     def to_cxi(self, cxi_file):
+        """Saves out a Ptycho2DDataset as a .cxi file 
+
+        This function saves all the compatible information in a
+        Ptycho2DDataset object into a .cxi file. This saved .cxi file
+        should be compatible with any standard .cxi file based
+        reconstruction tool, such as SHARP.
+        
+        Parameters
+        ----------
+        cxi_file : str, pathlib.Path, or h5py.File
+            The .cxi file to write to
+        """ 
+
+        # If a bare string is passed
+        if isinstance(cxi_file, str) or isinstance(cxi_file, pathlib.Path):
+            with h5py.File(cxi_file,'w') as f:
+                return self.to_cxi(f)
+
         super(Ptycho2DDataset,self).to_cxi(cxi_file)
         cdtdata.add_data(cxi_file, self.patterns, axes=self.axes)
         cdtdata.add_ptycho_translations(cxi_file, self.translations)
 
 
     def inspect(self):
+        """Launches an interactive plot for perusing the data
+        
+        This launches an interactive plotting tool in matplotlib that
+        shows the spatial map constructed from the integrated intensity
+        at each position on the left, next to a panel on the right that
+        can display a base-10 log plot of the detector readout at each
+        position.
+        """
         fig, axes = plt.subplots(1,2,figsize=(8,5.3))
         fig.tight_layout(rect=[0.04, 0.09, 0.98, 0.96])
         axslider = plt.axes([0.15,0.06,0.75,0.03])
@@ -146,7 +250,7 @@ class Ptycho2DDataset(CDataset):
                 cb1 = plt.colorbar(nanomap, ax=axes[0], orientation='horizontal',format='%.2e',ticks=ticker.LinearLocator(numticks=5),pad=0.15,fraction=0.1)
                 cb1.ax.tick_params(labelrotation=20)
     
-                meas = axes[1].imshow(meas_data * mask)
+                meas = axes[1].imshow(np.log(meas_data) / np.log(10) * mask)
 
                 cb2 = plt.colorbar(meas, ax=axes[1], orientation='horizontal',format='%.2e',ticks=ticker.LinearLocator(numticks=5),pad=0.15,fraction=0.1)
                 cb2.ax.tick_params(labelrotation=20)
@@ -173,7 +277,7 @@ class Ptycho2DDataset(CDataset):
 
                 
                 meas = axes[1].images[-1]
-                meas.set_data(meas_data * mask)
+                meas.set_data(np.log(meas_data) / np.log(10) * mask)
                 update_colorbar(meas)
 
                 

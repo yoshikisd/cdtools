@@ -1,3 +1,48 @@
+"""This module contains all the models for different CDI Reconstructions
+
+All the reconstructions are coordinated through the ptychography models
+defined here. The models are, at their core, just subclasses of the 
+:code:`torch.nn.model` class, so they contain the same structure of
+parameters, etc. Their central functionality is as a simulation that maps
+some input (usually, the index number of a scan point) to an output that
+corresponds to the measured data (usually, a diffraction pattern). This
+model can then be used as the heart of an automatic differentiation
+reconstruction which retrieves the parameters that were used in the model.
+
+
+The subclasses of the main CDIModel class are required to define their
+own implementations of the following functions:
+
+Loading and Saving
+------------------
+from_dataset
+    Creates a CDIModel from an appropriate CDataset
+simulate_to_dataset
+    Creates a CDataset from the simulation defined in the model
+save_results
+    Saves out a dictionary with the recovered parameters
+    
+
+Simulation
+----------
+interaction
+    Simulates exit waves from experimental parameters
+forward_propagator
+    The propagator from the experiment plane to the detector plane
+backward_propagator
+    Optional, the propagator from the detector plane to the experiment plane
+measurement
+    Simulates the detector readout from a detector plane wavefront
+loss
+    the loss function to report and use for automatic differentiation
+
+Example implementations of all these functions can be found in the code
+for the SimplePtycho class.
+
+In addition, it is recommended to read through the tutorial section on
+defining a new ptychography model before attempting to do so
+"""
+
 from __future__ import division, print_function, absolute_import
 
 import torch as t
@@ -7,55 +52,18 @@ from matplotlib.widgets import Slider
 from matplotlib import ticker
 import numpy as np
 
-#
-# This is unrelated, but it will then be important to be able to save and load
-# models easily from a predefined format. To be honest, this could just
-# literally be by pickling the model. They could also be saved out as
-# state_dicts or via torch.save. I think it's best to just save the whole
-# model - I lose out on the modularity of just saving the state_dict, but
-# I gain in it being easy to reload the non-learned aspects of the model,
-# like the wavelength and sample geometry. Remember that it's important
-# that the final outputs of the reconstructions are transferrable to other
-# places
-#
-
-
-#
-# For now, just save/load model via the built-in t.save() and t.load()
-# functions
-#
-
+__all__ = ['CDIModel', 'SimplePtycho', 'FancyPtycho']
 
 
 class CDIModel(t.nn.Module):
     """This base model defines all the functions that must be exposed for a valid CDIModel subclass
 
     Most of the functions only raise a NotImplementedError at this level and
-    must be explicitly defined by any subclass. The functions required can be
-    split into several subsections:
-
-    Creation:
-    from_dataset : a function to create a CDIModel from an appropriate CDataset
-
-    Simulation:
-    interaction : a function to simulate exit waves from experimental parameters
-    forward_propagator : the propagator from the experiment plane to the detector plane
-    backward_propagator : the propagator from the detector plane to the experiment plane
-    measurement : a function to simulate the detector readout from a detector plane wavefront
-    forward : predefined, the entire stacked forward model
-    loss : the loss function to report and use for automatic differentiation
-    simulation : predefined, simulates a stack of detector images from the forward model
-    simulate_to_dataset : a function to create a CDataset from the simulation defined in the model
-
-    Reconstruction:
-    AD_optimize : predefined, a generic automatic differentiation reconstruction
-    Adam_optimize : predefined,  sensible automatic differentiation reconstruction using ADAM
-
-    The work of defining the various subclasses boils down to creating an
-    appropriate implementation for this set of functions.
+    must be explicitly defined by any subclass - these are noted explocitly
+    in the module-level intro. The work of defining the various subclasses
+    boils down to creating an appropriate implementation for this set of
+    functions.
     """
-
-
 
     def from_dataset(self, dataset):
         raise NotImplementedError()
@@ -78,27 +86,51 @@ class CDIModel(t.nn.Module):
 
 
     def forward(self, *args):
+        """The complete forward model
+        
+        This model relies on composing the interaction, forward propagator,
+        and measurement functions which are required to be defined by all
+        subclasses. It therefore should not be redefined by the subclasses.
+        
+        The arguments to this function, for any given subclass, will be
+        the same as the arguments to the interaction function.
+        """
         return self.measurement(self.forward_propagator(self.interaction(*args)))
 
     def loss(self, sim_data, real_data):
         raise NotImplementedError()
 
 
-    # I know this is silly but it makes it clear this should be explicitly
-    # overwritten
     def to(self, *args, **kwargs):
         super(CDIModel,self).to(*args,**kwargs)
-
-
-    def simulate(self, args_list):
-        return t.Tensor([self.forward(*args) for args in args_list])
 
 
     def simulate_to_dataset(self, args_list):
         raise NotImplementedError()
     
+    def save_results(self):
+        raise NotImplementedError()
 
     def AD_optimize(self, iterations, data_loader,  optimizer, scheduler=None):
+        """Runs a round of reconstruction using the provided optimizer
+        
+        This is the basic automatic differentiation reconstruction tool
+        which all the other, algorithm-specific tools, use.
+        
+        Like all the other optimization routines, it is defined as a
+        generator function which yields the average loss each epoch.
+
+        Parameters
+        ----------
+        iterations : int
+            How many epochs of the algorithm to run
+        dataset : CDataset
+            The dataset to reconstruct against
+        optimizer : torch.optim.Optimizer
+            The optimizer to run the reconstruction with
+        scheduler : torch.optim.lr_scheduler._LRScheduler
+            Optional, a learning rate scheduler to use
+        """
 
         for it in range(iterations):
             loss = 0
@@ -127,7 +159,26 @@ class CDIModel(t.nn.Module):
 
 
     def Adam_optimize(self, iterations, dataset, batch_size=15, lr=0.005, schedule=False):
+        """Runs a round of reconstruction using the Adam optimizer
+        
+        This is generally accepted to be the most robust algorithm for use
+        with ptychography. Like all the other optimization routines,
+        it is defined as a generator function, which yields the average
+        loss each epoch.
 
+        Parameters
+        ----------
+        iterations : int
+            How many epochs of the algorithm to run
+        dataset : CDataset
+            The dataset to reconstruct against
+        batch_size : int
+            Optional, the size of the minibatches to use
+        lr : float
+            Optional, The learning rate (alpha) to use
+        schedule : float
+            Optional, whether to use the ReduceLROnPlateau scheduler
+        """
         # Make a dataloader
         data_loader = torchdata.DataLoader(dataset, batch_size=batch_size,
                                            shuffle=True)
@@ -147,7 +198,27 @@ class CDIModel(t.nn.Module):
 
     def LBFGS_optimize(self, iterations, dataset, batch_size=None,
                        lr=0.1,history_size=2):
+        """Runs a round of reconstruction using the L-BFGS optimizer
+        
+        This algorithm is often less stable that Adam, however in certain
+        situations or geometries it can be shockingly efficient. Like all
+        the other optimization routines, it is defined as a generator
+        function which yields the average loss each epoch.
 
+        Parameters
+        ----------
+        iterations : int
+            How many epochs of the algorithm to run
+        dataset : CDataset
+            The dataset to reconstruct against
+        batch_size : int
+            Optional, the size of the minibatches to use
+        lr : float
+            Optional, the learning rate to use
+        history_size : int
+            Optional, the length of the history to use.
+        """
+        
         # Make a dataloader
         if batch_size is not None:
             data_loader = torchdata.DataLoader(dataset, batch_size=batch_size,
@@ -178,9 +249,20 @@ class CDIModel(t.nn.Module):
         registered plots which need to incorporate some information from
         the dataset (such as geometry or a comparison with measured data).
         
-        Args:
-            dataset (CDataset): Optional, a dataset matched to the model type
-            update (bool) : Whether to update existing plots or plot new ones
+        Plots can be registered in any subclass by defining the plot_list
+        attribute. This should be a list of tuples in the following format:
+        ( 'Plot Title', function_to_generate_plot(self), 
+        function_to_determine_whether_to_plot(self))
+
+        Where the third element in the tuple (a function that returns 
+        True if the plot is relevant) is not required.
+
+        Parameters
+        ----------
+        dataset : CDataset
+            Optional, a dataset matched to the model type
+        update : bool
+            Whether to update existing plots or plot new ones
         
         """
         first_update = False
@@ -239,8 +321,10 @@ class CDIModel(t.nn.Module):
     def compare(self, dataset):
         """Opens a tool for comparing simulated and measured diffraction patterns
         
-        Args:
-            dataset (CDataset) : A dataset containing the simulated diffraction patterns to compare agains
+        Parameters
+        ----------
+        dataset : CDataset
+            A dataset containing the simulated diffraction patterns to compare against
         """
         
         fig, axes = plt.subplots(1,3,figsize=(12,5.3))
