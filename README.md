@@ -24,6 +24,6 @@ model.compare(dataset)
 plt.show()
 ```
 
-Full installation instructions and documentation can be found [here](https://github.mit.edu/pages/Scattering/CDTools/)
+Full installation instructions and documentation can be found [here](https://github.mit.edu/pages/Scattering/CDTools/).
 
 Have a wonderful day!
