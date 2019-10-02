@@ -46,7 +46,7 @@ class FancyPtycho(CDIModel):
         if mask is None:
             self.mask = mask
         else:
-            self.mask = t.ByteTensor(mask)
+            self.mask = t.BoolTensor(mask)
         
         # We rescale the probe here so it learns at the same rate as the
         # object
@@ -175,7 +175,7 @@ class FancyPtycho(CDIModel):
         weights = t.ones(len(dataset))
         
         if hasattr(dataset, 'mask') and dataset.mask is not None:
-            mask = dataset.mask.to(t.uint8)
+            mask = dataset.mask.to(t.bool)
         else:
             mask = None
 

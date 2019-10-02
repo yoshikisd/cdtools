@@ -278,7 +278,7 @@ def get_mask(cxi_file):
         mask = np.array(i1['detector_1/mask']).astype(np.uint32)
         mask_on = np.equal(mask,np.uint32(0))
         mask_has_signal = np.equal(mask,np.uint32(0x00001000))
-        return np.logical_or(mask_on,mask_has_signal).astype(np.uint8)
+        return np.logical_or(mask_on,mask_has_signal).astype(np.bool)
     else:
         return None
 

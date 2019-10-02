@@ -98,7 +98,7 @@ class SimplePtycho(CDIModel):
 
 
         if hasattr(dataset, 'mask') and dataset.mask is not None:
-            mask = dataset.mask.to(t.uint8)
+            mask = dataset.mask.to(t.bool)
         else:
             mask = None
 

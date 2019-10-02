@@ -50,11 +50,11 @@ def amplitude_mse(intensities, sim_intensities, mask=None):
 
     if mask is None:
         return t.sum((t.sqrt(sim_intensities) -
-                      t.sqrt(intensities))**2) / intensities.view(-1).shape[0]
+                      t.sqrt(intensities))**2)
     else:
         masked_intensities = intensities.masked_select(mask)
         return t.sum((t.sqrt(sim_intensities.masked_select(mask)) -
-                      t.sqrt(masked_intensities))**2) / masked_intensities.shape[0]
+                      t.sqrt(masked_intensities))**2)
 
 
     
