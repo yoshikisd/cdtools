@@ -21,7 +21,11 @@ def amplitude_mse(intensities, sim_intensities, mask=None):
     This function calculates the mean squared error between their
     associated amplitudes. Because this is not well defined for negative
     numbers, make sure that all the intensities are >0 before using this
-    loss.
+    loss. Note that this is actually a sum-squared error, because this
+    formulation makes it vastly simpler to compare error calculations
+    between reconstructions with different minibatch size. I hope to
+    find a better way to do this that is more honest with this
+    cost function, though.
 
     It can accept intensity and simulated intensity tensors of any shape
     as long as their shapes match, and the provided mask array can be

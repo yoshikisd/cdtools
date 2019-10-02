@@ -8,7 +8,10 @@ import pytest
 import os
 import datetime
 import numbers
-from pathlib import Path
+try:
+    import pathlib
+except ImportError:
+    import pathlib2 as pathlib
 
 
 

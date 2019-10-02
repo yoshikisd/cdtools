@@ -1,0 +1,8 @@
+numpy>=1.0
+scipy>=1.0
+matplotlib>=2.0
+python-dateutil
+pytorch>=1.2.0
+h5py>=2.1
+pytest
+sphinx

@@ -32,8 +32,11 @@ import numpy as np
 import torch as t
 from copy import copy
 import h5py
-import pathlib
-
+try:
+    import pathlib
+except ImportError:
+    import pathlib2 as pathlib
+    
 from CDTools.tools import data as cdtdata
 from CDTools.tools import plotting
 from torch.utils import data as torchdata
@@ -98,7 +101,10 @@ class CDataset(torchdata.Dataset):
         self.wavelength = wavelength
         self.detector_geometry = copy(detector_geometry)
         if mask is not None:
-            self.mask = t.tensor(mask)
+            if isinstance(mask, t.Tensor):
+                self.mask = mask.detach().to(dtype=t.bool)
+            else:
+                self.mask = t.BoolTensor(mask)
         else:
             self.mask = None
         if background is not None:

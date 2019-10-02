@@ -3,7 +3,10 @@ import numpy as np
 import torch as t
 from copy import copy
 import h5py
-import pathlib
+try:
+    import pathlib
+except ImportError:
+    import pathlib2 as pathlib
 
 from CDTools.datasets import CDataset
 from CDTools.tools import data as cdtdata
