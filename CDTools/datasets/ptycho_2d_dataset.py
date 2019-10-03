@@ -193,125 +193,164 @@ class Ptycho2DDataset(CDataset):
         can display a base-10 log plot of the detector readout at each
         position.
         """
+        
+        # We start by making the figure and axes
         fig, axes = plt.subplots(1,2,figsize=(8,5.3))
         fig.tight_layout(rect=[0.04, 0.09, 0.98, 0.96])
         axslider = plt.axes([0.15,0.06,0.75,0.03])
 
-        translations = self.translations.detach().cpu().numpy()
-        nanomap_values = (self.mask.to(t.float32) * self.patterns).sum(dim=(1,2)).detach().cpu().numpy()
-
-        def update_colorbar(im):
-            # If the update brought the colorbar out of whack
-            # (say, from clicking back in the navbar)
-            # Holy fuck this was annoying. Sorry future for how
-            # crappy this solution is.
-            if hasattr(im, 'norecurse') and im.norecurse:
-                im.norecurse=False
-                return
-
-            im.norecurse=True
-            im.colorbar.set_clim(vmin=np.min(im.get_array()),vmax=np.max(im.get_array()))
-            im.colorbar.ax.set_ylim(0,1)
-            im.colorbar.set_ticks(ticker.LinearLocator(numticks=5))
-            im.colorbar.draw_all()
-
-        def on_pick(event):
-            update(event.ind[0])
-            self.slider.set_val(fig.pattern_idx)
-            plt.draw()
-
-        def update(idx):
-            idx = int(idx) % len(self)
-            fig.pattern_idx = idx
-            updating = True if len(axes[1].images) >= 1 else False
-
+        
+        #
+        # Then we define some helper functions for getting the right data
+        # that are used both in the initial setup and the updates
+        #
+        
+        def get_data(idx):
             inputs, output = self[idx]
             meas_data = output.detach().cpu().numpy()
             if hasattr(self, 'mask') and self.mask is not None:
                 mask = self.mask.detach().cpu().numpy()
             else:
                 mask = 1
+            
+            return mask, meas_data
 
-            if not updating:
-                axes[0].set_title('Relative Displacement Map')
-                axes[1].set_title('Diffraction Pattern')
+        
+        def calculate_sizes(idx):
+            bbox = axes[0].get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+            s0 = bbox.width * bbox.height / translations.shape[0] * 72**2 #72 is points per inch
+            s0 /= 4 # A rough value to make the size work out
+            s = np.ones(len(self)) * s0
+            
+            s[idx] *= 4
+            return s
 
-                bbox = axes[0].get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+        def update_colorbar(im):
+            #
+            # This solves the problem of the colorbar being changed
+            # when the forward and back buttons are used!!!
+            #
+            if hasattr(im, 'norecurse') and im.norecurse:
+                im.norecurse=False
+                return
+            
+            im.norecurse=True
+            # This is needed to update the colorbar
+            im.set_clim(vmin=np.min(im.get_array()),
+                        vmax=np.max(im.get_array()))
 
-                s0 = bbox.width * bbox.height / translations.shape[0] * 72**2 #72 is points per inch
-                s0 /= 4 # A rough value to make the size work out
-                s = np.ones(len(nanomap_values)) * s0
+        #
+        # The meatiest part of this program, here we just go through and
+        # set up the plot how we want it
+        #
 
-                s[idx] *= 4
+        # First we set up the left-hand plot, which shows an overview map
+        axes[0].set_title('Relative Displacement Map')
+        
+        translations = self.translations.detach().cpu().numpy()
+        nanomap_values = (self.mask.to(t.float32) * self.patterns).sum(dim=(1,2)).detach().cpu().numpy()
+        s = calculate_sizes(0)
+        
+        nanomap = axes[0].scatter(1e6 * translations[:,0],1e6 * translations[:,1],s=s,c=nanomap_values, picker=True)
+        
+        axes[0].invert_xaxis()
+        axes[0].set_facecolor('k')
+        axes[0].set_xlabel('Translation x (um)', labelpad=1)
+        axes[0].set_ylabel('Translation y (um)', labelpad=1)
+        cb1 = plt.colorbar(nanomap, ax=axes[0], orientation='horizontal',
+                           format='%.2e',
+                           ticks=ticker.LinearLocator(numticks=5),
+                           pad=0.17,fraction=0.1)
+        cb1.ax.set_title('Integrated Intensity', size="medium", pad=5)
+        cb1.ax.tick_params(labelrotation=20)
 
-                nanomap = axes[0].scatter(1e6 * translations[:,0],1e6 * translations[:,1],s=s,c=nanomap_values, picker=True)
-                fig.canvas.mpl_connect('pick_event',on_pick)
 
-                axes[0].invert_xaxis()
-                axes[0].set_facecolor('k')
-                axes[0].set_xlabel('Translation x (um)', labelpad=1)
-                axes[0].set_ylabel('Translation y (um)', labelpad=1)
-                cb1 = plt.colorbar(nanomap, ax=axes[0], orientation='horizontal',format='%.2e',ticks=ticker.LinearLocator(numticks=5),pad=0.17,fraction=0.1)
-                cb1.ax.set_title('Integrated Intensity', size="medium", pad=5)
-                cb1.ax.tick_params(labelrotation=20)
+        # Now we set up the second plot, which shows the individual
+        # diffraction patterns
+        axes[1].set_title('Diffraction Pattern')
+        mask, meas_data = get_data(0)
+        if logarithmic:
+            meas = axes[1].imshow(np.log(meas_data) / np.log(10) * mask)
+        else:
+            meas = axes[1].imshow(meas_data * mask)
+            
+        cb2 = plt.colorbar(meas, ax=axes[1], orientation='horizontal',
+                           format='%.2e',
+                           ticks=ticker.LinearLocator(numticks=5),
+                           pad=0.17,fraction=0.1)
+        cb2.ax.tick_params(labelrotation=20)
+        cb2.ax.set_title('Pixel Intensity', size="medium", pad=5)
+        cb2.ax.callbacks.connect('xlim_changed', lambda ax: update_colorbar(meas))
 
-                if logarithmic:
-                    meas = axes[1].imshow(np.log(meas_data) / np.log(10) * mask)
-                else:
-                    meas = axes[1].imshow(meas_data * mask)
+        # This function handles all the updating, except for moving the
+        # slider value. This is done because the slider widget is
+        # ultimately responsible for triggering an update, so all other
+        # updates are done by changing the slider widget value which
+        # then triggers this
+        def update(idx):
+            # We have to explicitly make it an integer because the slider will
+            # output floats (even if they are still integer-valued)
+            idx = int(idx)
 
-                cb2 = plt.colorbar(meas, ax=axes[1], orientation='horizontal',format='%.2e',ticks=ticker.LinearLocator(numticks=5),pad=0.17,fraction=0.1)
-                cb2.ax.tick_params(labelrotation=20)
-                cb2.ax.set_title('Pixel Intensity', size="medium", pad=5)
-                cb2.ax.callbacks.connect('xlim_changed', lambda ax: update_colorbar(meas))
+            # Get the new data for this index
+            mask, meas_data = get_data(idx)
 
+            # Now we resize the nanomap to show the new selection
+            axes[0].collections[0].set_sizes(calculate_sizes(idx))
+
+            # And we update the data in the image as well
+            meas = axes[1].images[-1]
+            if logarithmic:
+                meas.set_data(np.log(meas_data) / np.log(10) * mask)
             else:
-                bbox = axes[0].get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                meas.set_data(meas_data * mask)
 
-                s0 = bbox.width * bbox.height / translations.shape[0] * 72**2 #72 is points per inch
-                s0 /= 4 # A rough value to make the size work out
-                s = np.ones(len(nanomap_values)) * s0
-                s[idx] *= 4
+            update_colorbar(meas)
 
-                axes[0].clear()
-                nanomap = axes[0].scatter(1e6 * translations[:,0],1e6 * translations[:,1],s=s,c=nanomap_values, picker=True)
-                fig.canvas.mpl_connect('pick_event',on_pick)
+   
+        #
+        # Now we define the functions to handle various kinds of events
+        # that can be thrown our way
+        #
+        
+        # We start by creating the slider here, so it can be used
+        # by the update hooks.
+        slider = Slider(axslider, 'Pattern #', 0, len(self)-1, valstep=1, valfmt="%d")
 
-                axes[0].set_title('Relative Displacement Map')
-                axes[0].invert_xaxis()
-                axes[0].set_facecolor('k')
-                axes[0].set_xlabel('Translation x (um)')
-                axes[0].set_ylabel('Translation y (um)')
-
-
-
-                meas = axes[1].images[-1]
-                if logarithmic:
-                    meas.set_data(np.log(meas_data) / np.log(10) * mask)
-                else:
-                    meas.set_data(meas_data * mask)
-
-                update_colorbar(meas)
-
-
-        # This is dumb but the slider doesn't work unless a reference to it is
-        # kept somewhere...
-        self.slider = Slider(axslider, 'Pattern #', 0, len(self)-1, valstep=1, valfmt="%d")
-        self.slider.on_changed(update)
-
+        # This handles scroll wheel and keypress events
         def on_action(event):
+            # Otherwise the if statements can throw errors when the
+            # event type isn't right, this way they just don't trigger
             if not hasattr(event, 'button'):
                 event.button = None
             if not hasattr(event, 'key'):
                 event.key = None
 
             if event.key == 'up' or event.button == 'up':
-                update(fig.pattern_idx - 1)
+                idx = slider.val - 1
             elif event.key == 'down' or event.button == 'down':
-                update(fig.pattern_idx + 1)
-            self.slider.set_val(fig.pattern_idx)
-            plt.draw()
+                idx = slider.val + 1
 
+            # Handle the wraparound and trigger the update
+            idx = int(idx) % len(self)
+            slider.set_val(idx)
+
+        # This handles "pick" events in the nanomap
+        def on_pick(event):
+            # If we don't filter on type of event, this will also capture,
+            # for example, scroll events that happen over the nanomap
+            if event.mouseevent.button == 1:
+                slider.set_val(event.ind[0])
+
+
+        # Here we connect the various update functions
+        fig.canvas.mpl_connect('pick_event',on_pick)
         fig.canvas.mpl_connect('key_press_event',on_action)
         fig.canvas.mpl_connect('scroll_event',on_action)
+        slider.on_changed(update)
+
+        # Throw an extra update into the mix just to get rid of any things
+        # (like the nanomap dot sizes) that otherwise would change on the
+        # first update
         update(0)
+        
