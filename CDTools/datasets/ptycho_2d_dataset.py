@@ -29,9 +29,9 @@ class Ptycho2DDataset(CDataset):
         """The __init__ function allows construction from python objects.
 
 
-        The detector_geometry dictionary is defined to have the 
+        The detector_geometry dictionary is defined to have the
         entries defined by the outputs of data.get_detector_geometry.
-        
+
 
         Parameters
         ----------
@@ -49,13 +49,13 @@ class Ptycho2DDataset(CDataset):
             A dictionary containing the various detector geometry
             parameters
         mask : array
-            A mask for the detector, defined as 1 for live pixels, 0 
+            A mask for the detector, defined as 1 for live pixels, 0
             for dead
         background : array
-            An initial guess for the not-previously-subtracted 
+            An initial guess for the not-previously-subtracted
             detector background
         """
-        
+
 
         super(Ptycho2DDataset,self).__init__(*args, **kwargs)
         self.axes = copy(axes)
@@ -66,24 +66,24 @@ class Ptycho2DDataset(CDataset):
         self.mask.masked_fill_(t.isnan(t.sum(self.patterns,dim=(0,))),0)
         self.patterns.masked_fill_(t.isnan(self.patterns),0)
 
-        
+
 
     def __len__(self):
         return self.patterns.shape[0]
 
     def _load(self, index):
         """ Internal function to load data
-        
+
         This function is used internally by the global __getitem__ function
         defined in the base class, which handles moving data around when
-        the dataset is (for example) storing the data on the CPU but 
+        the dataset is (for example) storing the data on the CPU but
         getting data as GPU tensors.
 
         The inputs for a 2D ptychogaphy data set are:
-        
+
         1) The indices of the patterns to use
         2) The recorded probe positions associated with those points
-        
+
         Parameters
         ----------
         index : int or slice
@@ -95,7 +95,7 @@ class Ptycho2DDataset(CDataset):
              A tuple of the inputs to the related forward models
         outputs : tuple
              The output pattern or stack of output patterns
-        """    
+        """
         return (index, self.translations[index]), self.patterns[index]
 
 
@@ -104,13 +104,13 @@ class Ptycho2DDataset(CDataset):
 
         This function sends the stored translations, patterns,
         mask and background to the specified device and dtype
-        
+
         Accepts the same parameters as torch.Tensor.to
         """
         super(Ptycho2DDataset,self).to(*args,**kwargs)
         self.translations = self.translations.to(*args, **kwargs)
         self.patterns = self.patterns.to(*args, **kwargs)
-        
+
 
     # It sucks that I can't reuse the base factory method here,
     # perhaps there is a way but I couldn't figure it out.
@@ -155,21 +155,21 @@ class Ptycho2DDataset(CDataset):
                    wavelength=wavelength,
                    detector_geometry=detector_geometry,
                    mask=mask, background=dark)
-    
+
 
     def to_cxi(self, cxi_file):
-        """Saves out a Ptycho2DDataset as a .cxi file 
+        """Saves out a Ptycho2DDataset as a .cxi file
 
         This function saves all the compatible information in a
         Ptycho2DDataset object into a .cxi file. This saved .cxi file
         should be compatible with any standard .cxi file based
         reconstruction tool, such as SHARP.
-        
+
         Parameters
         ----------
         cxi_file : str, pathlib.Path, or h5py.File
             The .cxi file to write to
-        """ 
+        """
 
         # If a bare string is passed
         if isinstance(cxi_file, str) or isinstance(cxi_file, pathlib.Path):
@@ -183,7 +183,7 @@ class Ptycho2DDataset(CDataset):
 
     def inspect(self):
         """Launches an interactive plot for perusing the data
-        
+
         This launches an interactive plotting tool in matplotlib that
         shows the spatial map constructed from the integrated intensity
         at each position on the left, next to a panel on the right that
@@ -196,7 +196,7 @@ class Ptycho2DDataset(CDataset):
 
         translations = self.translations.detach().cpu().numpy()
         nanomap_values = (self.mask.to(t.float32) * self.patterns).sum(dim=(1,2)).detach().cpu().numpy()
-        
+
         def update_colorbar(im):
             # If the update brought the colorbar out of whack
             # (say, from clicking back in the navbar)
@@ -205,7 +205,7 @@ class Ptycho2DDataset(CDataset):
             if hasattr(im, 'norecurse') and im.norecurse:
                 im.norecurse=False
                 return
-            
+
             im.norecurse=True
             im.colorbar.set_clim(vmin=np.min(im.get_array()),vmax=np.max(im.get_array()))
             im.colorbar.ax.set_ylim(0,1)
@@ -214,73 +214,76 @@ class Ptycho2DDataset(CDataset):
 
         def on_pick(event):
             update(event.ind[0])
+            self.slider.set_val(fig.pattern_idx)
             plt.draw()
-        
+
         def update(idx):
             idx = int(idx) % len(self)
             fig.pattern_idx = idx
             updating = True if len(axes[1].images) >= 1 else False
-            
+
             inputs, output = self[idx]
             meas_data = output.detach().cpu().numpy()
             if hasattr(self, 'mask') and self.mask is not None:
                 mask = self.mask.detach().cpu().numpy()
             else:
                 mask = 1
-                
+
             if not updating:
-                axes[0].set_title('Nanomap')
-                axes[1].set_title('Pattern')
+                axes[0].set_title('Relative Displacement Map')
+                axes[1].set_title('Diffraction Pattern')
 
                 bbox = axes[0].get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                
+
                 s0 = bbox.width * bbox.height / translations.shape[0] * 72**2 #72 is points per inch
                 s0 /= 4 # A rough value to make the size work out
                 s = np.ones(len(nanomap_values)) * s0
 
                 s[idx] *= 4
-    
+
                 nanomap = axes[0].scatter(1e6 * translations[:,0],1e6 * translations[:,1],s=s,c=nanomap_values, picker=True)
                 fig.canvas.mpl_connect('pick_event',on_pick)
 
                 axes[0].invert_xaxis()
                 axes[0].set_facecolor('k')
-                axes[0].set_xlabel('Translation x (um)')
-                axes[0].set_ylabel('Translation y (um)')
-                cb1 = plt.colorbar(nanomap, ax=axes[0], orientation='horizontal',format='%.2e',ticks=ticker.LinearLocator(numticks=5),pad=0.15,fraction=0.1)
+                axes[0].set_xlabel('Translation x (um)', labelpad=1)
+                axes[0].set_ylabel('Translation y (um)', labelpad=1)
+                cb1 = plt.colorbar(nanomap, ax=axes[0], orientation='horizontal',format='%.2e',ticks=ticker.LinearLocator(numticks=5),pad=0.17,fraction=0.1)
+                cb1.ax.set_title('Integrated Intensity', size="medium", pad=5)
                 cb1.ax.tick_params(labelrotation=20)
-    
+
                 meas = axes[1].imshow(np.log(meas_data) / np.log(10) * mask)
 
-                cb2 = plt.colorbar(meas, ax=axes[1], orientation='horizontal',format='%.2e',ticks=ticker.LinearLocator(numticks=5),pad=0.15,fraction=0.1)
+                cb2 = plt.colorbar(meas, ax=axes[1], orientation='horizontal',format='%.2e',ticks=ticker.LinearLocator(numticks=5),pad=0.17,fraction=0.1)
                 cb2.ax.tick_params(labelrotation=20)
+                cb2.ax.set_title('Pixel Intensity', size="medium", pad=5)
                 cb2.ax.callbacks.connect('xlim_changed', lambda ax: update_colorbar(meas))
-                
+
             else:
-                axes[0].set_title('Nanomap')
                 bbox = axes[0].get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                
+
                 s0 = bbox.width * bbox.height / translations.shape[0] * 72**2 #72 is points per inch
                 s0 /= 4 # A rough value to make the size work out
                 s = np.ones(len(nanomap_values)) * s0
                 s[idx] *= 4
-    
+
                 axes[0].clear()
                 nanomap = axes[0].scatter(1e6 * translations[:,0],1e6 * translations[:,1],s=s,c=nanomap_values, picker=True)
                 fig.canvas.mpl_connect('pick_event',on_pick)
 
+                axes[0].set_title('Relative Displacement Map')
                 axes[0].invert_xaxis()
                 axes[0].set_facecolor('k')
                 axes[0].set_xlabel('Translation x (um)')
                 axes[0].set_ylabel('Translation y (um)')
 
 
-                
+
                 meas = axes[1].images[-1]
                 meas.set_data(np.log(meas_data) / np.log(10) * mask)
                 update_colorbar(meas)
 
-                
+
         # This is dumb but the slider doesn't work unless a reference to it is
         # kept somewhere...
         self.slider = Slider(axslider, 'Pattern #', 0, len(self)-1, valstep=1, valfmt="%d")
@@ -291,7 +294,7 @@ class Ptycho2DDataset(CDataset):
                 event.button = None
             if not hasattr(event, 'key'):
                 event.key = None
-                
+
             if event.key == 'up' or event.button == 'up':
                 update(fig.pattern_idx - 1)
             elif event.key == 'down' or event.button == 'down':
@@ -302,5 +305,3 @@ class Ptycho2DDataset(CDataset):
         fig.canvas.mpl_connect('key_press_event',on_action)
         fig.canvas.mpl_connect('scroll_event',on_action)
         update(0)
-        
-
