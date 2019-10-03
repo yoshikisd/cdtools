@@ -13,12 +13,18 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.mit.edu/scattering/CDTools.git",
     install_requires=[
-        "numpy",
-        "scipy",
-        "matplotlib",
+        "numpy>=1.0",
+        "scipy>=1.0",
+        "matplotlib>=2.0",
         "python-dateutil",
-        "torch",
-        "h5py"],
+        "torch>=1.2.0", #1.2.0 introduced boolean tensors in a breaking way, we use the boolean tensors here for masking
+        "h5py>=2.1",
+        "pathlib2 ; python_version<'3.4'"],
+    extras_require={
+        'tests': ["pytest"],
+        'docs': ["sphinx","sphinx-argparse"],
+        ":python_version<'3.4'": ["pathlib2"],
+    },
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",

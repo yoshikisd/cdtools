@@ -148,15 +148,13 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
 
     
     if correct_ramp:
-        # Need to check if this is actually working and, if noy, why not
-        center_freq = ip.centroid_sq(cmath.fftshift(t.fft(probe[0],2)),comp=True)
+        # Need to check if this is actually working and, if not, why not
+        center_freq = ip.centroid(cmath.cabssq(cmath.fftshift(t.fft(probe[0],2))))
         center_freq -= (t.tensor(probe[0].shape[:-1]) // 2).to(t.float32)
         center_freq /= t.tensor(probe[0].shape[:-1]).to(t.float32)
-
-
     
         Is, Js = np.mgrid[:probe[0].shape[0],:probe[0].shape[1]]
-        probe_phase_ramp = cmath.expi(2*np.pi *
+        probe_phase_ramp = cmath.expi(2 * np.pi *
                                       (center_freq[0] * t.tensor(Is).to(t.float32) +
                                        center_freq[1] * t.tensor(Js).to(t.float32)))
         probe = cmath.cmult(probe, cmath.cconj(probe_phase_ramp))
@@ -165,7 +163,6 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
                                     (center_freq[0] * t.tensor(Is).to(t.float32) +
                                      center_freq[1] * t.tensor(Js).to(t.float32)))
         obj = cmath.cmult(obj, obj_phase_ramp)
-
     
     # Then, we set them to consistent absolute phases
     
@@ -475,7 +472,7 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
                           (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
 
     if nbins is None:
-        nbins = np.max(synth_obj[im_slice].shape) // 4
+        nbins = np.max(im1[im_slice].shape) // 4
 
     
     cor_fft = cmath.cmult(cmath.fftshift(t.fft(im1[im_slice],2)),
@@ -490,7 +487,7 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
     
     i_freqs = fftpack.fftshift(fftpack.fftfreq(cor_fft.shape[0],d=di))
     j_freqs = fftpack.fftshift(fftpack.fftfreq(cor_fft.shape[1],d=dj))
-    
+
     Js,Is = np.meshgrid(j_freqs,i_freqs)
     Rs = np.sqrt(Is**2+Js**2)
     

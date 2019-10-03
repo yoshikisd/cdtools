@@ -131,13 +131,17 @@ class CDIModel(t.nn.Module):
         scheduler : torch.optim.lr_scheduler._LRScheduler
             Optional, a learning rate scheduler to use
         """
-
+        # First, calculate the normalization
+        normalization = 0
+        for inputs, patterns in data_loader:
+            normalization += t.sum(patterns).cpu().numpy()
+            
+            
         for it in range(iterations):
             loss = 0
             N = 0
             for inputs, patterns in data_loader:
                 N += 1
-
                 def closure():
                     optimizer.zero_grad()
                     sim_patterns = self.forward(*inputs)
@@ -151,14 +155,14 @@ class CDIModel(t.nn.Module):
 
                 loss += optimizer.step(closure).detach().cpu().numpy()
 
-            loss /= N
+            loss /= normalization
             if scheduler is not None:
                 scheduler.step(loss)
-
+                
             yield loss
 
 
-    def Adam_optimize(self, iterations, dataset, batch_size=15, lr=0.005, schedule=False):
+    def Adam_optimize(self, iterations, dataset, batch_size=15, lr=0.005, schedule=False, amsgrad=False):
         """Runs a round of reconstruction using the Adam optimizer
         
         This is generally accepted to be the most robust algorithm for use
@@ -184,7 +188,7 @@ class CDIModel(t.nn.Module):
                                            shuffle=True)
 
         # Define the optimizer
-        optimizer = t.optim.Adam(self.parameters(), lr = lr)
+        optimizer = t.optim.Adam(self.parameters(), lr = lr, amsgrad=amsgrad)
 
 
         # Define the scheduler
@@ -230,6 +234,46 @@ class CDIModel(t.nn.Module):
         # Define the optimizer
         optimizer = t.optim.LBFGS(self.parameters(),
                                   lr = lr, history_size=history_size)
+
+        return self.AD_optimize(iterations, data_loader, optimizer)
+
+
+    def SGD_optimize(self, iterations, dataset, batch_size=None,
+                     lr=0.01, momentum=0, dampening=0, weight_decay=0,
+                     nesterov=False):
+        """Runs a round of reconstruction using the SGDoptimizer
+        
+        This algorithm is often less stable that Adam, but it is simpler
+        and is the basic workhorse of gradience descent.
+
+        Parameters
+        ----------
+        iterations : int
+            How many epochs of the algorithm to run
+        dataset : CDataset
+            The dataset to reconstruct against
+        batch_size : int
+            Optional, the size of the minibatches to use
+        lr : float
+            Optional, the learning rate to use
+        momentum : float
+            Optional, the length of the history to use.
+        """
+        
+        # Make a dataloader
+        if batch_size is not None:
+            data_loader = torchdata.DataLoader(dataset, batch_size=batch_size,
+                                               shuffle=True)
+        else:
+            data_loader = torchdata.DataLoader(dataset)
+
+
+        # Define the optimizer
+        optimizer = t.optim.SGD(self.parameters(),
+                                lr = lr, momentum=momentum,
+                                dampening=dampening,
+                                weight_decay=weight_decay,
+                                nesterov=nesterov)
 
         return self.AD_optimize(iterations, data_loader, optimizer)
 

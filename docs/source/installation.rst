@@ -13,6 +13,18 @@ It is recommended that you clone the repository, rather than just downloading th
 Step 2: Install Dependencies
 ----------------------------
 
+The dependencies for CDTools can be installed, if you are managing your environment with anaconda, by running
+
+.. code:: bash
+	  
+   $ conda install --file conda_requirements.txt
+
+There are two optional dependencies which are not installed via this procedure - the dependency sphinx-argparse for building the docs, and the pathlib2 module that provides python 2 compatibility. These can either be installed manually via conda-forge, or otherwise they will be installed automatically by pip during the final installation step if needed.
+
+If you manage your environment with pip, all required packges should be installed automatically. The only thing to be aware of is that pytorch must be compiled with MKL support, and CUDA support if you would like to use the GPU. For this reason, using anaconda python is strongly recommended.
+
+For convenience, the full set of dependencies are noted below:
+   
 CDTools depends on the following packages:
 
    * `numpy <http://www.numpy.org>`_
@@ -27,6 +39,7 @@ And has optional dependencies on
    * `pytest <https://docs.pytest.org/>`_
    * `sphinx <https://www.sphinx-doc.org/>`_
    * `sphinx-argparse <https://sphinx-argparse.readthedocs.io>`_
+   * `pathlib2 <https://pypi.org/project/pathlib2/>`_
      
 All of these can be installed via pip or conda. Finally, CDTools is written to be python 2.7+ compatible, but is only actively tested on python 3.
 
@@ -42,7 +55,9 @@ To install in CDTools in developer mode (recommended, to allow any updates to be
 
 .. code:: bash
 	  
-   $ pip install -e .
+   $ pip install -e .[tests,docs]
+
+If you don't need to run the tests, or don't need to build the docs, you can omit the relevant option or options.
 
 If you prefer to use a tool other than pip, CDTools can be installed via any other package management tool that works with a setup.py file.
 

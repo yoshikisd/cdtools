@@ -3,7 +3,10 @@ import numpy as np
 import torch as t
 from copy import copy
 import h5py
-import pathlib
+try:
+    import pathlib
+except ImportError:
+    import pathlib2 as pathlib
 
 from CDTools.datasets import CDataset
 from CDTools.tools import data as cdtdata
@@ -62,7 +65,7 @@ class Ptycho2DDataset(CDataset):
         self.translations = t.tensor(translations)
         self.patterns = t.tensor(patterns)
         if self.mask is None:
-            self.mask = t.ones(self.patterns.shape[-2:]).to(dtype=t.uint8)
+            self.mask = t.ones(self.patterns.shape[-2:]).to(dtype=t.bool)
         self.mask.masked_fill_(t.isnan(t.sum(self.patterns,dim=(0,))),0)
         self.patterns.masked_fill_(t.isnan(self.patterns),0)
 
@@ -181,7 +184,7 @@ class Ptycho2DDataset(CDataset):
         cdtdata.add_ptycho_translations(cxi_file, self.translations)
 
 
-    def inspect(self):
+    def inspect(self, logarithmic=True):
         """Launches an interactive plot for perusing the data
 
         This launches an interactive plotting tool in matplotlib that
@@ -252,7 +255,10 @@ class Ptycho2DDataset(CDataset):
                 cb1.ax.set_title('Integrated Intensity', size="medium", pad=5)
                 cb1.ax.tick_params(labelrotation=20)
 
-                meas = axes[1].imshow(np.log(meas_data) / np.log(10) * mask)
+                if logarithmic:
+                    meas = axes[1].imshow(np.log(meas_data) / np.log(10) * mask)
+                else:
+                    meas = axes[1].imshow(meas_data * mask)
 
                 cb2 = plt.colorbar(meas, ax=axes[1], orientation='horizontal',format='%.2e',ticks=ticker.LinearLocator(numticks=5),pad=0.17,fraction=0.1)
                 cb2.ax.tick_params(labelrotation=20)
@@ -280,7 +286,11 @@ class Ptycho2DDataset(CDataset):
 
 
                 meas = axes[1].images[-1]
-                meas.set_data(np.log(meas_data) / np.log(10) * mask)
+                if logarithmic:
+                    meas.set_data(np.log(meas_data) / np.log(10) * mask)
+                else:
+                    meas.set_data(meas_data * mask)
+
                 update_colorbar(meas)
 
 

@@ -103,8 +103,8 @@ def ptycho_cxi_1():
 
     # Remember the format for the CXI file differs from the format used
     # internally
-    mask = np.zeros((256,256)).astype(np.uint32)
-    expected['mask'] = np.ones((256,256)).astype(np.uint8)
+    mask = np.zeros((256,256)).astype(np.int32)
+    expected['mask'] = np.ones((256,256)).astype(np.bool)
     d1f.create_dataset('mask',data=mask)
 
     # Create an initial background
@@ -272,7 +272,7 @@ def ptycho_cxi_3():
     # Remember the format for the CXI file differs from the format used
     # internally
     mask = np.ones((256,256)).astype(np.uint32) * 0x00001000
-    expected['mask'] = np.ones((256,256)).astype(np.uint8)
+    expected['mask'] = np.ones((256,256)).astype(np.bool)
     d1f.create_dataset('mask',data=mask)
     expected['dark'] = None
     

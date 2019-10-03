@@ -27,8 +27,8 @@ def test_CDataset_init():
     mask = np.ones((256,256))
     dataset = CDataset(entry_info, sample_info,
                        wavelength, detector_geometry, mask)
-    
-    assert t.all(t.eq(dataset.mask,t.tensor(mask)))
+
+    assert t.all(t.eq(dataset.mask,t.tensor(mask.astype(np.bool))))
     assert dataset.entry_info == entry_info
     assert dataset.sample_info == sample_info
     assert dataset.wavelength == wavelength
@@ -110,7 +110,7 @@ def test_CDataset_to(ptycho_cxi_1):
     dataset = CDataset.from_cxi(ptycho_cxi_1[0])
 
     dataset.to(dtype=t.float32)
-    assert dataset.mask.dtype == t.uint8
+    assert dataset.mask.dtype == t.bool
     # If cuda is available, check that moving the mask to CUDA works.
     if t.cuda.is_available():
         dataset.to(device='cuda:0')
@@ -147,7 +147,7 @@ def test_Ptycho2DDataset_init():
                                 detector_geometry=detector_geometry,
                                 mask=mask)
 
-    assert t.all(t.eq(dataset.mask,t.tensor(mask)))
+    assert t.all(t.eq(dataset.mask,t.BoolTensor(mask)))
     assert dataset.entry_info == entry_info
     assert dataset.sample_info == sample_info
     assert dataset.wavelength == wavelength
@@ -241,7 +241,7 @@ def test_Ptycho2DDataset_to(ptycho_cxi_1):
     dataset = Ptycho2DDataset.from_cxi(ptycho_cxi_1[0])
     
     dataset.to(dtype=t.float64)
-    assert dataset.mask.dtype == t.uint8
+    assert dataset.mask.dtype == t.bool
     assert dataset.patterns.dtype == t.float64
     assert dataset.translations.dtype == t.float64
     # If cuda is available, check that moving the mask to CUDA works.

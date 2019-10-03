@@ -16,17 +16,17 @@ def test_amplitude_mse():
     # And add some noise to it
     sim = data + 0.1 * np.random.rand(10,100,100)
     # and define a simple mask that needs to be broadcast
-    mask = (np.random.rand(100,100) > 0.1).astype(np.uint8)
+    mask = (np.random.rand(100,100) > 0.1).astype(np.bool)
 
     # First, test without a mask
     np_result = np.sum((np.sqrt(data) - np.sqrt(sim))**2)
-    np_result /=  data.size
+    #np_result /=  data.size
     torch_result = losses.amplitude_mse(t.from_numpy(data),t.from_numpy(sim))
     assert np.isclose(np_result, np.take(torch_result.numpy(),0))
 
     # Then, test with a mask
     np_result = np.sum(mask * (np.sqrt(data) - np.sqrt(sim))**2)
-    np_result /=  np.count_nonzero(mask * np.ones_like(data))
+    #np_result /=  np.count_nonzero(mask * np.ones_like(data))
     torch_result = losses.amplitude_mse(t.from_numpy(data),t.from_numpy(sim),
                          mask = t.from_numpy(mask))
     assert np.isclose(np_result, np.take(torch_result.numpy(),0))
@@ -38,7 +38,7 @@ def test_intensity_mse():
     # And add some noise to it
     sim = data + 0.1 * np.random.rand(10,100,100)
     # and define a simple mask that needs to be broadcast
-    mask = (np.random.rand(100,100) > 0.1).astype(np.uint8)
+    mask = (np.random.rand(100,100) > 0.1).astype(np.bool)
 
 
     # First, test without a mask
@@ -61,7 +61,7 @@ def test_poisson_ml():
     # And add some noise to it
     sim = data + 0.1 * np.random.rand(10,100,100)
     # and define a simple mask that needs to be broadcast
-    mask = (np.random.rand(100,100) > 0.1).astype(np.uint8)
+    mask = (np.random.rand(100,100) > 0.1).astype(np.bool)
 
 
     # First, test without a mask

@@ -73,6 +73,7 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
 
     # In some edge cases this shape can be smaller than the detector shape
     full_shape = t.max(full_shape, det_shape)
+
     
     if opt_for_fft:
         full_shape = t.Tensor([next_fast_len(dim) for dim in full_shape]).to(t.int32)
