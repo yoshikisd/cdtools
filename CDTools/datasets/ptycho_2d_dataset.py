@@ -62,8 +62,8 @@ class Ptycho2DDataset(CDataset):
 
         super(Ptycho2DDataset,self).__init__(*args, **kwargs)
         self.axes = copy(axes)
-        self.translations = t.tensor(translations)
-        self.patterns = t.tensor(patterns)
+        self.translations = t.Tensor(translations).clone()
+        self.patterns = t.Tensor(patterns).clone()
         if self.mask is None:
             self.mask = t.ones(self.patterns.shape[-2:]).to(dtype=t.bool)
         self.mask.masked_fill_(t.isnan(t.sum(self.patterns,dim=(0,))),0)

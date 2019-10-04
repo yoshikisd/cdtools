@@ -152,8 +152,8 @@ def test_Ptycho2DDataset_init():
     assert dataset.sample_info == sample_info
     assert dataset.wavelength == wavelength
     assert dataset.detector_geometry == detector_geometry
-    assert t.allclose(dataset.patterns, t.tensor(patterns))
-    assert t.allclose(dataset.translations, t.tensor(translations))
+    assert t.allclose(dataset.patterns, t.Tensor(patterns))
+    assert t.allclose(dataset.translations, t.Tensor(translations))
 
 
 
