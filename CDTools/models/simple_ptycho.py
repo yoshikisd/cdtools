@@ -43,7 +43,7 @@ class SimplePtycho(CDIModel):
         if mask is None:
             self.mask = None
         else:
-            self.mask = t.ByteTensor(mask)
+            self.mask = t.BoolTensor(mask)
 
         # We rescale the probe here so it learns at the same rate as the
         # object

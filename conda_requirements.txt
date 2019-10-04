@@ -6,3 +6,4 @@ pytorch>=1.2.0
 h5py>=2.1
 pytest
 sphinx
+sphinx_rtd_theme

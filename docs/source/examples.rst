@@ -21,7 +21,9 @@ This script runs a ptychography reconstruction using the SimplePtycho model. Thi
 
 .. literalinclude:: ../../examples/simple_ptycho.py
 
-Running this script leads to a very poor reconstruction on the example data, however depending on the dataset the model can produce reasonable results. When reading this script, note the basic workflow. After the data is loaded, a model is created to match the geometry stored in the dataset, with a default initialization for all the parameters. Next, a reconstruction is run (and the progress reported out). Finally, the finished reconstruction is plotted.First, data is read
+Because this script only runs ten iterations, the quality of the reconstruction is relatively poor - however, on this particular dataset, running 75 or so iterations will lead to a surprisingly good reconstruction. On other datasets, however, it will often fail to converge, even in some cases where there is little error in the data.
+
+When reading this script, note the basic workflow. After the data is loaded, a model is created to match the geometry stored in the dataset, with a default initialization for all the parameters. Next, a reconstruction is run (and the progress reported out). Finally, the finished reconstruction is plotted.
 
 
 Gold Balls Ptycho

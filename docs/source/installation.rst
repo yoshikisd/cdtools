@@ -39,6 +39,7 @@ And has optional dependencies on
    * `pytest <https://docs.pytest.org/>`_
    * `sphinx <https://www.sphinx-doc.org/>`_
    * `sphinx-argparse <https://sphinx-argparse.readthedocs.io>`_
+   * `sphinx_rtd_theme <https://sphinx-rtd-theme.readthedocs.io/en/stable/>`_
    * `pathlib2 <https://pypi.org/project/pathlib2/>`_
      
 All of these can be installed via pip or conda. Finally, CDTools is written to be python 2.7+ compatible, but is only actively tested on python 3.

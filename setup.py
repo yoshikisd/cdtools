@@ -22,7 +22,7 @@ setuptools.setup(
         "pathlib2 ; python_version<'3.4'"],
     extras_require={
         'tests': ["pytest"],
-        'docs': ["sphinx","sphinx-argparse"],
+        'docs': ["sphinx","sphinx-argparse","sphinx_rtd_theme"],
         ":python_version<'3.4'": ["pathlib2"],
     },
     packages=setuptools.find_packages(),
