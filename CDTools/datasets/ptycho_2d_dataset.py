@@ -42,6 +42,8 @@ class Ptycho2DDataset(CDataset):
             An nx3 array containing the probe translations at each scan point
         patterns : array
             An nxmxl array containing the full stack of measured diffraction patterns
+        axes : list(str)
+            A list of names for the axes of the probe translations
         entry_info : dict
             A dictionary containing the entry_info metadata
         sample_info : dict
@@ -70,7 +72,6 @@ class Ptycho2DDataset(CDataset):
         self.patterns.masked_fill_(t.isnan(self.patterns),0)
 
 
-
     def __len__(self):
         return self.patterns.shape[0]
 
@@ -82,6 +83,8 @@ class Ptycho2DDataset(CDataset):
         the dataset is (for example) storing the data on the CPU but
         getting data as GPU tensors.
 
+        It loads data in the format (inputs, output)
+        
         The inputs for a 2D ptychogaphy data set are:
 
         1) The indices of the patterns to use
@@ -139,26 +142,24 @@ class Ptycho2DDataset(CDataset):
             with h5py.File(cxi_file,'r') as f:
                 return cls.from_cxi(f)
 
-        entry_info = cdtdata.get_entry_info(cxi_file)
-        sample_info = cdtdata.get_sample_info(cxi_file)
-        wavelength = cdtdata.get_wavelength(cxi_file)
-        distance, basis, corner = cdtdata.get_detector_geometry(cxi_file)
-        detector_geometry = {'distance' : distance,
-                             'basis'    : basis,
-                             'corner'   : corner}
-        mask = cdtdata.get_mask(cxi_file)
-
-        dark = cdtdata.get_dark(cxi_file)
+        # Generate a base dataset
+        dataset = CDataset.from_cxi(cxi_file)
+        # Mutate the class to this subclass (BasicPtychoDataset)
+        dataset.__class__ = cls
+        
+        # Load the data that is only relevant for this class
         patterns, axes = cdtdata.get_data(cxi_file)
-
         translations = cdtdata.get_ptycho_translations(cxi_file)
-        return cls(translations, patterns, axes=axes,
-                   entry_info = entry_info,
-                   sample_info = sample_info,
-                   wavelength=wavelength,
-                   detector_geometry=detector_geometry,
-                   mask=mask, background=dark)
 
+        # And now re-do the stuff from __init__
+        dataset.translations = t.Tensor(translations).clone()
+        dataset.patterns = t.Tensor(patterns).clone()
+        dataset.axes = axes
+        if dataset.mask is None:
+            dataset.mask = t.ones(dataset.patterns.shape[-2:]).to(dtype=t.bool)
+
+        return dataset
+    
 
     def to_cxi(self, cxi_file):
         """Saves out a Ptycho2DDataset as a .cxi file
@@ -180,7 +181,10 @@ class Ptycho2DDataset(CDataset):
                 return self.to_cxi(f)
 
         super(Ptycho2DDataset,self).to_cxi(cxi_file)
-        cdtdata.add_data(cxi_file, self.patterns, axes=self.axes)
+        if hasattr(self, 'axes'):
+            cdtdata.add_data(cxi_file, self.patterns, axes=self.axes)
+        else:
+            cdtdata.add_data(cxi_file, self.patterns)
         cdtdata.add_ptycho_translations(cxi_file, self.translations)
 
 
