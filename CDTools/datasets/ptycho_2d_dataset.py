@@ -84,7 +84,7 @@ class Ptycho2DDataset(CDataset):
         getting data as GPU tensors.
 
         It loads data in the format (inputs, output)
-        
+
         The inputs for a 2D ptychogaphy data set are:
 
         1) The indices of the patterns to use
@@ -146,7 +146,7 @@ class Ptycho2DDataset(CDataset):
         dataset = CDataset.from_cxi(cxi_file)
         # Mutate the class to this subclass (BasicPtychoDataset)
         dataset.__class__ = cls
-        
+
         # Load the data that is only relevant for this class
         patterns, axes = cdtdata.get_data(cxi_file)
         translations = cdtdata.get_ptycho_translations(cxi_file)
@@ -159,7 +159,7 @@ class Ptycho2DDataset(CDataset):
             dataset.mask = t.ones(dataset.patterns.shape[-2:]).to(dtype=t.bool)
 
         return dataset
-    
+
 
     def to_cxi(self, cxi_file):
         """Saves out a Ptycho2DDataset as a .cxi file
@@ -197,18 +197,18 @@ class Ptycho2DDataset(CDataset):
         can display a base-10 log plot of the detector readout at each
         position.
         """
-        
+
         # We start by making the figure and axes
         fig, axes = plt.subplots(1,2,figsize=(8,5.3))
         fig.tight_layout(rect=[0.04, 0.09, 0.98, 0.96])
         axslider = plt.axes([0.15,0.06,0.75,0.03])
 
-        
+
         #
         # Then we define some helper functions for getting the right data
         # that are used both in the initial setup and the updates
         #
-        
+
         def get_data(idx):
             inputs, output = self[idx]
             meas_data = output.detach().cpu().numpy()
@@ -216,16 +216,16 @@ class Ptycho2DDataset(CDataset):
                 mask = self.mask.detach().cpu().numpy()
             else:
                 mask = 1
-            
+
             return mask, meas_data
 
-        
+
         def calculate_sizes(idx):
             bbox = axes[0].get_window_extent().transformed(fig.dpi_scale_trans.inverted())
             s0 = bbox.width * bbox.height / translations.shape[0] * 72**2 #72 is points per inch
             s0 /= 4 # A rough value to make the size work out
             s = np.ones(len(self)) * s0
-            
+
             s[idx] *= 4
             return s
 
@@ -237,11 +237,13 @@ class Ptycho2DDataset(CDataset):
             if hasattr(im, 'norecurse') and im.norecurse:
                 im.norecurse=False
                 return
-            
+
             im.norecurse=True
             # This is needed to update the colorbar
-            im.set_clim(vmin=np.min(im.get_array()),
-                        vmax=np.max(im.get_array()))
+            # only change limits if array contains multiple values
+            if np.min(im.get_array()) != np.max(im.get_array()):
+                im.set_clim(vmin=np.min(im.get_array()),
+                            vmax=np.max(im.get_array()))
 
         #
         # The meatiest part of this program, here we just go through and
@@ -250,13 +252,13 @@ class Ptycho2DDataset(CDataset):
 
         # First we set up the left-hand plot, which shows an overview map
         axes[0].set_title('Relative Displacement Map')
-        
+
         translations = self.translations.detach().cpu().numpy()
         nanomap_values = (self.mask.to(t.float32) * self.patterns).sum(dim=(1,2)).detach().cpu().numpy()
         s = calculate_sizes(0)
-        
+
         nanomap = axes[0].scatter(1e6 * translations[:,0],1e6 * translations[:,1],s=s,c=nanomap_values, picker=True)
-        
+
         axes[0].invert_xaxis()
         axes[0].set_facecolor('k')
         axes[0].set_xlabel('Translation x (um)', labelpad=1)
@@ -277,7 +279,7 @@ class Ptycho2DDataset(CDataset):
             meas = axes[1].imshow(np.log(meas_data) / np.log(10) * mask)
         else:
             meas = axes[1].imshow(meas_data * mask)
-            
+
         cb2 = plt.colorbar(meas, ax=axes[1], orientation='horizontal',
                            format='%.2e',
                            ticks=ticker.LinearLocator(numticks=5),
@@ -311,12 +313,12 @@ class Ptycho2DDataset(CDataset):
 
             update_colorbar(meas)
 
-   
+
         #
         # Now we define the functions to handle various kinds of events
         # that can be thrown our way
         #
-        
+
         # We start by creating the slider here, so it can be used
         # by the update hooks.
         slider = Slider(axslider, 'Pattern #', 0, len(self)-1, valstep=1, valfmt="%d")
@@ -330,9 +332,9 @@ class Ptycho2DDataset(CDataset):
             if not hasattr(event, 'key'):
                 event.key = None
 
-            if event.key == 'up' or event.button == 'up':
+            if event.key == 'up' or event.button == 'up' or event.key == 'right':
                 idx = slider.val - 1
-            elif event.key == 'down' or event.button == 'down':
+            elif event.key == 'down' or event.button == 'down' or event.key == 'left':
                 idx = slider.val + 1
 
             # Handle the wraparound and trigger the update
@@ -357,4 +359,3 @@ class Ptycho2DDataset(CDataset):
         # (like the nanomap dot sizes) that otherwise would change on the
         # first update
         update(0)
-        
