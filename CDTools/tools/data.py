@@ -104,13 +104,13 @@ def get_sample_info(cxi_file):
                 metadata[attr] = str(s1[attr][()].decode())
             except AttributeError as e:
                 metadata[attr] = str(np.array(s1[attr][:])[0].decode())
-    
+
     float_attrs = ['concentration',
                    'mass',
                    'temperature',
                    'thickness',
                    'unit_cell_volume']
-    
+
     for attr in float_attrs:
         if attr in s1:
             metadata[attr] = np.float32(s1[attr][()])
@@ -125,7 +125,7 @@ def get_sample_info(cxi_file):
         yvec = orient[3:] / np.linalg.norm(orient[3:])
         metadata['orientation'] = np.array([xvec,yvec,
                                             np.cross(xvec,yvec)])
-        
+
     if 'geometry_1/surface_normal' in s1:
         snorm = np.array(s1['geometry_1/surface_normal']).astype(np.float32)
         xvec = np.cross(np.array([0.,1.,0.]), snorm)
@@ -133,7 +133,7 @@ def get_sample_info(cxi_file):
         yvec = np.cross(snorm, xvec)
         yvec /= np.linalg.norm(yvec)
         metadata['orientation'] = np.array([xvec, yvec, snorm])
-        
+
     # Check if the metadata is empty
     if metadata == {}:
         metadata = None
@@ -304,7 +304,7 @@ def get_dark(cxi_file):
     dark : np.array
         An array storing the dark image
     """
-    
+
     i1 = cxi_file['entry_1/instrument_1']
     if 'detector_1/data_dark' in i1:
         darks = np.array(i1['detector_1/data_dark'])
@@ -342,7 +342,7 @@ def get_data(cxi_file, cut_zeroes = True):
     axes : list(str)
         A list of the axes defined in the axes attribute, if any
     """
-    
+
     # Possible locations for the data
     if 'entry_1/data_1/data' in cxi_file:
         pull_from = 'entry_1/data_1/data'
@@ -468,7 +468,7 @@ def add_sample_info(cxi_file, metadata):
         # Only store the part of this matrix as defined in the CXI file spec
         s1['geometry_1'].create_dataset('orientation',
                                         data=metadata['orientation'].ravel()[:6])
-        
+
     for key, value in metadata.items():
         if key == 'orientation':
             continue # this is a special case
@@ -539,6 +539,8 @@ def add_detector(cxi_file, distance, basis, corner=None):
 
     if isinstance(basis, t.Tensor):
         basis = basis.detach().cpu().numpy()
+    if basis.shape == (2,3):
+        basis = basis.T
     d1['x_pixel_size'] = np.linalg.norm(basis[:,1])
     d1['y_pixel_size'] = np.linalg.norm(basis[:,0])
     d1.create_dataset('basis_vectors', data=basis)
@@ -591,7 +593,7 @@ def add_dark(cxi_file, dark):
     ----------
     cxi_file : h5py.File
         The file to add the mask to
-    dark : array 
+    dark : array
         The dark image(s) to save out to the file
     """
     if 'entry_1/instrument_1' not in cxi_file:
