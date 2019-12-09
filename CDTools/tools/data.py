@@ -234,18 +234,17 @@ def get_detector_geometry(cxi_file):
     except:
         corner_position = None
 
-    # Don't pretend to calculate corner position from distance if it's
-    # if it's not defined, but do calculate distance from corner position
-    # if distance is not defined. If neither is defined, then raise
-    # an error.
+    # Don't pretend to calculate corner position from distance if it's not
+    # defined, but do calculate distance from corner position if distance is
+    # not defined. If neither is defined, then raise an error.
     if distance is None and corner_position is not None:
         detector_normal = np.cross(basis_vectors[:,0],
                                    basis_vectors[:,1])
         detector_normal /= np.linalg.norm(detector_normal)
         distance = np.linalg.norm(np.dot(corner_position, detector_normal))
 
-    if distance is None and corner_position is not None:
-        raise KeyError('Neither sample to detector distance or corner position is defined in file.')
+    if distance is None and corner_position is None:
+        raise KeyError('Neither sample to detector distance nor corner position is defined in file.')
 
     return distance, basis_vectors, corner_position
 
@@ -260,7 +259,7 @@ def get_mask(cxi_file):
     If any bit is set in the mask at all, it will be defined as a bad
     pixel, with the exception of pixels marked exactly as 0x00001000,
     which is defined to mean that the pixel has signal above the
-    background. These pixels are treated as on pixels
+    background. These pixels are treated as on pixels.
 
     Parameters
     ----------
@@ -292,7 +291,7 @@ def get_dark(cxi_file):
     if the dark image is a single image, it will return that image. If it
     is a stack of images, it will return the mean along the stack axis.
 
-    If the darks do not exist, it will return None
+    If the darks do not exist, it will return None.
 
     Parameters
     ----------
@@ -327,8 +326,7 @@ def get_data(cxi_file, cut_zeroes = True):
 
     It will return the data array in whatever shape it's defined in.
 
-    It will also read out the axes attribute of the data into a list
-    of strings
+    It will also read out the axes attribute of the data into a list of strings.
 
     Parameters
     ----------
@@ -514,7 +512,7 @@ def add_detector(cxi_file, distance, basis, corner=None):
 
     It will define all the relevant parameters - distance, pixel size,
     detector basis, and corner position (if relevant) based on the provided
-    information
+    information.
 
     Parameters
     ----------
