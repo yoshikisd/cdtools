@@ -261,8 +261,8 @@ class Ptycho2DDataset(CDataset):
 
         axes[0].invert_xaxis()
         axes[0].set_facecolor('k')
-        axes[0].set_xlabel('Translation x (um)', labelpad=1)
-        axes[0].set_ylabel('Translation y (um)', labelpad=1)
+        axes[0].set_xlabel('Translation x ($\mu$m)', labelpad=1)
+        axes[0].set_ylabel('Translation y ($\mu$m)', labelpad=1)
         cb1 = plt.colorbar(nanomap, ax=axes[0], orientation='horizontal',
                            format='%.2e',
                            ticks=ticker.LinearLocator(numticks=5),
