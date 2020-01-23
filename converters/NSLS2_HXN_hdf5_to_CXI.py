@@ -12,6 +12,7 @@ import CDTools
 from CDTools.tools import data as cdtdata
 from matplotlib import pyplot as plt
 from scipy.spatial.transform import Rotation
+from datetime import datetime
 
 def create_cxi_from_NSLS2_HXN_2DFly(data_dir, save_str, scan_number,
                                 wavelength, theta, ROI_corner_xy, metadata):
@@ -77,7 +78,7 @@ def create_cxi_from_NSLS2_HXN_2DFly(data_dir, save_str, scan_number,
     cdtdata.add_sample_info(scan_cxi, sample_info_dict)
 
     ## Add other metadata for experiment
-    metadata['time'] = scan_pickle['time']
+    metadata['start_time'] = datetime.fromtimestamp(scan_pickle['time'])
     cdtdata.add_entry_info(scan_cxi, metadata)
 
 
