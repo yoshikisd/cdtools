@@ -13,8 +13,8 @@ import numpy as np
 
 class SimplePtycho(CDIModel):
     """A simple ptychography model for exploring ideas and extensions
-    
-    
+
+
 
     """
     def __init__(self, wavelength, detector_geometry,
@@ -39,7 +39,7 @@ class SimplePtycho(CDIModel):
         self.detector_slice = detector_slice
 
         self.surface_normal = t.Tensor(surface_normal)
-        
+
         if mask is None:
             self.mask = None
         else:
@@ -81,7 +81,7 @@ class SimplePtycho(CDIModel):
         if hasattr(dataset, 'sample_info') and \
            dataset.sample_info is not None and \
            'orientation' in dataset.sample_info:
-            surface_normal = dataset.sample_info.orientation[2]
+            surface_normal = dataset.sample_info['orientation'][2]
         else:
             surface_normal = np.array([0.,0.,1.])
 
@@ -146,7 +146,7 @@ class SimplePtycho(CDIModel):
 
         if self.mask is not None:
             self.mask = self.mask.to(*args, **kwargs)
-            
+
         self.min_translation = self.min_translation.to(*args,**kwargs)
         self.probe_basis = self.probe_basis.to(*args,**kwargs)
         self.probe_norm = self.probe_norm.to(*args,**kwargs)
@@ -155,7 +155,7 @@ class SimplePtycho(CDIModel):
     def sim_to_dataset(self, args_list):
         # In the future, potentially add more control
         # over what metadata is saved (names, etc.)
-        
+
         # First, I need to gather all the relevant data
         # that needs to be added to the dataset
         entry_info = {'program_name': 'CDTools',
@@ -168,15 +168,15 @@ class SimplePtycho(CDIModel):
         ysurfacevec = np.cross(surface_normal, xsurfacevec)
         ysurfacevec /= np.linalg.norm(ysurfacevec)
         orientation = np.array([xsurfacevec, ysurfacevec, surface_normal])
-        
+
         sample_info = {'description': 'A simulated sample',
                        'orientation': orientation}
-        
+
         detector_geometry = self.detector_geometry
         mask = self.mask
         wavelength = self.wavelength
         indices, translations = args_list
-        
+
         # Then we simulate the results
         data = self.forward(indices, translations)
 
@@ -202,7 +202,7 @@ class SimplePtycho(CDIModel):
     ]
 
 
-    
+
     def save_results(self):
         probe = tools.cmath.torch_to_complex(self.probe.detach().cpu())
         probe = probe * self.probe_norm.detach().cpu().numpy()

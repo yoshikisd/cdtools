@@ -63,7 +63,7 @@ def create_cxi_from_NSLS2_HXN_2DFly(data_dir, save_str, scan_number,
 
     ## Add sample
     theta = np.radians(theta)
-    sample_unit_vecs = Rotation.from_rotvec(theta * np.array([0,1,0])).as_dcm()
+    sample_unit_vecs = Rotation.from_rotvec(-theta * np.array([0,1,0])).as_dcm()
     orientation = np.hstack((sample_unit_vecs[:,0], sample_unit_vecs[:,1]))
     translation = np.zeros(3)
     sample_info_dict = {
