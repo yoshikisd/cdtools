@@ -41,7 +41,6 @@ def create_cxi_from_NSLS2_HXN_2DFly(data_dir, save_str, scan_number,
 
     ## Load in pickle and hdf5 files
     scan_str = "scan_" + scan_number
-    print('Scan #:', scan_number)
 
     # Load pickle (includes useful data about scan not in .hdf5 file)
     with open(os.path.join(data_dir, scan_str+".pickle"), 'rb') as f:
@@ -54,9 +53,6 @@ def create_cxi_from_NSLS2_HXN_2DFly(data_dir, save_str, scan_number,
 
 
     ## Let's attempt to convert this bad boy
-    print(80*'-'+'\nCreating cxi file.')
-
-    # We save as .h5 in order to inspect with panalopy GUI utility
     scan_cxi = cdtdata.create_cxi(save_str)
 
 
