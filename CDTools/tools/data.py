@@ -436,9 +436,9 @@ def add_entry_info(cxi_file, metadata):
         elif isinstance(value, datetime.datetime):
             cxi_file['entry_1'][key] = np.string_(value.isoformat())
         elif isinstance(value, numbers.Number):
-            si[key] = value
+            cxi_file['entry_1'][key] = value
         elif isinstance(value, (np.ndarray,list,tuple)):
-            s1.create_dataset(key, data=np.asarray(value))
+            cxi_file['entry_1'].create_dataset(key, data=np.asarray(value))
         elif isinstance(value, t.Tensor):
             asnumpy = value.detach().cpu().numpy()
             cxi_file['entry_1'].create_dataset(key, data=asnumpy)

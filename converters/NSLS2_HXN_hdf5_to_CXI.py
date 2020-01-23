@@ -1,4 +1,3 @@
-#!/home/david/.conda/envs/CDToolsEnv/bin/python
 """
 Purpose: Convert NSLSII HXN hdf5 files to CXI files for analysis with CDTools.
 Author:  David Rower
@@ -15,7 +14,7 @@ from matplotlib import pyplot as plt
 from scipy.spatial.transform import Rotation
 
 def create_cxi_from_NSLS2_HXN_2DFly(data_dir, save_str, scan_number,
-                                wavelength, theta, ROI_corner_xy):
+                                wavelength, theta, ROI_corner_xy, metadata):
     """Converts NSLS2 HXN 2D Fly scan data (from pickle and hdf5) to CXI format
 
     Assumes scan files will live in data_dir with naming convention
@@ -35,6 +34,8 @@ def create_cxi_from_NSLS2_HXN_2DFly(data_dir, save_str, scan_number,
         Rotation angle of sample in HXN convention, in degrees
     ROI_corner_xy : np.array
         1x2 array containing x, y corner of detector ROI
+    metadata : dict
+        Contains metadata relevant to the experiment
     """
 
     ## Load in pickle and hdf5 files
@@ -53,7 +54,6 @@ def create_cxi_from_NSLS2_HXN_2DFly(data_dir, save_str, scan_number,
 
     ## Let's attempt to convert this bad boy
     print(80*'-'+'\nCreating cxi file.')
-
 
     # We save as .h5 in order to inspect with panalopy GUI utility
     scan_cxi = cdtdata.create_cxi(save_str)
@@ -75,6 +75,10 @@ def create_cxi_from_NSLS2_HXN_2DFly(data_dir, save_str, scan_number,
         "translation" : translation
     }
     cdtdata.add_sample_info(scan_cxi, sample_info_dict)
+
+    ## Add other metadata for experiment
+    metadata['time'] = scan_pickle['time']
+    cdtdata.add_entry_info(scan_cxi, metadata)
 
 
     ## Add detector
