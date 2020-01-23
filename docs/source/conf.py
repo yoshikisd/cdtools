@@ -114,7 +114,7 @@ html_theme = 'sphinx_rtd_theme'
 # -- Options for HTMLHelp output ---------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'ADCDdoc'
+htmlhelp_basename = 'CDToolsdoc'
 
 
 # -- Options for LaTeX output ------------------------------------------------
@@ -140,8 +140,12 @@ latex_elements = {
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
+#latex_documents = [
+#    (master_doc, 'CDTools.tex', 'CDTools Documentation',
+#     'Abraham Levitan', 'manual'),
+#]
 latex_documents = [
-    (master_doc, 'ADCD.tex', 'ADCD Documentation',
+    ('latextoc', 'CDTools.tex', 'CDTools Documentation',
      'Abraham Levitan', 'manual'),
 ]
 
