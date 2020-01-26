@@ -32,7 +32,7 @@ def colorize(z):
         A complex-valued array
     Returns
     -------
-    rgb : list(array) 
+    rgb : list(array)
         A list of arrays for the R,G, and B channels of an image
     """
 
@@ -57,13 +57,13 @@ def get_units_factor(units):
     ----------
     units : str
         The abbreviation for the unit type
-    
+
     Returns
     -------
     factor : float
         The factor meters / (unit)
     """
-    
+
     u = units.lower()
     if u=='m':
         factor=1
@@ -71,7 +71,7 @@ def get_units_factor(units):
         factor=1e2
     if u=='mm':
         factor=1e3
-    if u=='um':
+    if u=='um' or u=="$\mu$m":
         factor=1e6
     if u=='nm':
         factor=1e9
@@ -81,16 +81,16 @@ def get_units_factor(units):
         factor=1e12
     return factor
 
-    
-def plot_amplitude(im, fig = None, basis=None, units='um', cmap='viridis', **kwargs):
+
+def plot_amplitude(im, fig = None, basis=None, units='$\mu$m', cmap='viridis', **kwargs):
     """Plots the amplitude of a complex array with dimensions NxM
-    
+
     If a figure is given explicitly, it will clear that existing figure and
     plot over it. Otherwise, it will generate a new figure.
 
     If a basis is explicitly passed, the image will be plotted in real-space
     coordinates
-    
+
     Parameters
     ----------
     im : array
@@ -129,11 +129,11 @@ def plot_amplitude(im, fig = None, basis=None, units='um', cmap='viridis', **kwa
             basis = basis.detach().cpu().numpy()
         basis_norm = np.linalg.norm(basis, axis = 0)
         basis_norm = basis_norm * get_units_factor(units)
-        
+
         extent = [0, absolute.shape[-1]*basis_norm[1], 0, absolute.shape[-2]*basis_norm[0]]
     else:
         extent=None
-        
+
     plt.imshow(absolute, cmap = cmap, extent = extent)
     cbar = plt.colorbar()
     cbar.set_label('Amplitude (a.u.)')
@@ -144,11 +144,11 @@ def plot_amplitude(im, fig = None, basis=None, units='um', cmap='viridis', **kwa
     else:
         plt.xlabel('j (pixels)')
         plt.ylabel('i (pixels)')
-        
+
     return fig
 
 
-def plot_phase(im, fig=None, basis=None, units='um', cmap='auto', **kwargs):
+def plot_phase(im, fig=None, basis=None, units='$\mu$m', cmap='auto', **kwargs):
     """ Plots the phase of a complex array with dimensions NxMx2
 
     If a figure is given explicitly, it will clear that existing figure and
@@ -156,7 +156,7 @@ def plot_phase(im, fig=None, basis=None, units='um', cmap='auto', **kwargs):
 
     If a basis is explicitly passed, the image will be plotted in real-space
     coordinates
-    
+
     Parameters
     ----------
     im : array
@@ -194,12 +194,12 @@ def plot_phase(im, fig=None, basis=None, units='um', cmap='auto', **kwargs):
             basis = basis.detach().cpu().numpy()
         basis_norm = np.linalg.norm(basis, axis = 0)
         basis_norm = basis_norm * get_units_factor(units)
-        
+
         extent = [0, phase.shape[-1]*basis_norm[1], 0, phase.shape[-2]*basis_norm[0]]
     else:
         extent=None
 
-    
+
     # If the user has matplotlib >=3.0, use the preferred colormap
     if cmap == 'auto':
         try:
@@ -208,21 +208,21 @@ def plot_phase(im, fig=None, basis=None, units='um', cmap='auto', **kwargs):
             plt.imshow(phase, cmap = 'hsv', extent=extent)
     else:
         plt.imshow(phase)#, cmap = cmap, extent=extent)
-        
+
     cbar = plt.colorbar()
     cbar.set_label('Phase (rad)')
-    
+
     if basis is not None:
         plt.xlabel('X (' + units + ')')
         plt.ylabel('Y (' + units + ')')
     else:
         plt.xlabel('j (pixels)')
         plt.ylabel('i (pixels)')
-        
+
     return fig
 
 
-def plot_colorized(im, fig=None, basis=None, units='um', **kwargs):
+def plot_colorized(im, fig=None, basis=None, units='$\mu$m', **kwargs):
     """ Plots the colorized version of a complex array with dimensions NxM
 
     The darkness corresponds to the intensity of the image, and the color
@@ -233,7 +233,7 @@ def plot_colorized(im, fig=None, basis=None, units='um', **kwargs):
 
     If a basis is explicitly passed, the image will be plotted in real-space
     coordinates
-    
+
     Parameters
     ----------
     im : array
@@ -258,7 +258,7 @@ def plot_colorized(im, fig=None, basis=None, units='um', **kwargs):
     else:
         plt.figure(fig.number)
         plt.gcf().clear()
-        
+
     if isinstance(im, t.Tensor):
         im = cmath.torch_to_complex(im.detach().cpu())
 
@@ -267,7 +267,7 @@ def plot_colorized(im, fig=None, basis=None, units='um', **kwargs):
             basis = basis.detach().cpu().numpy()
         basis_norm = np.linalg.norm(basis, axis = 0)
         basis_norm = basis_norm * get_units_factor(units)
-        
+
         extent = [0, im.shape[-1]*basis_norm[1], 0, im.shape[-2]*basis_norm[0]]
     else:
         extent=None
@@ -281,14 +281,14 @@ def plot_colorized(im, fig=None, basis=None, units='um', **kwargs):
     else:
         plt.xlabel('j (pixels)')
         plt.ylabel('i (pixels)')
-        
+
     return fig
 
 
 
-def plot_translations(translations, fig=None, units='um', lines=True, **kwargs):
+def plot_translations(translations, fig=None, units='$\mu$m', lines=True, **kwargs):
     """Plots a set of probe translations in a nicely formatted way
-    
+
     Parameters
     ----------
     translations : array
@@ -308,9 +308,9 @@ def plot_translations(translations, fig=None, units='um', lines=True, **kwargs):
     used_fig : matplotlib.figure.Figure
         The figure object that was actually plotted to.
     """
-    
+
     factor = get_units_factor(units)
-    
+
     if fig is None:
         fig = plt.figure()
         ax = fig.add_subplot(111, **kwargs)
@@ -320,7 +320,7 @@ def plot_translations(translations, fig=None, units='um', lines=True, **kwargs):
 
     if isinstance(translations, t.Tensor):
         translations = translations.detach().cpu().numpy()
-        
+
     translations = translations * factor
     plt.plot(translations[:,0], translations[:,1],'k.')
     if lines:
@@ -330,10 +330,10 @@ def plot_translations(translations, fig=None, units='um', lines=True, **kwargs):
 
     return fig
 
-    
-def plot_nanomap(translations, values, fig=None, units='um', convention='probe'):
+
+def plot_nanomap(translations, values, fig=None, units='$\mu$m', convention='probe'):
     """Plots a set of nanomap data in a flexible way
-    
+
     Parameters
     ----------
     translations : array
@@ -374,12 +374,12 @@ def plot_nanomap(translations, values, fig=None, units='um', convention='probe')
 
     if convention.lower() != 'probe':
         trans = trans * -1
-        
+
     s = bbox.width * bbox.height / trans.shape[0] * 72**2 #72 is points per inch
     s /= 4 # A rough value to make the size work out
-    
+
     plt.scatter(factor * trans[:,0],factor * trans[:,1],s=s,c=values)
-    
+
     plt.gca().set_facecolor('k')
     plt.xlabel('Translation x (' + units + ')')
     plt.ylabel('Translation y (' + units + ')')

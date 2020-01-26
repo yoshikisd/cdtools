@@ -105,3 +105,23 @@ class SimplePtycho(CDIModel):
     
 if __name__ == '__main__':
     
+    from basic_ptycho_dataset import BasicPtychoDataset
+    from h5py import File
+    from matplotlib import pyplot as plt
+    
+    filename = 'example_data/lab_ptycho_data.cxi'
+    with File(filename, 'r') as f:
+        dataset = BasicPtychoDataset.from_cxi(f)
+        
+        
+    model = SimplePtycho.from_dataset(dataset)
+    
+    #model.to(device='cuda')
+    #dataset.get_as(device='cuda')
+
+    for i, loss in enumerate(model.Adam_optimize(100, dataset)):
+        model.inspect(dataset)
+        print(i,loss)
+        
+    model.compare(dataset)
+    plt.show()

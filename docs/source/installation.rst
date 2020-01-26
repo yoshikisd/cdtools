@@ -13,7 +13,7 @@ It is recommended that you clone the repository, rather than just downloading th
 Step 2: Install Dependencies
 ----------------------------
 
-The dependencies for CDTools can be installed, if you are managing your environment with anaconda, by running
+The dependencies for CDTools can be installed, if you are managing your environment with anaconda, by running the following command in the top level directory of the package:
 
 .. code:: bash
 	  

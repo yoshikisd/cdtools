@@ -3,7 +3,7 @@
 The functions in this module are designed to work either with pytorch tensors
 or numpy arrays, so they can be used either directly after reconstructions
 on the attributes of the models themselves, or after-the-fact once the
-data has been stored in numpy arrays. 
+data has been stored in numpy arrays.
 """
 from __future__ import division, print_function
 
@@ -21,17 +21,17 @@ __all__ = ['orthogonalize_probes','standardize', 'synthesize_reconstructions',
 from matplotlib import pyplot as plt
 def orthogonalize_probes(probes):
     """Orthogonalizes a set of incoherently mixing probes
-    
+
     The strategy is to define a reduced orthogonal basis that spans
     all of the retrieved probes, and then build the density matrix
     defined by the probes in that basis. After diagonalization, the
     eigenvectors can be recast into the original basis and returned
-    
+
     Parameters
     ----------
     probes : array
         An l x n x m complex array representing  a stack of probes
-    
+
     Returns
     -------
     ortho_probes: array
@@ -51,7 +51,7 @@ def orthogonalize_probes(probes):
         for j, basis in enumerate(bases):
             coefficients[j,i] = np.sum(basis.conj()*ortho_probe)
             ortho_probe -= basis * coefficients[j,i]
-             
+
 
         coefficients[i,i] = np.sqrt(np.sum(np.abs(ortho_probe)**2))
         bases.append(ortho_probe / coefficients[i,i])
@@ -68,12 +68,12 @@ def orthogonalize_probes(probes):
             probe += basis * coefficient
         ortho_probes.append(probe)
 
-    
+
     if send_to_torch:
         return cmath.complex_to_torch(np.stack(ortho_probes[::-1]))
     else:
         return np.stack(ortho_probes[::-1])
-        
+
 
 
 def standardize(probe, obj, obj_slice=None, correct_ramp=False):
@@ -105,7 +105,7 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
     probe : array
         A complex array storing a retrieved probe or stack of incoherently mixed probes
     obj : array
-        A complex array storing a retrieved probe
+        A complex array storing a retrieved object
     obj_slice : slice
         Optional, a slice to take from the object for calculating normalizations
     correct_ramp : bool
@@ -136,7 +136,7 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
     else:
         single_probe = False
 
-        
+
     normalization = t.sqrt(t.sum(cmath.cabssq(probe[0])) / (len(probe[0].view(-1))/2))
     probe = probe / normalization
     obj = obj * normalization
@@ -146,13 +146,13 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
         obj_slice = np.s_[(obj.shape[0]//8)*3:(obj.shape[0]//8)*5,
                           (obj.shape[1]//8)*3:(obj.shape[1]//8)*5]
 
-    
+
     if correct_ramp:
         # Need to check if this is actually working and, if not, why not
         center_freq = ip.centroid(cmath.cabssq(cmath.fftshift(t.fft(probe[0],2))))
         center_freq -= (t.tensor(probe[0].shape[:-1]) // 2).to(t.float32)
         center_freq /= t.tensor(probe[0].shape[:-1]).to(t.float32)
-    
+
         Is, Js = np.mgrid[:probe[0].shape[0],:probe[0].shape[1]]
         probe_phase_ramp = cmath.expi(2 * np.pi *
                                       (center_freq[0] * t.tensor(Is).to(t.float32) +
@@ -163,37 +163,37 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
                                     (center_freq[0] * t.tensor(Is).to(t.float32) +
                                      center_freq[1] * t.tensor(Js).to(t.float32)))
         obj = cmath.cmult(obj, obj_phase_ramp)
-    
+
     # Then, we set them to consistent absolute phases
-    
+
     obj_angle = cmath.cphase(t.sum(obj[obj_slice],dim=(0,1)))
     obj = cmath.cmult(obj, cmath.expi(-obj_angle))
 
     for i in range(probe.shape[0]):
         probe_angle = cmath.cphase(t.sum(probe[i],dim=(0,1)))
         probe[i] = cmath.cmult(probe[i], cmath.expi(-probe_angle))
-        
+
     if single_probe:
         probe = probe[0]
-        
+
     if probe_np:
         probe = cmath.torch_to_complex(probe.detach().cpu())
     if obj_np:
         obj = cmath.torch_to_complex(obj.detach().cpu())
-    
+
     return probe, obj
-    
+
 
 
 def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None, correct_ramp=False):
     """Takes a collection of reconstructions and outputs a single synthesized probe and object
-    
+
     The function first standardizes the sets of probes and objects using the
     standardize function, passing through the relevant options. Then it
     calculates the closest overlap of subsequent frames to subpixel
     precision and uses a sinc interpolation to shift all the probes and objects
     to a common frame. Then the images are summed.
-    
+
     Parameters
     ----------
     probes : list(array)
@@ -216,7 +216,7 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None,
     obj_stack : list(array)
         A list of standardized objects, for further processing
     """
-    
+
     probe_np = False
     if isinstance(probes[0], np.ndarray):
         probes = [cmath.complex_to_torch(probe).to(t.float32) for probe in probes]
@@ -228,15 +228,15 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None,
 
     obj_shape = np.min(np.array([obj.shape[:-1] for obj in objects]),axis=0)
     objects = [obj[:obj_shape[0],:obj_shape[1]] for obj in objects]
-    
+
     if obj_slice is None:
         obj_slice = np.s_[(objects[0].shape[0]//8)*3:(objects[0].shape[0]//8)*5,
                           (objects[0].shape[1]//8)*3:(objects[0].shape[1]//8)*5]
-        
-    
-    
+
+
+
     synth_probe, synth_obj = standardize(probes[0].clone(), objects[0].clone(), obj_slice=obj_slice,correct_ramp=correct_ramp)
-    
+
     obj_stack = [synth_obj]
 
     for i, (probe, obj) in enumerate(zip(probes[1:],objects[1:])):
@@ -245,11 +245,11 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None,
             shift = ip.find_shift(synth_probe[0],probe[0], resolution=50)
         else:
             shift = ip.find_shift(synth_obj[obj_slice],obj[obj_slice], resolution=50)
-        
+
 
         obj = ip.sinc_subpixel_shift(obj,np.array(shift))
 
-        
+
         if len(probe.shape) == 4:
             probe = t.stack([ip.sinc_subpixel_shift(p,tuple(shift))
                              for p in probe],dim=0)
@@ -260,7 +260,7 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None,
         synth_obj = synth_obj + obj
         obj_stack.append(obj)
 
-    
+
     # If there only was one image
     try:
         i
@@ -279,13 +279,13 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None,
 
 def calc_consistency_prtf(synth_obj, objects, basis, obj_slice=None,nbins=None):
     """Calculates a PRTF between each the individual objects and a synthesized one
-    
+
     The consistency PRTF at any given spatial frequency is defined as the ratio
     between the intensity of any given reconstruction and the intensity
     of a synthesized or averaged reconstruction at that spatial frequency.
     Typically, the PRTF is averaged over spatial frequencies with the same
     magnitude.
-    
+
     Parameters
     ----------
     synth_obj : array
@@ -316,51 +316,51 @@ def calc_consistency_prtf(synth_obj, objects, basis, obj_slice=None,nbins=None):
 
     if isinstance(basis, t.Tensor):
         basis = basis.detach().cpu().numpy()
-    
+
     if obj_slice is None:
         obj_slice = np.s_[(objects[0].shape[0]//8)*3:(objects[0].shape[0]//8)*5,
                           (objects[0].shape[1]//8)*3:(objects[0].shape[1]//8)*5]
 
     if nbins is None:
         nbins = np.max(synth_obj[obj_slice].shape) // 4
-    
+
     synth_fft = cmath.cabssq(cmath.fftshift(t.fft(synth_obj[obj_slice],2))).numpy()
 
-    
-    di = np.linalg.norm(basis[:,0]) 
+
+    di = np.linalg.norm(basis[:,0])
     dj = np.linalg.norm(basis[:,1])
-    
+
     i_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[0],d=di))
     j_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[1],d=dj))
-    
+
     Js,Is = np.meshgrid(j_freqs,i_freqs)
     Rs = np.sqrt(Is**2+Js**2)
-    
-    
+
+
     synth_ints, bins = np.histogram(Rs,bins=nbins,weights=synth_fft)
 
     prtfs = []
     for obj in objects:
         obj = obj[obj_slice]
-        single_fft = cmath.cabssq(cmath.fftshift(t.fft(obj,2))).numpy() 
+        single_fft = cmath.cabssq(cmath.fftshift(t.fft(obj,2))).numpy()
         single_ints, bins = np.histogram(Rs,bins=nbins,weights=single_fft)
 
         prtfs.append(synth_ints/single_ints)
 
 
     prtf = np.mean(prtfs,axis=0)
-    
+
     if not obj_np:
         bins = t.Tensor(bins)
         prtf = t.Tensor(prtf)
-        
+
     return bins[:-1], prtf
 
 
 
 def calc_deconvolved_cross_correlation(im1, im2, im_slice=None):
     """Calculates a cross-correlation between two images with their autocorrelations deconvolved.
-    
+
     This is formally defined as the inverse Fourier transform of the normalized
     product of the Fourier transforms of the two images. It results in a
     kernel, whose characteristic size is related to the exactness of the
@@ -379,7 +379,7 @@ def calc_deconvolved_cross_correlation(im1, im2, im_slice=None):
     -------
     corr : array
         The complex-valued deconvolved cross-correlation, in real space
-    
+
     """
 
     im_np = False
@@ -389,7 +389,7 @@ def calc_deconvolved_cross_correlation(im1, im2, im_slice=None):
     if isinstance(im2, np.ndarray):
         im2 = cmath.complex_to_torch(im2)
         im_np = True
-        
+
     # If last dimension is not 2, then convert to a complex tensor now
     if im1.shape[-1] != 2:
         im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
@@ -407,16 +407,16 @@ def calc_deconvolved_cross_correlation(im1, im2, im_slice=None):
     # Not sure if this is more or less stable than just the correlation
     # maximum - requires some testing
     cor = t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2)
-    
+
     if im_np:
         cor = cmath.torch_to_complex(cor)
 
     return cor
-        
-    
+
+
 def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
     """Calculates a Fourier ring correlation between two images
-    
+
     This function requires an input of a basis to allow for FRC calculations
     to be related to physical units.
 
@@ -446,7 +446,7 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
         The FRC values
     threshold : array
         The threshold curve for comparison
-    
+
     """
 
     im_np = False
@@ -459,14 +459,14 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
 
     if isinstance(basis, np.ndarray):
         basis = t.tensor(basis)
-    
+
         # If last dimension is not 2, then convert to a complex tensor now
     if im1.shape[-1] != 2:
         im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
     if im2.shape[-1] != 2:
         im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
 
-        
+
     if im_slice is None:
         im_slice = np.s_[(im1.shape[0]//8)*3:(im1.shape[0]//8)*5,
                           (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
@@ -474,23 +474,23 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
     if nbins is None:
         nbins = np.max(im1[im_slice].shape) // 4
 
-    
+
     cor_fft = cmath.cmult(cmath.fftshift(t.fft(im1[im_slice],2)),
                           cmath.fftshift(cmath.cconj(t.fft(im2[im_slice],2))))
-    
+
     F1 = cmath.cabs(cmath.fftshift(t.fft(im1[im_slice],2)))**2
     F2 = cmath.cabs(cmath.fftshift(t.fft(im2[im_slice],2)))**2
-    
 
-    di = np.linalg.norm(basis[:,0]) 
+
+    di = np.linalg.norm(basis[:,0])
     dj = np.linalg.norm(basis[:,1])
-    
+
     i_freqs = fftpack.fftshift(fftpack.fftfreq(cor_fft.shape[0],d=di))
     j_freqs = fftpack.fftshift(fftpack.fftfreq(cor_fft.shape[1],d=dj))
 
     Js,Is = np.meshgrid(j_freqs,i_freqs)
     Rs = np.sqrt(Is**2+Js**2)
-    
+
 
 
     numerator, bins = np.histogram(Rs,bins=nbins,weights=cmath.torch_to_complex(cor_fft))
@@ -502,13 +502,13 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
 
     # This moves from combined-image SNR to single-image SNR
     snr /= 2
-    
+
     threshold = (snr + (2 * snr + 1) / np.sqrt(n_pix)) / \
         (1 + snr + (2 * np.sqrt(snr)) / np.sqrt(n_pix))
-    
+
     if not im_np:
         bins = t.tensor(bins)
         frc = t.tensor(frc)
         threshold = t.tensor(threshold)
-    
+
     return bins[:-1], frc, threshold

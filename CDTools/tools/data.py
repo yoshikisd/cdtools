@@ -104,13 +104,13 @@ def get_sample_info(cxi_file):
                 metadata[attr] = str(s1[attr][()].decode())
             except AttributeError as e:
                 metadata[attr] = str(np.array(s1[attr][:])[0].decode())
-    
+
     float_attrs = ['concentration',
                    'mass',
                    'temperature',
                    'thickness',
                    'unit_cell_volume']
-    
+
     for attr in float_attrs:
         if attr in s1:
             metadata[attr] = np.float32(s1[attr][()])
@@ -125,7 +125,7 @@ def get_sample_info(cxi_file):
         yvec = orient[3:] / np.linalg.norm(orient[3:])
         metadata['orientation'] = np.array([xvec,yvec,
                                             np.cross(xvec,yvec)])
-        
+
     if 'geometry_1/surface_normal' in s1:
         snorm = np.array(s1['geometry_1/surface_normal']).astype(np.float32)
         xvec = np.cross(np.array([0.,1.,0.]), snorm)
@@ -133,7 +133,7 @@ def get_sample_info(cxi_file):
         yvec = np.cross(snorm, xvec)
         yvec /= np.linalg.norm(yvec)
         metadata['orientation'] = np.array([xvec, yvec, snorm])
-        
+
     # Check if the metadata is empty
     if metadata == {}:
         metadata = None
@@ -234,18 +234,17 @@ def get_detector_geometry(cxi_file):
     except:
         corner_position = None
 
-    # Don't pretend to calculate corner position from distance if it's
-    # if it's not defined, but do calculate distance from corner position
-    # if distance is not defined. If neither is defined, then raise
-    # an error.
+    # Don't pretend to calculate corner position from distance if it's not
+    # defined, but do calculate distance from corner position if distance is
+    # not defined. If neither is defined, then raise an error.
     if distance is None and corner_position is not None:
         detector_normal = np.cross(basis_vectors[:,0],
                                    basis_vectors[:,1])
         detector_normal /= np.linalg.norm(detector_normal)
         distance = np.linalg.norm(np.dot(corner_position, detector_normal))
 
-    if distance is None and corner_position is not None:
-        raise KeyError('Neither sample to detector distance or corner position is defined in file.')
+    if distance is None and corner_position is None:
+        raise KeyError('Neither sample to detector distance nor corner position is defined in file.')
 
     return distance, basis_vectors, corner_position
 
@@ -260,7 +259,7 @@ def get_mask(cxi_file):
     If any bit is set in the mask at all, it will be defined as a bad
     pixel, with the exception of pixels marked exactly as 0x00001000,
     which is defined to mean that the pixel has signal above the
-    background. These pixels are treated as on pixels
+    background. These pixels are treated as on pixels.
 
     Parameters
     ----------
@@ -292,7 +291,7 @@ def get_dark(cxi_file):
     if the dark image is a single image, it will return that image. If it
     is a stack of images, it will return the mean along the stack axis.
 
-    If the darks do not exist, it will return None
+    If the darks do not exist, it will return None.
 
     Parameters
     ----------
@@ -304,7 +303,7 @@ def get_dark(cxi_file):
     dark : np.array
         An array storing the dark image
     """
-    
+
     i1 = cxi_file['entry_1/instrument_1']
     if 'detector_1/data_dark' in i1:
         darks = np.array(i1['detector_1/data_dark'])
@@ -327,8 +326,7 @@ def get_data(cxi_file, cut_zeroes = True):
 
     It will return the data array in whatever shape it's defined in.
 
-    It will also read out the axes attribute of the data into a list
-    of strings
+    It will also read out the axes attribute of the data into a list of strings.
 
     Parameters
     ----------
@@ -342,7 +340,7 @@ def get_data(cxi_file, cut_zeroes = True):
     axes : list(str)
         A list of the axes defined in the axes attribute, if any
     """
-    
+
     # Possible locations for the data
     if 'entry_1/data_1/data' in cxi_file:
         pull_from = 'entry_1/data_1/data'
@@ -438,9 +436,9 @@ def add_entry_info(cxi_file, metadata):
         elif isinstance(value, datetime.datetime):
             cxi_file['entry_1'][key] = np.string_(value.isoformat())
         elif isinstance(value, numbers.Number):
-            si[key] = value
+            cxi_file['entry_1'][key] = value
         elif isinstance(value, (np.ndarray,list,tuple)):
-            s1.create_dataset(key, data=np.asarray(value))
+            cxi_file['entry_1'].create_dataset(key, data=np.asarray(value))
         elif isinstance(value, t.Tensor):
             asnumpy = value.detach().cpu().numpy()
             cxi_file['entry_1'].create_dataset(key, data=asnumpy)
@@ -468,7 +466,7 @@ def add_sample_info(cxi_file, metadata):
         # Only store the part of this matrix as defined in the CXI file spec
         s1['geometry_1'].create_dataset('orientation',
                                         data=metadata['orientation'].ravel()[:6])
-        
+
     for key, value in metadata.items():
         if key == 'orientation':
             continue # this is a special case
@@ -514,7 +512,7 @@ def add_detector(cxi_file, distance, basis, corner=None):
 
     It will define all the relevant parameters - distance, pixel size,
     detector basis, and corner position (if relevant) based on the provided
-    information
+    information.
 
     Parameters
     ----------
@@ -539,6 +537,8 @@ def add_detector(cxi_file, distance, basis, corner=None):
 
     if isinstance(basis, t.Tensor):
         basis = basis.detach().cpu().numpy()
+    if basis.shape == (2,3):
+        basis = basis.T
     d1['x_pixel_size'] = np.linalg.norm(basis[:,1])
     d1['y_pixel_size'] = np.linalg.norm(basis[:,0])
     d1.create_dataset('basis_vectors', data=basis)
@@ -591,7 +591,7 @@ def add_dark(cxi_file, dark):
     ----------
     cxi_file : h5py.File
         The file to add the mask to
-    dark : array 
+    dark : array
         The dark image(s) to save out to the file
     """
     if 'entry_1/instrument_1' not in cxi_file:

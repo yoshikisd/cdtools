@@ -1,8 +1,7 @@
 .. toctree::
-   :hidden:
    :maxdepth: 1
 
-   self
+   intro
    installation
    examples
    tutorial
@@ -11,7 +10,5 @@
    models
    tools/index
    indices_tables
-   
 
-.. include:: intro.rst
 
