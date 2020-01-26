@@ -232,7 +232,11 @@ def gaussian_probe(dataset, basis, shape, sigma, propagation_distance=0):
     # First, we want to generate the parameters (sigma and curvature) for the
     # propagated gaussian. Ignore the purely z-dependent phases
     wavelength = dataset.wavelength
+    if propagation_distance is  None:
+        propagation_distance = 0
+    
     z = propagation_distance # for shorthand
+    
     sigma = np.array(sigma)
     k = 2 * np.pi / wavelength
     zr = k * sigma**2

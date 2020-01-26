@@ -43,20 +43,11 @@ def intensity(wavefield, detector_slice=None, epsilon=1e-7, saturation=None, ove
     sim_patterns : torch.Tensor
         A real MxN array storing the wavefield's intensities
     """
-    output = cmath.cabssq(wavefield) + epsilon
+    output = cmath.cabssq(wavefield)
 
     # Now we apply oversampling
     if oversampling != 1:
-        dim = output.dim()
-        if dim == 2:
-            output = output[None,None,:,:]
-        if dim == 3:
-            output = output[None,:,:,:]
-        output = avg_pool2d(output, 2, 2)
-        if dim == 2:
-            output = output[0,0,:,:]
-        if dim == 3:
-            output = output[0,:,:,:]
+        output = avg_pool2d(output, oversampling)
 
     # Then we grab the detector slice
     if detector_slice is not None:
@@ -67,9 +58,9 @@ def intensity(wavefield, detector_slice=None, epsilon=1e-7, saturation=None, ove
 
     # And now saturation    
     if saturation is None:
-        return output
+        return output + epsilon
     else:
-        return t.clamp(output,0,saturation)
+        return t.clamp(output + epsilon,0,saturation)
 
 
 def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=None, oversampling=1):
@@ -102,20 +93,11 @@ def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=Non
     """
     # This syntax just adds an axis to the slice to preserve the J direction
 
-    output = t.sum(cmath.cabssq(wavefields),dim=0) + epsilon
+    output = t.sum(cmath.cabssq(wavefields),dim=0) 
 
     # Now we apply oversampling
     if oversampling != 1:
-        dim = output.dim()
-        if dim == 2:
-            output = output[None,None,:,:]
-        if dim == 3:
-            output = output[None,:,:,:]
-        output = avg_pool2d(output, 2, 2)
-        if dim == 2:
-            output = output[0,0,:,:]
-        if dim == 3:
-            output = output[0,:,:,:]
+        output = avg_pool2d(output, oversampling)
 
     # Then we grab the detector slice
     if detector_slice is not None:
@@ -125,9 +107,9 @@ def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=Non
             output = output[(np.s_[:],) + detector_slice]
 
     if saturation is None:
-        return output
+        return output + epsilon
     else:
-        return t.clamp(output,0,saturation)
+        return t.clamp(output + epsilon,0,saturation)
 
 
 def quadratic_background(wavefield, background, detector_slice=None, measurement=intensity, epsilon=1e-7, saturation=None, oversampling=1):

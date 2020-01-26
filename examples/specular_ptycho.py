@@ -28,7 +28,7 @@ dataset.get_as(device='cuda')
 
 
 # Run the reconstruction
-for i, loss in enumerate(model.Adam_optimize(250, dataset,batch_size=5)):
+for i, loss in enumerate(model.Adam_optimize(100, dataset,batch_size=5)):
     print(i,loss)
     model.inspect(dataset)
 

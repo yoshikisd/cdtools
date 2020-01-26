@@ -96,7 +96,7 @@ class FancyPtycho(CDIModel):
         
         
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -110,8 +110,11 @@ class FancyPtycho(CDIModel):
         dataset.get_as(*get_as_args[0],**get_as_args[1])
 
         # Set to none to avoid issues with things outside the detector
-        center = tools.image_processing.centroid(t.sum(patterns,dim=0))
-        
+        if auto_center:
+            center = tools.image_processing.centroid(t.sum(patterns,dim=0))
+        else:
+            center = None
+            
         # Then, generate the probe geometry from the dataset
         ewg = tools.initializers.exit_wave_geometry
         probe_basis, probe_shape, det_slice =  ewg(det_basis,
@@ -142,7 +145,7 @@ class FancyPtycho(CDIModel):
             surface_normal = outgoing_dir + np.array([0.,0.,1.])
             surface_normal /= np.linalg.norm(outgoing_dir)
 
-            
+
         # Next generate the object geometry from the probe geometry and
         # the translations
         pix_translations = tools.interactions.translations_to_pixel(probe_basis, translations, surface_normal=surface_normal)

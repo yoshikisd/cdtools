@@ -177,7 +177,7 @@ class Ptycho2DDataset(CDataset):
 
         # If a bare string is passed
         if isinstance(cxi_file, str) or isinstance(cxi_file, pathlib.Path):
-            with h5py.File(cxi_file,'w') as f:
+            with cdtdata.create_cxi(cxi_file) as f:
                 return self.to_cxi(f)
 
         super(Ptycho2DDataset,self).to_cxi(cxi_file)
