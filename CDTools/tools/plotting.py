@@ -71,7 +71,7 @@ def get_units_factor(units):
         factor=1e2
     if u=='mm':
         factor=1e3
-    if u=='um' or u=="$\mu$m":
+    if u=='um' or u=="$\\mu$m":
         factor=1e6
     if u=='nm':
         factor=1e9
@@ -82,7 +82,7 @@ def get_units_factor(units):
     return factor
 
 
-def plot_amplitude(im, fig = None, basis=None, units='$\mu$m', cmap='viridis', **kwargs):
+def plot_amplitude(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', **kwargs):
     """Plots the amplitude of a complex array with dimensions NxM
 
     If a figure is given explicitly, it will clear that existing figure and
@@ -148,7 +148,7 @@ def plot_amplitude(im, fig = None, basis=None, units='$\mu$m', cmap='viridis', *
     return fig
 
 
-def plot_phase(im, fig=None, basis=None, units='$\mu$m', cmap='auto', **kwargs):
+def plot_phase(im, fig=None, basis=None, units='$\\mu$m', cmap='auto', **kwargs):
     """ Plots the phase of a complex array with dimensions NxMx2
 
     If a figure is given explicitly, it will clear that existing figure and
@@ -222,7 +222,7 @@ def plot_phase(im, fig=None, basis=None, units='$\mu$m', cmap='auto', **kwargs):
     return fig
 
 
-def plot_colorized(im, fig=None, basis=None, units='$\mu$m', **kwargs):
+def plot_colorized(im, fig=None, basis=None, units='$\\mu$m', **kwargs):
     """ Plots the colorized version of a complex array with dimensions NxM
 
     The darkness corresponds to the intensity of the image, and the color
@@ -286,7 +286,7 @@ def plot_colorized(im, fig=None, basis=None, units='$\mu$m', **kwargs):
 
 
 
-def plot_translations(translations, fig=None, units='$\mu$m', lines=True, **kwargs):
+def plot_translations(translations, fig=None, units='$\\mu$m', lines=True, **kwargs):
     """Plots a set of probe translations in a nicely formatted way
 
     Parameters
@@ -331,7 +331,7 @@ def plot_translations(translations, fig=None, units='$\mu$m', lines=True, **kwar
     return fig
 
 
-def plot_nanomap(translations, values, fig=None, units='$\mu$m', convention='probe'):
+def plot_nanomap(translations, values, fig=None, units='$\\mu$m', convention='probe'):
     """Plots a set of nanomap data in a flexible way
 
     Parameters
