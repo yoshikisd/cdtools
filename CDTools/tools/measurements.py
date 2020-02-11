@@ -47,7 +47,10 @@ def intensity(wavefield, detector_slice=None, epsilon=1e-7, saturation=None, ove
 
     # Now we apply oversampling
     if oversampling != 1:
-        output = avg_pool2d(output, oversampling)
+        if wavefield.dim() == 3:
+            output = avg_pool2d(output.unsqueeze(0), oversampling)[0]
+        else:
+            output = avg_pool2d(output, oversampling)
 
     # Then we grab the detector slice
     if detector_slice is not None:
@@ -97,8 +100,11 @@ def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=Non
 
     # Now we apply oversampling
     if oversampling != 1:
-        output = avg_pool2d(output, oversampling)
-
+        if wavefields.dim() == 4:
+            output = avg_pool2d(output.unsqueeze(0), oversampling)[0]
+        else:
+            output = avg_pool2d(output, oversampling)
+            
     # Then we grab the detector slice
     if detector_slice is not None:
         if wavefields.dim() == 4:
