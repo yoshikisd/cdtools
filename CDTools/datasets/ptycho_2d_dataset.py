@@ -188,7 +188,7 @@ class Ptycho2DDataset(CDataset):
         cdtdata.add_ptycho_translations(cxi_file, self.translations)
 
 
-    def inspect(self, logarithmic=True):
+    def inspect(self, logarithmic=True, units='um'):
         """Launches an interactive plot for perusing the data
 
         This launches an interactive plotting tool in matplotlib that
@@ -257,12 +257,13 @@ class Ptycho2DDataset(CDataset):
         nanomap_values = (self.mask.to(t.float32) * self.patterns).sum(dim=(1,2)).detach().cpu().numpy()
         s = calculate_sizes(0)
 
-        nanomap = axes[0].scatter(1e6 * translations[:,0],1e6 * translations[:,1],s=s,c=nanomap_values, picker=True)
+        units_factor = plotting.get_units_factor(units)
+        nanomap = axes[0].scatter(units_factor * translations[:,0],units_factor * translations[:,1],s=s,c=nanomap_values, picker=True)
 
         axes[0].invert_xaxis()
         axes[0].set_facecolor('k')
-        axes[0].set_xlabel('Translation x ($\mu$m)', labelpad=1)
-        axes[0].set_ylabel('Translation y ($\mu$m)', labelpad=1)
+        axes[0].set_xlabel('Translation x ('+units+')', labelpad=1)
+        axes[0].set_ylabel('Translation y ('+units+')', labelpad=1)
         cb1 = plt.colorbar(nanomap, ax=axes[0], orientation='horizontal',
                            format='%.2e',
                            ticks=ticker.LinearLocator(numticks=5),
