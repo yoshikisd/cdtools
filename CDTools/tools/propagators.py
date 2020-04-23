@@ -117,8 +117,66 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, *
     # the previous expression to ensure that complex frequencies
     # get mapped to values <1 instead of >1
     propagator = complex_to_torch(np.conj(propagator)) 
-
+    
     return propagator.to(*args, **kwargs)
+
+
+def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, propagation_vector, *args, **kwargs):
+    """Generates an angular-spectrum based near-field propagator from experimental quantities
+
+    This function generates an angular-spectrum based near field
+    propagator that will work on torch Tensors. The function is structured
+    this way - to generate the propagator first - because the
+    generation of the propagation mask is a bit expensive and if this
+    propagator is used in a reconstruction program, then it will be best
+    to calculate this mask once and close over it.
+
+    Formally, this propagator is the complex conjugate of the fourier
+    transform of the convolution kernel for light propagation in free
+    space
+
+    This function is written to work on any wavefield defined on any
+    array of parallelograms. In addition, there is an assumed phase ramp
+    applied to the wavefield before propagation, defined such that a feature
+    with uniform phase will propagate along the direction of the 
+    defined propagation vector. This helps simplify 
+
+
+    Parameters
+    ----------
+    shape : array
+        The shape of the arrays to be propagated
+    spacing : array
+        The (2x3) set of basis vectors describing the array to be propagated
+    wavelength : float
+        The wavelength of light to simulate propagation of
+    propagation_vector : array
+        The displacement to propagate the wavefield along.
+    tilt : float
+        The tilt, in radians, of the plane that the wavefield is defined on
+
+    Returns
+    -------
+    propagator : torch.Tensor
+        A phase mask which accounts for the phase change that each plane wave will undergo.
+    """
+
+    ki = 2 * np.pi * fftpack.fftfreq(shape[0],spacing[0])
+    kj = 2 * np.pi * fftpack.fftfreq(shape[1],spacing[1])
+    Kj, Ki = np.meshgrid(kj,ki)
+
+    # Define this as complex so the square root properly gives
+    # k>k0 components imaginary frequencies    
+    k0 = np.complex128((2*np.pi/wavelength))
+    
+    propagator = np.exp(1j*np.sqrt(k0**2 - Ki**2 - Kj**2) * z)
+
+    # Take the conjugate explicitly here instead of negating
+    # the previous expression to ensure that complex frequencies
+    # get mapped to values <1 instead of >1
+    propagator = complex_to_torch(np.conj(propagator)) 
+    
+    return propagator.to(**kwargs)
 
 
 def near_field(wavefront, angular_spectrum_propagator):
