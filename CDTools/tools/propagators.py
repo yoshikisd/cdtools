@@ -139,21 +139,21 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, p
     array of parallelograms. In addition, there is an assumed phase ramp
     applied to the wavefield before propagation, defined such that a feature
     with uniform phase will propagate along the direction of the 
-    defined propagation vector. This helps simplify 
+    defined propagation vector. This decision provides the best numerical
+    stabilit and allows for the simple setup of light fields copropagating
+    with the coordinate system.
 
 
     Parameters
     ----------
     shape : array
         The shape of the arrays to be propagated
-    spacing : array
+    basis : array
         The (2x3) set of basis vectors describing the array to be propagated
     wavelength : float
         The wavelength of light to simulate propagation of
     propagation_vector : array
         The displacement to propagate the wavefield along.
-    tilt : float
-        The tilt, in radians, of the plane that the wavefield is defined on
 
     Returns
     -------
@@ -161,10 +161,17 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, p
         A phase mask which accounts for the phase change that each plane wave will undergo.
     """
 
-    ki = 2 * np.pi * fftpack.fftfreq(shape[0],spacing[0])
-    kj = 2 * np.pi * fftpack.fftfreq(shape[1],spacing[1])
-    Kj, Ki = np.meshgrid(kj,ki)
+    
+    sides = basis * shape
+    fourier_basis = 2 * np.pi * np.linalg.pinv(sides).transpose()
+    print(fourier_basis)
 
+    ki = 2 * np.pi * fftpack.fftfreq(shape[0],basis[1,0])
+    kj = 2 * np.pi * fftpack.fftfreq(shape[1],basis[0,1])
+    print(ki[1]-ki[0])
+    print(kj[1]-kj[0])
+    Kj, Ki = np.meshgrid(kj,ki)
+    
     # Define this as complex so the square root properly gives
     # k>k0 components imaginary frequencies    
     k0 = np.complex128((2*np.pi/wavelength))

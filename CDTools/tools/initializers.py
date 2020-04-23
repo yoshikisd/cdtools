@@ -88,14 +88,22 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
 
     
     # Finally, generate the basis for the exit wave in real space
-    # I believe this calculation is incorrect for non-rectangular
-    # detectors, because the real space basis should be related to the
-    # dual of the original basis. Leaving this for now since
-    # non-rectangular detectors are not a pressing concern.
-    basis_dirs = det_basis / t.norm(det_basis, dim=0)
-    real_space_basis = basis_dirs * wavelength * distance / \
-        (full_shape.to(t.float32) * t.norm(det_basis,dim=0))
-    
+
+    # This method should work for a general parallelogram
+    # shaped detector
+    det_shape = det_basis * full_shape.to(t.float32)
+    pinv_basis = t.Tensor(np.linalg.pinv(det_shape).transpose()).to(t.float32)
+    real_space_basis = pinv_basis * wavelength * distance
+
+    # This is definitely correct, but less simple. Included here
+    # So future me can check that both versions are consistent.
+    #oop_dir = np.cross(det_basis[:,0],det_basis[:,1])
+    #oop_dir /= np.linalg.norm(oop_dir)
+    #full_basis = np.array([np.array(det_basis[:,0]),np.array(det_basis[:,1]),oop_dir]).transpose()
+    #inv_basis = t.Tensor(np.linalg.inv(full_basis)[:2,:].transpose()).to(t.float32)
+    #real_space_basis = inv_basis*wavelength * distance / \
+    #    full_shape.to(t.float32)
+
     # Finally, convert the shape back to a torch.Size
     full_shape = t.Size([dim * oversampling for dim in full_shape]) 
 
