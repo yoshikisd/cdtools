@@ -50,7 +50,7 @@ We then try a basic Adam reconstruction with this model, with no changes to the 
        model.inspect(dataset)
        print(i,loss)
 
-   model.compare()
+   model.compare(dataset)
    plt.show()
 
 
