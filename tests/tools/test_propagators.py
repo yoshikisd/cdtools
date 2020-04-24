@@ -48,7 +48,7 @@ def test_near_field():
     # The strategy is to compare the propagation of a gaussian beam to
     # the propagation in the paraxial approximation.
     
-    x = (np.arange(800) - 400) * 1.5e-9
+    x = (np.arange(901) - 450) * 1.5e-9
     y = (np.arange(1200) - 600) * 1e-9
     Ys,Xs = np.meshgrid(y,x)
     Rs = np.sqrt(Xs**2+Ys**2)
@@ -93,7 +93,7 @@ def test_generalized_near_field():
     # The strategy is to compare the propagation of a gaussian beam to
     # the propagation in the paraxial approximation.
     
-    x = (np.arange(800) - 400) * 1.5e-9
+    x = (np.arange(901) - 450) * 1.5e-9
     y = (np.arange(1200) - 600) * 1e-9
     Ys,Xs = np.meshgrid(y,x)
     Rs = np.sqrt(Xs**2+Ys**2)
@@ -114,9 +114,11 @@ def test_generalized_near_field():
     # paraxial approx
     Ez = w0 / wz * np.exp(-Rs**2 / wz**2) * np.exp(-1j * k * ( z + Rs**2 / (2 * Rz)) + 1j * np.arctan(z / zr))
 
-    asp = propagators.generate_angular_spectrum_propagator(
-        E0.shape,(1.5e-9,1e-9),wavelength,z,dtype=t.float64)
-    
+    basis= np.array([[0,-1e-9],[-1.5e-9,0],[0,0]])
+    propagation_vector = np.array([0,0,z])
+    asp = propagators.generate_generalized_angular_spectrum_propagator(
+        E0.shape,basis,wavelength,propagation_vector,dtype=t.float64)
+    #assert False
     Ez_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
     Ez_t = cmath.torch_to_complex(Ez_t)
     
