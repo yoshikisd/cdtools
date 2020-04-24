@@ -9,7 +9,7 @@ import torch as t
 import pytest
 import scipy.misc
 from scipy.fftpack import fftshift, ifftshift
-
+from matplotlib import pyplot as plt
 
 
 @pytest.fixture(scope='module')
@@ -68,9 +68,13 @@ def test_near_field():
     # The analytical expression for propagation of a gaussian beam in the
     # paraxial approx
     Ez = w0 / wz * np.exp(-Rs**2 / wz**2) * np.exp(-1j * k * ( z + Rs**2 / (2 * Rz)) + 1j * np.arctan(z / zr))
+    Ez_nozphase = Ez * np.exp(1j * k * z)
+    
 
+    # First we check it normally
     asp = propagators.generate_angular_spectrum_propagator(
         E0.shape,(1.5e-9,1e-9),wavelength,z,dtype=t.float64)
+
     
     Ez_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
     Ez_t = cmath.torch_to_complex(Ez_t)
@@ -80,6 +84,27 @@ def test_near_field():
 
 
     Emz = np.conj(Ez)
+
+    Emz_t = propagators.inverse_near_field(cmath.complex_to_torch(E0),asp)
+    Emz_t = cmath.torch_to_complex(Emz_t)    
+
+    # Again, 10^-3 is about all the accuracy we can expect
+    assert np.max(np.abs(Emz-Emz_t)) < 1e-3 * np.max(np.abs(Emz))
+
+    # Then, we check it with the phase correction
+    asp = propagators.generate_angular_spectrum_propagator(
+        E0.shape,(1.5e-9,1e-9),wavelength,z,remove_z_phase=True,
+        dtype=t.float64)
+
+    
+    Ez_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
+    Ez_t = cmath.torch_to_complex(Ez_t)
+    
+    # Check for at least 10^-3 relative accuracy in this scenario
+    assert np.max(np.abs(Ez_nozphase-Ez_t)) < 1e-3 * np.max(np.abs(Ez_nozphase))
+
+
+    Emz = np.conj(Ez_nozphase)
 
     Emz_t = propagators.inverse_near_field(cmath.complex_to_torch(E0),asp)
     Emz_t = cmath.torch_to_complex(Emz_t)    
@@ -92,47 +117,111 @@ def test_generalized_near_field():
 
     # The strategy is to compare the propagation of a gaussian beam to
     # the propagation in the paraxial approximation.
-    
+
+    # For this one, we want to test it on a rotated coordinate system
+    # First, we should do a test with the phase ramp along the z direction
+    # explicitly included
+
+    basis= np.array([[0,-1.5e-9],[-1e-9,0],[0,0]])
     x = (np.arange(901) - 450) * 1.5e-9
     y = (np.arange(1200) - 600) * 1e-9
-    Ys,Xs = np.meshgrid(y,x)
-    Rs = np.sqrt(Xs**2+Ys**2)
+    Xs_0,Ys_0 = np.meshgrid(x,y)
+    Zs_0 = np.zeros(Xs_0.shape)
 
+    Positions = np.stack([Xs_0,Ys_0,Zs_0])
+    
+    # assert 0
     wavelength = 3e-9 #nm
     sigma = 20e-9 #nm
     z = 1000e-9 #nm
+    propagation_vector = np.array([0,0,z]) 
 
     k = 2 * np.pi / wavelength
     w0 = np.sqrt(2)*sigma
     zr = np.pi * w0**2 / wavelength
-    wz = w0 * np.sqrt(1 + (z / zr)**2)
-    Rz =  z * (1 + (zr / z)**2)
     
-    E0 = np.exp(-Rs**2 / w0**2)
 
     # The analytical expression for propagation of a gaussian beam in the
     # paraxial approx
-    Ez = w0 / wz * np.exp(-Rs**2 / wz**2) * np.exp(-1j * k * ( z + Rs**2 / (2 * Rz)) + 1j * np.arctan(z / zr))
+    def get_w(Zs):
+        return w0 * np.sqrt(1 + (Zs / zr)**2)
 
-    basis= np.array([[0,-1e-9],[-1.5e-9,0],[0,0]])
-    propagation_vector = np.array([0,0,z])
-    asp = propagators.generate_generalized_angular_spectrum_propagator(
-        E0.shape,basis,wavelength,propagation_vector,dtype=t.float64)
-    #assert False
-    Ez_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
-    Ez_t = cmath.torch_to_complex(Ez_t)
+    def get_inv_R(Zs):
+        return Zs / (Zs**2 + zr**2)
     
-    # Check for at least 10^-3 relative accuracy in this scenario
-    assert np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez))
+    def get_E(Xs, Ys, Zs, correct=False):
+        # if correct is True, remove the e^(-ikz) dependence
+        Rs_sq = Xs**2 + Ys**2
+        Wzs = get_w(Zs)
+        E = w0 / Wzs * np.exp(-Rs_sq / Wzs**2) *\
+            np.exp(-1j * k * ( Zs + Rs_sq * get_inv_R(Zs) / 2) + \
+                   1j * np.arctan(Zs / zr))
+        if correct:
+            E = E * np.exp(1j * k * Zs)
+        return E
+    
+
+    # This tests the straight ahead case
+    I = np.eye(3)
+
+    # This tests a rotation about the y axis
+    th = np.deg2rad(5)
+    Ry = np.array([[np.cos(th),0,np.sin(th)],
+                   [0,1,0],
+                   [-np.sin(th),0,np.cos(th)]])
+    
+    # This tests a rotation about two axes
+    phi = np.deg2rad(2)
+    Rx = np.array([[1,0,0],
+                   [0,np.cos(phi),-np.sin(phi)],
+                   [0,np.sin(phi),np.cos(phi)]])
+    Rboth = np.matmul(Rx,Ry)
+
+    # This tests a shearing
+    shear = 0.23
+    Rshear = np.array([[1,shear,0],
+                       [0,1,0],
+                       [0,0,1]])
+    
+    # This tests a shearing and a rotation together
+    Rall = np.matmul(Rboth,Rshear)
+    
+    rot_mats = [I,Ry, Rboth, Rshear, Rboth]
+    purposes = ['standard','y-rot','both-rot','shear','shear-rot']
+    
+    for purpose,rot_mat in zip(purposes,rot_mats):
+        print('Testing', purpose)
+        Xs,Ys,Zs_0 = np.tensordot(rot_mat,Positions,axes=1)
+        new_basis = np.dot(rot_mat, basis)
+        Zs_prop = Zs_0 + z
+        
+        # Check that it works both with the explicit and implicit phase ramps
+        for prop_oo in [False, True]:
+            print('Propagate Along Offset =',prop_oo)
+
+            E0 = get_E(Xs,Ys,Zs_0, correct=prop_oo)
+            Ez = get_E(Xs,Ys,Zs_prop, correct=prop_oo)
+
+            asp = propagators.generate_generalized_angular_spectrum_propagator(
+                E0.shape,new_basis,wavelength,propagation_vector,
+                dtype=t.float64, propagate_along_offset=prop_oo)
 
 
-    Emz = np.conj(Ez)
+            Ez_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
+            Ez_t = cmath.torch_to_complex(Ez_t)
 
-    Emz_t = propagators.inverse_near_field(cmath.complex_to_torch(E0),asp)
-    Emz_t = cmath.torch_to_complex(Emz_t)    
+            # Check for at least 10^-3 relative accuracy in this scenario
+            assert np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez))
+            
+            
+            Em0_t = propagators.inverse_near_field(cmath.complex_to_torch(Ez),asp)
+            Em0_t = cmath.torch_to_complex(Em0_t)    
 
-    # Again, 10^-3 is about all the accuracy we can expect
-    assert np.max(np.abs(Emz-Emz_t)) < 1e-3 * np.max(np.abs(Emz))
+            # Again, 10^-3 is about all the accuracy we can expect
+            assert np.max(np.abs(E0-Em0_t)) < 1e-3 * np.max(np.abs(E0))
+            
+        print('Test Successful')
+
 
 
 def test_inverse_near_field():

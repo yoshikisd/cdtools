@@ -72,7 +72,7 @@ def inverse_far_field(wavefront):
     return fftshift(t.ifft(ifftshift(wavefront), 2, normalized=True))
 
 
-def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, **kwargs):
+def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, remove_z_phase=False, **kwargs):
     """Generates an angular-spectrum based near-field propagator from experimental quantities
 
     This function generates an angular-spectrum based near field
@@ -96,6 +96,8 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, *
         The wavelength of light to simulate propagation of
     z : float
         The distance to simulate propagation over
+    remove_z_phase : bool
+        Default False, whether to remove the dominant z-direction phase dependence
 
     Returns
     -------
@@ -112,6 +114,9 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, *
     k0 = np.complex128((2*np.pi/wavelength))
     
     propagator = np.exp(1j*np.sqrt(k0**2 - Ki**2 - Kj**2) * z)
+
+    if remove_z_phase:
+        propagator *= np.exp(-1j * k0 * z)
 
     # Take the conjugate explicitly here instead of negating
     # the previous expression to ensure that complex frequencies
@@ -139,12 +144,15 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     is designed to work on any wavefield defined on an array of
     parallelograms.
 
-    In addition, if propagate_along_offset is true, there is an assumed phase
+    In addition, if propagate_along_offset is True, there is an assumed phase
     ramp applied to the wavefield before propagation, defined such that a
     feature with uniform phase will propagate along the direction of the 
-    defined offset vector. This decision provides the best numerical
-    stability and allows for the simple setup of light fields copropagating
-    with the coordinate system.
+    defined offset vector. This will also remove the phase variation along
+    the propagation direction, because it makes the most physical sense to
+    regard this choice as removing the dominant phase variation in 3D, allowing
+    for the generation of a smoothly varying wavefield over 3D volumes.
+    This decision provides the best numerical stability and allows for the
+    simple setup of light fields copropagating with the coordinate system.
 
 
     Parameters
@@ -157,6 +165,8 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
         The wavelength of light to simulate propagation of
     propagation_vector : array
         The displacement to propagate the wavefield along.
+    propagate_along_offset : bool
+        Optional, whether to include an implied phase ramp to propagate uniform phase features along the offset direction
 
     Returns
     -------
@@ -186,7 +196,6 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
 
     # This may have a sign error - must be checked
     phase_mask = np.exp(1j * np.tensordot(offset_vector,K_xyz,axes=1))
-    
 
     # Next, we apply a shift to the k-space vectors which sets up
     # propagation such that a uniform phase object will propagate along the
@@ -198,10 +207,22 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     perpendicular_dir /= np.linalg.norm(perpendicular_dir)
     offset_perpendicular = np.dot(perpendicular_dir, offset_vector)
     offset_parallel = offset_vector - perpendicular_dir * offset_perpendicular
+    print(offset_perpendicular)
+    print(offset_parallel)
     k0 = 2*np.pi/wavelength
     k_offset = offset_parallel * k0 / np.sqrt(offset_perpendicular**2 +
                                     np.linalg.norm(offset_parallel)**2)
-    K_xyz = K_xyz - k_offset[:,None,None]
+
+    # Only implement the shift if the flag is set to True
+    if propagate_along_offset:
+        K_xyz = K_xyz + k_offset[:,None,None]
+
+        # we also need to remove the z-dependence on the phase
+        # This time, though, the z-dependence actually has to do with
+        # the oput of plane component of k at the central offset. Normally
+        # this is 0, so the z-component is just k0, but not in this case
+        phase_mask *= np.exp(-1j * np.sqrt(k0**2 - np.linalg.norm(k_offset)**2)
+                             * offset_perpendicular)
     
     # Redefine this as complex so the square root properly gives
     # k>k0 components imaginary frequencies    
@@ -211,6 +232,11 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     propagator = np.exp(1j*np.sqrt(k0**2 - np.linalg.norm(K_xyz,axis=0)**2)
                         * offset_perpendicular)
     propagator *= phase_mask
+    
+    # This removes the z-dependence on the phase:
+    #if propagate_along_offset:
+    #    print(offset_perpendicular)
+    #    propagator *= np.exp(-1j * k0 * offset_perpendicular)
     
     # Take the conjugate explicitly here instead of negating
     # the previous expression to ensure that complex frequencies
