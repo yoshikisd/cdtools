@@ -19,7 +19,7 @@ dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
 
 #dataset.inspect()
 
-model = CDTools.models.Bragg2DPtycho.from_dataset(dataset,probe_support_radius=60)#propagate_probe=False)#, n_modes=8)
+model = CDTools.models.Bragg2DPtycho.from_dataset(dataset,probe_support_radius=60,correct_tilt=False)#propagate_probe=False)#, n_modes=8)
 model.to(device='cuda')
 dataset.get_as(device='cuda')
 

@@ -356,7 +356,7 @@ class Bragg2DPtycho(CDIModel):
             for j in range(translations.size()[0]):
                 if self.propagate_probe:
                     propagator = ggasp(pr.shape, self.probe_basis, self.wavelength,
-                                       t.Tensor([0,0,5*props[j]]),
+                                       t.Tensor([0,0,0*props[j]]),
                                        dtype=pr.dtype,device=pr.device, propagate_along_offset=True)
                     prop_pr = tools.propagators.near_field(pr, propagator)
 
