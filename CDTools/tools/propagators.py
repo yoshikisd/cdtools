@@ -338,16 +338,20 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     is designed to work on any wavefield defined on an array of
     parallelograms.
 
-    In addition, if propagate_along_offset is True, there is an assumed phase
-    ramp applied to the wavefield before propagation, defined such that a
-    feature with uniform phase will propagate along the direction of the 
-    defined offset vector. This will also remove the phase variation along
+
+    In addition, if the propagation_vector is set, there is an assumed
+    phase ramp  applied to the wavefield before propagation, defined such
+    that a feature with uniform phase will propagate along the direction of
+    the propagation vector. This will also remove the phase variation along
     the propagation direction, because it makes the most physical sense to
     regard this choice as removing the dominant phase variation in 3D, allowing
     for the generation of a smoothly varying wavefield over 3D volumes.
     This decision provides the best numerical stability and allows for the
     simple setup of light fields copropagating with the coordinate system.
-
+    
+    If the propagate_along_offset option is set to True, then the propagation
+    vector will be set equal to the offset vector. This overrides the
+    propagation_vector option
 
     Parameters
     ----------
