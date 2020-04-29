@@ -95,7 +95,11 @@ def test_pixel_to_translations():
                                                 surface_normal=surface_normal)
     assert t.allclose(translations, roundtrip)
 
-    
+
+
+def test_project_translations_to_sample():
+    # Needs to be tested
+    assert 0
 
 def test_ptycho_2D_round(random_probe, random_obj):
     # Test a stack of images

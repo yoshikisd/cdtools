@@ -2,10 +2,11 @@ from __future__ import division, print_function, absolute_import
 
 import torch as t
 from CDTools.models import CDIModel
-from CDTools.datasets import Ptycho_2D_Dataset
+from CDTools.datasets import Ptycho2DDataset
 from CDTools import tools
 from CDTools.tools import cmath
 from CDTools.tools import plotting as p
+from CDTools.tools.propagators import generate_generalized_angular_spectrum_propagator as ggasp
 from matplotlib import pyplot as plt
 from datetime import datetime
 import numpy as np
@@ -46,16 +47,24 @@ class Bragg2DPtycho(CDIModel):
     def __init__(self, wavelength, detector_geometry,
                  probe_basis, probe_guess, obj_guess,
                  detector_slice=None,
-                 surface_normal=np.array([0.,0.,1.]),
                  min_translation = t.Tensor([0,0]),
                  median_propagation = t.Tensor(data=[0]),
                  background = None, translation_offsets=None, mask=None,
                  weights = None, translation_scale = 1, saturation=None,
                  probe_support = None, obj_support=None, oversampling=1,
-                 propagate_probe=None, correct_tilt=None):
+                 propagate_probe=True, correct_tilt=True):
 
         
-        super(FancyPtycho,self).__init__()
+        # We need the detector geometry
+        # We need the probe basis (but in this case, we don't need the surface
+        # normal because it comes implied by the probe basis
+        # we do need the detector slice I suppose
+        # The min translation is also needed
+        # The median propagation should be needed as well
+        # translation_offsets can stay 2D for now
+        # propagate_probe and correct_tilt are important!
+        
+        super(Bragg2DPtycho,self).__init__()
         self.wavelength = t.Tensor([wavelength])
         self.detector_geometry = copy(detector_geometry)
         det_geo = self.detector_geometry
@@ -67,9 +76,15 @@ class Bragg2DPtycho(CDIModel):
             det_geo['corner'] = t.Tensor(det_geo['corner'])
 
         self.min_translation = t.Tensor(min_translation)
-
+        self.median_propagation = median_propagation
+        
         self.probe_basis = t.Tensor(probe_basis)
         self.detector_slice = detector_slice
+
+        # calculate the surface normal from the probe basis
+        surface_normal =  np.cross(np.array(probe_basis)[:,1],
+                           np.array(probe_basis)[:,0])
+        surface_normal /= np.linalg.norm(surface_normal)
         self.surface_normal = t.Tensor(surface_normal)
         
         self.saturation = saturation
@@ -85,6 +100,16 @@ class Bragg2DPtycho(CDIModel):
             self.probe_norm = 1 * t.max(tools.cmath.cabs(probe_guess[0].to(t.float32)))
         else:
             self.probe_norm = 1 * t.max(tools.cmath.cabs(probe_guess.to(t.float32)))         
+
+        # Not strictly necessary but otherwise it will return
+        # a probe with the stuff outside of the support unchanged after
+        # optimization
+        if probe_support is not None:
+            probe_guess = probe_guess * probe_support
+            # This seems dumb, but otherwise it winds up with a mixture
+            # of negative and positive zeros and it's super annoying when
+            # you look at the phase map
+            probe_guess[probe_guess == 0] = 0
             
         self.probe = t.nn.Parameter(probe_guess.to(t.float32)
                                     / self.probe_norm)
@@ -125,21 +150,27 @@ class Bragg2DPtycho(CDIModel):
 
         self.oversampling = oversampling
 
-        # Here we need to implement a simple condition to choose whether
-        # to propagate the probe or not
-        if not( propagate_probe is True or propagate_probe is False):
-            pass
-        else:
-            self.propagate_probe = propagate_probe
+        self.propagate_probe = propagate_probe
+        self.correct_tilt = correct_tilt
+        if correct_tilt:
+            # recall that here we always want the shape of the detector
+            # before it's cut down by the detector slice to match the
+            # physical detector region
+            det_shape = self.probe[0].shape[:-1]
 
-        if not(correct_tilt is True or correct_tilt is False):
-            pass
+            self.k_map, self.intensity_map = \
+                tools.propagators.generate_high_NA_k_intensity_map(
+                    self.probe_basis, self.detector_geometry['basis'],
+                    det_shape,
+                    self.detector_geometry['distance'],
+                    self.wavelength,dtype=t.float32)
         else:
-            self.correct_tilt = correct_tilt
+            self.k_map = None
+            self.intensity_map = None
         
         
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True, propagate_probe=True,correct_tilt=True):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -158,9 +189,9 @@ class Bragg2DPtycho(CDIModel):
         else:
             center = None
             
-        # Then, generate the probe geometry from the dataset
+        # Then, generate the exit wave geometry from the dataset
         ewg = tools.initializers.exit_wave_geometry
-        probe_basis, probe_shape, det_slice =  ewg(det_basis,
+        ew_basis, ew_shape, det_slice =  ewg(det_basis,
                                                    det_shape,
                                                    wavelength,
                                                    distance,
@@ -169,15 +200,14 @@ class Bragg2DPtycho(CDIModel):
                                                    opt_for_fft=False,
                                                    oversampling=oversampling)
 
-
+        # now we grab the sample surface normal
         if hasattr(dataset, 'sample_info') and \
            dataset.sample_info is not None and \
            'orientation' in dataset.sample_info:
             surface_normal = dataset.sample_info['orientation'][2]
         else:
             surface_normal = np.array([0.,0.,1.])
-
-
+            
         # If this information is supplied when the function is called,
         # then we override the information in the .cxi file
         if scattering_mode in {'t', 'transmission'}:
@@ -188,12 +218,42 @@ class Bragg2DPtycho(CDIModel):
             surface_normal = outgoing_dir + np.array([0.,0.,1.])
             surface_normal /= np.linalg.norm(outgoing_dir)
 
+        # and we use that to generate the probe basis
 
+        ew_normal = np.cross(np.array(ew_basis)[:,1],
+                           np.array(ew_basis)[:,0])
+        ew_normal /= np.linalg.norm(ew_normal)
+
+        # This is a bit of an odd way to do a projection but I think it's
+        # the most compact and reliable. We set up two matrix-vector equations
+        # to enforce the two conditions (on the plane normal to the surface
+        # normal and in the ew_normal direction from the original point
+
+        mat = np.vstack([np.eye(3) - np.outer(ew_normal,ew_normal),
+                         surface_normal])
+
+        # We know that this matrix multiplied by the final result must
+        # equal the input vector with a trailing 0, so we can do the
+        # projection with a pseudoinverse and removing the last column
+
+        projector = np.linalg.pinv(mat)[:,:3]
+        
+        
+        probe_basis = t.Tensor(np.dot(projector, ew_basis))
+        
+
+        # Now we need a much better way to handle the translations here
+        # than translations_to_pixel
+        
         # Next generate the object geometry from the probe geometry and
         # the translations
-        pix_translations = tools.interactions.translations_to_pixel(probe_basis, translations, surface_normal=surface_normal)
+        p2s = tools.interactions.project_translations_to_sample
+        pix_translations, propagations = p2s(probe_basis, translations)
 
-        obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=200)
+
+        obj_size, min_translation = tools.initializers.calc_object_setup(ew_shape, pix_translations, padding=200)
+
+        median_propagation = t.median(propagations)
 
         if hasattr(dataset, 'background') and dataset.background is not None:
             background = t.sqrt(dataset.background)
@@ -201,10 +261,14 @@ class Bragg2DPtycho(CDIModel):
             background = None
 
         # Finally, initialize the probe and  object using this information
+        # Because the grid we defined on the sample is projected from the
+        # detector conjugate space, we can pretend that the grid is just in
+        # that space and use the standard initializations anyway
+        
         if probe_size is None:
-            probe = tools.initializers.SHARP_style_probe(dataset, probe_shape, det_slice, propagation_distance=propagation_distance, oversampling=oversampling)
+            probe = tools.initializers.SHARP_style_probe(dataset, ew_shape, det_slice, propagation_distance=propagation_distance, oversampling=oversampling)
         else:
-            probe = tools.initializers.gaussian_probe(dataset, probe_basis, probe_shape, probe_size, propagation_distance=propagation_distance)
+            probe = tools.initializers.gaussian_probe(dataset, ew_basis, ew_shape, probe_size, propagation_distance=propagation_distance)
 
 
         # Now we initialize all the subdominant probe modes
@@ -244,42 +308,72 @@ class Bragg2DPtycho(CDIModel):
         else:
             obj_support = None
 
+
+        # Here we need to implement a simple condition to choose whether
+        # to propagate the probe or not
+        if not( propagate_probe is True or propagate_probe is False):
+            raise NotImplementedError('No auto option implemented yet')
+
+        if not(correct_tilt is True or correct_tilt is False):
+            raise NotImplementedError('No auto option implemented yet')
+
+            
         return cls(wavelength, det_geo, probe_basis, probe, obj,
                    detector_slice=det_slice,
-                   surface_normal=surface_normal,
                    min_translation=min_translation,
+                   median_propagation =median_propagation,
                    translation_offsets = translation_offsets,
                    weights=weights, mask=mask, background=background,
                    translation_scale=translation_scale,
                    saturation=saturation,
                    probe_support=probe_support,
                    obj_support=obj_support,
-                   oversampling=oversampling)
+                   oversampling=oversampling,
+                   propagate_probe=propagate_probe,
+                   correct_tilt=correct_tilt)
                    
     
     def interaction(self, index, translations):
-        pix_trans = tools.interactions.translations_to_pixel(self.probe_basis,
-                                                             translations,
-                                                             surface_normal=self.surface_normal)
+        pix_trans, props = tools.interactions.project_translations_to_sample(
+            self.probe_basis, translations)
+
         pix_trans -= self.min_translation
+        props -= self.median_propagation
 
         if self.translation_offsets is not None:
             pix_trans += self.translation_scale * self.translation_offsets[index]
+
+        single_translation = False
+        if translations.dim() == 1:
+            translations = translations[None,:]
+            single_translation = True
             
         all_exit_waves = []
         for i in range(self.probe.shape[0]):
             pr = self.probe[i] * self.probe_support
-            exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(pr,
-                                                           self.obj_support * self.obj,
-                                                           pix_trans,
-                                                           shift_probe=True)
-            exit_waves = exit_waves * self.probe_support[...,:,:]
+
+            exit_waves = []
+            for j in range(translations.size()[0]):
+                if self.propagate_probe:
+                    propagator = ggasp(pr.shape, self.probe_basis, self.wavelength,
+                                       t.Tensor([0,0,5*props[j]]),
+                                       dtype=pr.dtype,device=pr.device, propagate_along_offset=True)
+                    prop_pr = tools.propagators.near_field(pr, propagator)
+
+                else:
+                    prop_pr = pr
+                exit_waves.append(self.probe_norm *
+                                  tools.interactions.ptycho_2D_sinc(prop_pr,
+                                            self.obj_support * self.obj,
+                                            pix_trans[j],
+                                            shift_probe=True))
+            exit_waves = t.stack(exit_waves)
 
 
-            if exit_waves.dim() == 4:
+            if not single_translation:
                 exit_waves =  self.weights[index][:,None,None,None] * exit_waves
             else:
-                exit_waves =  self.weights[index] * exit_waves
+                exit_waves =  self.weights[index] * exit_waves[0,:,:,:]
                 
             all_exit_waves.append(exit_waves)
 
@@ -288,11 +382,18 @@ class Bragg2DPtycho(CDIModel):
     
         
     def forward_propagator(self, wavefields):
-        return tools.propagators.far_field(wavefields)
+        if self.correct_tilt:
+            return tools.propagators.high_NA_far_field(
+                wavefields,self.k_map,intensity_map=self.intensity_map)
+        else:
+            return tools.propagators.far_field(wavefields)
 
 
     def backward_propagator(self, wavefields):
-        return tools.propagators.inverse_far_field(wavefields)
+        if self.correct_tilt:
+            assert NotImplementedError('Backward propagator not defined with tilt correction')
+        else:
+            return tools.propagators.inverse_far_field(wavefields)
 
     
     def measurement(self, wavefields):
@@ -309,7 +410,7 @@ class Bragg2DPtycho(CDIModel):
 
     
     def to(self, *args, **kwargs):
-        super(FancyPtycho, self).to(*args, **kwargs)
+        super(Bragg2DPtycho, self).to(*args, **kwargs)
         self.wavelength = self.wavelength.to(*args,**kwargs)
         # move the detector geometry too
         det_geo = self.detector_geometry
@@ -323,6 +424,10 @@ class Bragg2DPtycho(CDIModel):
         if self.mask is not None:
             self.mask = self.mask.to(*args, **kwargs)
 
+        if self.k_map is not None:
+            self.k_map = self.k_map.to(*args,**kwargs)
+        if self.intensity_map is not None:
+            self.intensity_map = self.intensity_map.to(*args,**kwargs)
             
         self.min_translation = self.min_translation.to(*args,**kwargs)
         self.probe_basis = self.probe_basis.to(*args,**kwargs)
@@ -330,6 +435,7 @@ class Bragg2DPtycho(CDIModel):
         self.probe_support = self.probe_support.to(*args,**kwargs)
         self.obj_support = self.obj_support.to(*args,**kwargs)
         self.surface_normal = self.surface_normal.to(*args, **kwargs)
+
 
         
     def sim_to_dataset(self, args_list):

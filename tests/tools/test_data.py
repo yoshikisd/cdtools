@@ -100,7 +100,7 @@ def test_get_ptycho_translations(test_ptycho_cxis):
 
 def test_create_cxi(tmp_path):
     data.create_cxi(tmp_path / 'test_create.cxi')
-    with h5py.File(tmp_path / 'test_create.cxi') as f:
+    with h5py.File(tmp_path / 'test_create.cxi','r') as f:
         assert f['cxi_version'][()] == 160
         assert 'entry_1' in f
 
@@ -114,7 +114,7 @@ def test_add_entry_info(tmp_path):
     with data.create_cxi(tmp_path / 'test_add_entry_info.cxi') as f:
         data.add_entry_info(f, entry_info)
 
-    with h5py.File(tmp_path / 'test_add_entry_info.cxi') as f:
+    with h5py.File(tmp_path / 'test_add_entry_info.cxi','r') as f:
         read_entry_info = data.get_entry_info(f)
 
     for key in entry_info:
@@ -135,7 +135,7 @@ def test_add_sample_info(tmp_path):
     with data.create_cxi(tmp_path / 'test_add_sample_info.cxi') as f:
         data.add_sample_info(f, sample_info)
 
-    with h5py.File(tmp_path / 'test_add_sample_info.cxi') as f:
+    with h5py.File(tmp_path / 'test_add_sample_info.cxi','r') as f:
         read_sample_info = data.get_sample_info(f)    
 
     for key in sample_info:
@@ -154,7 +154,7 @@ def test_add_source(tmp_path):
     with data.create_cxi(tmp_path / 'test_add_source.cxi') as f:
         data.add_source(f, wavelength)
 
-    with h5py.File(tmp_path / 'test_add_source.cxi') as f:
+    with h5py.File(tmp_path / 'test_add_source.cxi','r') as f:
         # Check this directly since we want to make sure it saved
         # the wavelength and energy
         read_wavelength = f['entry_1/instrument_1/source_1/wavelength'][()]
@@ -173,7 +173,7 @@ def test_add_detector(tmp_path):
     with data.create_cxi(tmp_path / 'test_add_detector.cxi') as f:
         data.add_detector(f, distance, basis, corner=corner)
 
-    with h5py.File(tmp_path / 'test_add_detector.cxi') as f:
+    with h5py.File(tmp_path / 'test_add_detector.cxi','r') as f:
         # Check this directly since we want to make sure it saved
         # the pixel sizes
         d1 = f['entry_1/instrument_1/detector_1']
@@ -196,7 +196,7 @@ def test_add_mask(tmp_path):
     with data.create_cxi(tmp_path / 'test_add_mask.cxi') as f:
         data.add_mask(f, mask)
 
-    with h5py.File(tmp_path / 'test_add_mask.cxi') as f:
+    with h5py.File(tmp_path / 'test_add_mask.cxi','r') as f:
         read_mask = data.get_mask(f)
 
     assert np.all(mask == read_mask)
@@ -208,7 +208,7 @@ def test_add_dark(tmp_path):
     with data.create_cxi(tmp_path / 'test_add_dark.cxi') as f:
         data.add_dark(f, dark)
 
-    with h5py.File(tmp_path / 'test_add_dark.cxi') as f:
+    with h5py.File(tmp_path / 'test_add_dark.cxi','r') as f:
         read_dark = data.get_dark(f)
 
     print(dark.shape)
@@ -224,14 +224,13 @@ def test_add_data(tmp_path):
     with data.create_cxi(tmp_path / 'test_add_data.cxi') as f:
         data.add_data(f, fake_data, axes)
 
-    with h5py.File(tmp_path / 'test_add_data.cxi') as f:
+    with h5py.File(tmp_path / 'test_add_data.cxi','r') as f:
         # Check this directly since we want to make sure it saved
         # it in all the places it should have
         read_data_1 = np.array(f['entry_1/data_1/data'])
         read_data_2 = np.array(f['entry_1/instrument_1/detector_1/data'])
         read_axes = str(f['entry_1/instrument_1/detector_1/data'].attrs['axes'].decode())
     
-
     assert np.allclose(fake_data, read_data_1)
     assert np.allclose(fake_data, read_data_2)
     assert 'translation:y:x' == read_axes
@@ -242,7 +241,7 @@ def test_add_data(tmp_path):
     with data.create_cxi(tmp_path / 'test_add_data_torch.cxi') as f:
         data.add_data(f, fake_data)
 
-    with h5py.File(tmp_path / 'test_add_data_torch.cxi') as f:    
+    with h5py.File(tmp_path / 'test_add_data_torch.cxi','r') as f:    
         read_data, axes = data.get_data(f)
 
     assert np.allclose(fake_data.numpy(),read_data)
@@ -255,7 +254,7 @@ def test_add_ptycho_translations(tmp_path):
     with data.create_cxi(tmp_path / 'test_add_ptycho_translations.cxi') as f:
         data.add_ptycho_translations(f, translations)
     
-    with h5py.File(tmp_path / 'test_add_ptycho_translations.cxi') as f:
+    with h5py.File(tmp_path / 'test_add_ptycho_translations.cxi','r') as f:
         # Check this directly since we want to make sure it saved
         # it in all the places it should have
         read_translations_1 = np.array(f['entry_1/data_1/translation'])

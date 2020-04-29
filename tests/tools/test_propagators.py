@@ -42,7 +42,90 @@ def test_inverse_far_field(exit_waves_1):
     assert(np.allclose(exit_waves_1, propagators.inverse_far_field(far_field_np_result)))
 
 
+def test_generate_high_NA_k_intensity_map():
 
+    # We need to generate a plausible scenario. I will start
+    # by using the initializer to generate a reasonable exit wave geometry
+    # and detector pair
+    basis = t.Tensor([[0,-30e-6,0],
+                      [-20e-6,0,0]]).transpose(0,1)
+    shape = t.Size([478,573])
+    #shape = t.Size([3,5])
+    wavelength = 1e-9
+    distance = 1#6e-3
+    rs_basis, full_shape, det_slice = \
+        initializers.exit_wave_geometry(basis, shape, wavelength,
+                                        distance, opt_for_fft=False)
+
+    k_map, intensity_map = propagators.generate_high_NA_k_intensity_map(
+        rs_basis, basis, shape, distance, wavelength,
+        dtype=t.float32)
+
+    # generate a good test exit wave
+    i = (np.arange(478) - 240)
+    j = (np.arange(573) - 270)
+    Is,Js = np.meshgrid(i,j,indexing='ij')
+    wavefield = ((np.abs(Is) < 20) * (np.abs(Js) < 25)).astype(np.complex128)
+    t_wavefield = cmath.complex_to_torch(wavefield).to(dtype=t.float32)
+
+    high_NA_propagated = propagators.high_NA_far_field(
+        t_wavefield, k_map, intensity_map=intensity_map)
+    low_NA_propagated = propagators.far_field(t_wavefield)
+
+    low_NA = cmath.torch_to_complex(low_NA_propagated)
+    high_NA = cmath.torch_to_complex(high_NA_propagated)
+
+    # Checking first that for a low-NA propagation they give the same result
+    # 1e-4 tolerance seems to be reasonable in this comparison given my
+    # exploration with the code
+    #assert np.max(np.abs(high_NA-low_NA))/np.max(np.abs(low_NA)) < 1e-4
+
+    # Now I will explore some results with a tilted sample
+    #print(rs_basis)
+    #print(rs_basis_tilted)
+    distance = 0.01#6e-3
+    rs_basis, full_shape, det_slice = \
+        initializers.exit_wave_geometry(basis, shape, wavelength,
+                                        distance, opt_for_fft=False)
+    rs_basis_tilted = rs_basis.clone()
+    rs_basis_tilted[2,1] = rs_basis_tilted[0,1]
+
+    
+    k_map, intensity_map = propagators.generate_high_NA_k_intensity_map(
+        rs_basis_tilted, basis, shape, distance, wavelength,
+        dtype=t.float32)
+    
+    high_NA_propagated = propagators.high_NA_far_field(
+        t_wavefield, k_map, intensity_map=intensity_map)
+    low_NA_propagated = propagators.far_field(t_wavefield)
+
+    low_NA = cmath.torch_to_complex(low_NA_propagated)
+    high_NA = cmath.torch_to_complex(high_NA_propagated)
+    
+    #plt.close('all')
+    #plt.imshow(np.abs(low_NA)) 
+    #plt.figure()
+    #plt.imshow(np.abs(high_NA))
+    #plt.colorbar()
+    #plt.imshow(np.abs(wavefield))
+    #plt.show()
+
+
+    # Now I want to test that it doesn't crash for wavefields of various shapes
+    propagators.high_NA_far_field(t_wavefield.unsqueeze(0),
+                                  k_map, intensity_map=intensity_map)
+    propagators.high_NA_far_field(t_wavefield.unsqueeze(0).unsqueeze(0),
+                                  k_map, intensity_map=intensity_map)
+
+    # I believe this works, but I still would like to get a second method for
+    # simulating at least one diffraction pattern as an independent check
+    
+    assert 0
+    
+    
+
+    
+    
 def test_near_field():
 
     # The strategy is to compare the propagation of a gaussian beam to

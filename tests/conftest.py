@@ -34,7 +34,7 @@ def ptycho_cxi_1():
     """
 
     expected = {}
-    f = h5py.File('ptycho_cxi_1',driver='core',backing_store=False)
+    f = h5py.File('ptycho_cxi_1','w',driver='core',backing_store=False)
 
     # Start by defining the basic structure
     f.create_dataset('cxi_version', data=150)
@@ -153,7 +153,7 @@ def ptycho_cxi_2():
     """
 
     expected = {}
-    f = h5py.File('ptycho_cxi_2',driver='core',backing_store=False)
+    f = h5py.File('ptycho_cxi_2','w',driver='core',backing_store=False)
 
     # Start by defining the basic structure
     f.create_dataset('cxi_version', data=150)
@@ -234,7 +234,7 @@ def ptycho_cxi_3():
     """
 
     expected = {}
-    f = h5py.File('ptycho_cxi_3',driver='core',backing_store=False)
+    f = h5py.File('ptycho_cxi_3','w',driver='core',backing_store=False)
 
     # Start by defining the basic structure
     f.create_dataset('cxi_version', data=150)

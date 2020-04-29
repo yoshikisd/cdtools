@@ -13,7 +13,9 @@ import numpy as np
 
 
 __all__ = ['translations_to_pixel', 'pixel_to_translations',
-           'ptycho_2D_round','ptycho_2D_linear','ptycho_2D_sinc']
+           'project_translations_to_sample',
+           'ptycho_2D_round','ptycho_2D_linear','ptycho_2D_sinc',
+           'ptycho_2D_propagate']
 
 
 
@@ -127,7 +129,92 @@ def pixel_to_translations(basis, pixel_translations, surface_normal=t.Tensor([0,
     else:
         return translations
 
+
+
+def project_translations_to_sample(sample_basis, translations):
+    """Takes real space translations and outputs them in pixels in a sample basis
     
+    This projection function is designed for the Bragg2DPtycho class. More
+    broadly, it works to take a set of translations in the lab frame and
+    convert each one into two values. First, an (i,j) value in pixels
+    describing the location of the probe's intersection with the sample
+    plane, assuming the basis found in sample_basis is used. Second, an
+    amount that the probe must be propagated along the z-axis to reach
+    that location on the sample plane.
+    
+    The assumed geometry is incoming radiation with a wavevector parallel
+    to the +z axis, [0,0,1].
+
+    Parameters
+    ----------
+    sample_basis : torch.Tensor
+        The real space basis the wavefields are defined in
+    translations : torch.Tensor 
+        A Jx3 stack of real-space translations, or a single translation
+
+    Returns
+    -------
+    pixel_translations : torch.Tensor
+        A Jx2 stack of translations in internal (i,j) pixel-space, or a single translation
+    propagations : torch.Tensor
+        A length-J vector of propagation distances, in meters
+    """
+
+    # Must do this all in pytorch unfortunately
+    # First we calculate the surface normal for the projection onto the sample
+    surface_normal =  t.cross(sample_basis[:,1],sample_basis[:,0])
+    surface_normal /= t.norm(surface_normal)
+
+
+    # Then we calculate a matrix which can do the projection
+    
+    propagation_dir = t.Tensor(np.array([0,0,1])).to(
+        device=surface_normal.device,
+        dtype=surface_normal.dtype)
+
+    I = t.eye(3).to(
+        device=surface_normal.device,
+        dtype=surface_normal.dtype)
+    
+    # Here we're setting up a matrix-vector equation mat*answer=input
+    mat = t.cat((I - t.ger(propagation_dir,propagation_dir),
+                 surface_normal.unsqueeze(0)))
+    
+    # And we invert the matrix to do the projection
+    projector = t.pinverse(mat)[:,:3].to(device=translations.device,
+                                         dtype=translations.dtype)
+
+    # Finally, we need to get the result in the right basis, so this will
+    # do that conversion for us
+    basis_vectors_inv = t.pinverse(sample_basis).to(device=translations.device,
+                                                    dtype=translations.dtype)
+
+    # Same for the propagation direction to extract how far it must propagate
+    propagation_dir_inv = propagation_dir.unsqueeze(0).to(
+        device=translations.device,
+        dtype=translations.dtype)
+
+    
+    sample_projection = t.mm(basis_vectors_inv, projector).t()
+    prop_projection = t.mm(propagation_dir_inv, projector).t()
+
+
+    single_translation = False
+    if len(translations.shape) == 1:
+        translations = translations[None,:]
+        single_translation = True
+
+    pixel_translations = t.mm(translations, sample_projection)
+    propagations = t.mm(translations, prop_projection)
+    
+    if single_translation:
+        return pixel_translations[0], propagations[0]
+    else:
+        return pixel_translations, propagations
+    
+
+    
+
 def ptycho_2D_round(probe, obj, translations):
     """Returns a stack of exit waves without accounting for subpixel shifts
 
@@ -334,3 +421,6 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10):
         return exit_waves[0]
     else:
         return t.stack(exit_waves)
+
+
+
