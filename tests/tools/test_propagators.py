@@ -217,7 +217,6 @@ def test_generalized_near_field():
     wavelength = 3e-9 #nm
     sigma = 20e-9 #nm
     z = 1000e-9 #nm
-    propagation_vector = np.array([0,0,z]) 
 
     k = 2 * np.pi / wavelength
     w0 = np.sqrt(2)*sigma
@@ -244,6 +243,8 @@ def test_generalized_near_field():
         return E
     
 
+    # We make some rotation matrices to test
+    
     # This tests the straight ahead case
     I = np.eye(3)
 
@@ -268,40 +269,78 @@ def test_generalized_near_field():
     
     # This tests a shearing and a rotation together
     Rall = np.matmul(Rboth,Rshear)
+
+    # And we make some propagation vectors to test:
+
+    # This is along the z direction
+    z_dir = np.array([0,0,1])
+
+    # This checks that it's not sensitive to the magnitude
+    z_dir_large = np.array([0,0,10])
+
+    # And finally some offset vectors
+
+    # This checks straight ahead
+    z_offset = np.array([0,0,z])
     
-    rot_mats = [I,Ry, Rboth, Rshear, Rboth]
-    purposes = ['standard','y-rot','both-rot','shear','shear-rot']
+    # This checks with an offset in x and y
+    shear_offset = np.array([0.1*z,-0.03*z,z])
     
-    for purpose,rot_mat in zip(purposes,rot_mats):
+    
+    rot_mats = [I,I,I,Rboth, Rboth,Rboth, Rall, Rall, Rall]
+    offset_vecs = [z_offset]*8 + [shear_offset]
+    propagation_vecs = ['perp','offset',z_dir,
+                        'perp','offset',z_dir_large,
+                        'perp','offset',z_dir_large]
+    purposes = ['standard']*3 + ['both-rot']*3 + ['shear-rot']*3
+    
+    for purpose,rot_mat,offset_vec, propagation_vec \
+        in zip(purposes,rot_mats,offset_vecs,propagation_vecs):
+        
         print('Testing', purpose)
         Xs,Ys,Zs_0 = np.tensordot(rot_mat,Positions,axes=1)
         new_basis = np.dot(rot_mat, basis)
-        Zs_prop = Zs_0 + z
+        Xs_prop, Ys_prop, Zs_prop = np.stack([Xs,Ys,Zs_0]) \
+            + offset_vec[:,None,None]
         
-        # Check that it works both with the explicit and implicit phase ramps
-        for prop_oo in [False, True]:
-            print('Propagate Along Offset =',prop_oo)
-
-            E0 = get_E(Xs,Ys,Zs_0, correct=prop_oo)
-            Ez = get_E(Xs,Ys,Zs_prop, correct=prop_oo)
-
+        print('Propagate Along',propagation_vec)
+        
+        if str(propagation_vec) == 'perp':
+            E0 = get_E(Xs,Ys,Zs_0, correct=False)
+            Ez = get_E(Xs_prop,Ys_prop,Zs_prop, correct=False)
             asp = propagators.generate_generalized_angular_spectrum_propagator(
-                E0.shape,new_basis,wavelength,propagation_vector,
-                dtype=t.float64, propagate_along_offset=prop_oo)
+                E0.shape,new_basis,wavelength,offset_vec,dtype=t.float64)
+        elif str(propagation_vec) == 'offset':
+            E0 = get_E(Xs,Ys,Zs_0, correct=True)
+            Ez = get_E(Xs_prop,Ys_prop,Zs_prop, correct=True)
+            asp = propagators.generate_generalized_angular_spectrum_propagator(
+                E0.shape,new_basis,wavelength,offset_vec,
+                dtype=t.float64, propagate_along_offset=True)
+        else:
+            E0 = get_E(Xs,Ys,Zs_0, correct=True)
+            Ez = get_E(Xs_prop,Ys_prop,Zs_prop, correct=True)
+            asp = propagators.generate_generalized_angular_spectrum_propagator(
+                    E0.shape,new_basis,wavelength,offset_vec,
+                    dtype=t.float64, propagation_vector=propagation_vec)
 
+        Ez_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
+        Ez_t = cmath.torch_to_complex(Ez_t)
 
-            Ez_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
-            Ez_t = cmath.torch_to_complex(Ez_t)
-
-            # Check for at least 10^-3 relative accuracy in this scenario
-            assert np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez))
+        # Check for at least 10^-3 relative accuracy in this scenario
+        #if not np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez)):
+        #    plt.close('all')
+        #    plt.imshow(np.abs(Ez))
+        #    plt.figure()
+        #    plt.imshow(np.abs(Ez_t))
+        #    plt.show()
+        assert np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez))
+        
             
-            
-            Em0_t = propagators.inverse_near_field(cmath.complex_to_torch(Ez),asp)
-            Em0_t = cmath.torch_to_complex(Em0_t)    
-
-            # Again, 10^-3 is about all the accuracy we can expect
-            assert np.max(np.abs(E0-Em0_t)) < 1e-3 * np.max(np.abs(E0))
+        Em0_t = propagators.inverse_near_field(cmath.complex_to_torch(Ez),asp)
+        Em0_t = cmath.torch_to_complex(Em0_t)    
+        
+        # Again, 10^-3 is about all the accuracy we can expect
+        assert np.max(np.abs(E0-Em0_t)) < 1e-3 * np.max(np.abs(E0))
             
         print('Test Successful')
 

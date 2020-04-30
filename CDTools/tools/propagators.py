@@ -320,7 +320,7 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     return propagator.to(*args, **kwargs)
 
 
-def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, offset_vector, *args, propagation_vector=None, propagate_along_offset=True, **kwargs):
+def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, offset_vector, *args, propagation_vector=None, propagate_along_offset=False, **kwargs):
     """Generates an angular-spectrum based near-field propagator from experimental quantities
 
     This function generates an angular-spectrum based near field
@@ -440,6 +440,7 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
 
     # Only implement the shift if the flag is set to True
     if propagation_vector is not None:
+        propagation_vector = propagation_vector / np.linalg.norm(propagation_vector)
         prop_perpendicular = np.dot(perpendicular_dir, propagation_vector)
         prop_parallel = propagation_vector - perpendicular_dir \
             * prop_perpendicular
@@ -450,7 +451,7 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
             # a special case
             k_offset = np.array([0,0,0]) 
         else:  
-            k_offset = prop_parallel * k0 / np.linalg.norm(propagation_vector)
+            k_offset = prop_parallel * k0 
 
         # There apparently is a sign correction that I need to apply
         sign_correction = np.sign(np.dot(perpendicular_dir,propagation_vector))
@@ -459,10 +460,11 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
 
         # we also need to remove the z-dependence on the phase
         # This time, though, the z-dependence actually has to do with
-        # the oput of plane component of k at the central offset. Normally
+        # the out of plane component of k at the central offset. Normally
         # this is 0, so the z-component is just k0, but not in this case
+        # I need to understand this better I think
         phase_mask *= np.exp(-1j * np.sqrt(k0**2 - np.linalg.norm(k_offset)**2)
-                             * prop_perpendicular)
+                             * offset_perpendicular)
     
     # Redefine this as complex so the square root properly gives
     # k>k0 components imaginary frequencies    
@@ -473,10 +475,6 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
                         * offset_perpendicular)
     propagator *= phase_mask
     
-    # This removes the z-dependence on the phase:
-    #if propagate_along_offset:
-    #    print(offset_perpendicular)
-    #    propagator *= np.exp(-1j * k0 * offset_perpendicular)
     
     # Take the conjugate explicitly here instead of negating
     # the previous expression to ensure that complex frequencies
