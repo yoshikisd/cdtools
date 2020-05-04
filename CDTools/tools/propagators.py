@@ -306,9 +306,13 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     # Define this as complex so the square root properly gives
     # k>k0 components imaginary frequencies    
     k0 = np.complex128((2*np.pi/wavelength))
-    
-    propagator = np.exp(1j*np.sqrt(k0**2 - Ki**2 - Kj**2) * z)
 
+    # Properly accuount for evanescent waves
+    if z >=0:
+        propagator = np.exp(1j*np.sqrt(k0**2 - Ki**2 - Kj**2) * z)
+    else:
+        propagator = np.exp(1j*np.conj(np.sqrt(k0**2 - Ki**2 - Kj**2)) * z)
+        
     if remove_z_phase:
         propagator *= np.exp(-1j * k0 * z)
 
@@ -352,6 +356,35 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     If the propagate_along_offset option is set to True, then the propagation
     vector will be set equal to the offset vector. This overrides the
     propagation_vector option
+
+    Note that, unlike in the case of the simple angular spectrum propagator,
+    the direction of "forward propagation" is defined by the offset vector.
+    Therefore, in the simple case of a perpendicular offset, there will be
+    no difference between using an offset vector or the negative of the 
+    offset vector. This is because, for the light propagation problem to
+    be well posed, the assumption must be made that light only passes through
+    the plane of the known wavefield in one direction. Mathematically, this
+    corresponds to a choice of uniform phase objects either accumulating
+    positive or negative phase. In the simple propagation case, there is
+    no ambiguity introduced by always choosing the light field to propagate
+    along the positive z direction. In the general case, there is no equivalent
+    obvious choice - thus, the light is always assumed to pass through the
+    initial plane travelling in the direction of the final plane.
+
+    Practically, if one wants to simulate inverse propagation, there are then
+    two possible approaches. First, one can use the inverse_near_field 
+    function, which simulates the inverse propagation problem and therefore
+    will naturally simulate propagation in the opposite direction. Second,
+    one can explicitly include a propagation_vector argument, which overrides
+    the offset vector in defining the direction in which light passes through
+    the input plane. However, in this case, the resulting light field will have
+    the overall phase accumulation due to propagation along the propagation
+    vector removed, which may not be the intended behavior. However, this is
+    not recommended, as inverse propagation will tend to magnify evanescent
+    waves - it is therefore preferable (unless there is a specific need to
+    account for evanescent waves properly) to use the inverse near field
+    propagator
+    
 
     Parameters
     ----------
@@ -420,7 +453,6 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
 
     # This may have a sign error - must be checked
     phase_mask = np.exp(1j * np.tensordot(offset_vector,K_xyz,axes=1))
-
     
     # Next, we apply a shift to the k-space vectors which sets up
     # propagation such that a uniform phase object will propagate along the
@@ -434,13 +466,15 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     perpendicular_dir = np.cross(basis[:,1],basis[:,0])
     perpendicular_dir /= np.linalg.norm(perpendicular_dir)
     offset_perpendicular = np.dot(perpendicular_dir, offset_vector)
-        
+
+
     k0 = 2*np.pi/wavelength
 
+    sign_correction = 1
 
     # Only implement the shift if the flag is set to True
     if propagation_vector is not None:
-        propagation_vector = propagation_vector / np.linalg.norm(propagation_vector)
+        
         prop_perpendicular = np.dot(perpendicular_dir, propagation_vector)
         prop_parallel = propagation_vector - perpendicular_dir \
             * prop_perpendicular
@@ -451,28 +485,39 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
             # a special case
             k_offset = np.array([0,0,0]) 
         else:  
-            k_offset = prop_parallel * k0 
+            k_offset = prop_parallel * k0 / np.linalg.norm(propagation_vector)
+
+        K_xyz = K_xyz + k_offset[:,None,None] 
 
         # There apparently is a sign correction that I need to apply
-        sign_correction = np.sign(np.dot(perpendicular_dir,propagation_vector))
+        #sign_correction = np.sign(np.dot(perpendicular_dir,propagation_vector))
+        sign_correction = np.sign(np.dot(offset_vector,propagation_vector))
     
-        K_xyz = K_xyz + k_offset[:,None,None] * sign_correction
 
         # we also need to remove the z-dependence on the phase
         # This time, though, the z-dependence actually has to do with
         # the out of plane component of k at the central offset. Normally
         # this is 0, so the z-component is just k0, but not in this case
-        # I need to understand this better I think
+        # We only need one case here, unlike with the propagator, because
+        # k_offset will always be less than k0
         phase_mask *= np.exp(-1j * np.sqrt(k0**2 - np.linalg.norm(k_offset)**2)
-                             * offset_perpendicular)
+                             * sign_correction
+                             * np.abs(offset_perpendicular))
+            
     
     # Redefine this as complex so the square root properly gives
     # k>k0 components imaginary frequencies    
     k0 = np.complex128(k0)
-
+    
     # Finally, generate the propagator!
-    propagator = np.exp(1j*np.sqrt(k0**2 - np.linalg.norm(K_xyz,axis=0)**2)
-                        * offset_perpendicular)
+    # Must have cases to ensure that evanescent waves decay instead of grow
+    if sign_correction > 0:
+        propagator = np.exp(1j*np.sqrt(k0**2 - np.linalg.norm(K_xyz,axis=0)**2)
+                            * sign_correction * np.abs(offset_perpendicular))
+    else:
+        propagator = np.exp(-1j * np.conj(np.sqrt(k0**2 -
+                                        np.linalg.norm(K_xyz,axis=0)**2))
+                            * np.abs(offset_perpendicular))
     propagator *= phase_mask
     
     
@@ -519,8 +564,20 @@ def inverse_near_field(wavefront, angular_spectrum_propagator):
     using the supplied angular spectrum propagator, which is a premade
     phase mask.
 
-    It propagates the wave using the conjugate of the supplied phase mask,
-    which corresponds to the inverse propagation problem.
+    It propagates the wave using the complex conjugate of the supplied
+    phase mask. This corresponds to propagation backward across the original
+    propagation region - however, the treatment of evanescent waves is such
+    that evanescent waves will decay both during the forward propagation and
+    inverse propagation. This is done for reasons of numerical stability,
+    as the choice to magnify evanescent waves during the inverse propagation
+    process will quickly lead to magnification of any small amount of noise at 
+    frequencies larger than k_0, and in most typical situations will even
+    lead to overflow of the floating point range. If evanescent waves need
+    to be treated appropriately for any reason, it is recommended to use the
+    "magnify_evanescent" option in the appropriate helper function used to
+    generate the propagation phase mask. In this case, evanescent waves will
+    be magnified both when used with the forward and inverse near field
+    functions
 
 
     Parameters

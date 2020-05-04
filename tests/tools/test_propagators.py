@@ -178,7 +178,7 @@ def test_near_field():
     asp = propagators.generate_angular_spectrum_propagator(
         E0.shape,(1.5e-9,1e-9),wavelength,z,remove_z_phase=True,
         dtype=t.float64)
-
+    
     
     Ez_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
     Ez_t = cmath.torch_to_complex(Ez_t)
@@ -266,9 +266,21 @@ def test_generalized_near_field():
     Rshear = np.array([[1,shear,0],
                        [0,1,0],
                        [0,0,1]])
+
+    
+    # This tests an inversion of the axes
+    Rinv = np.array([[-1,0,0],
+                     [0,-1,0],
+                     [0,0,-1]])
+
+    # This tests a reflection about the y-z plane
+    Rrefl = np.array([[-1,0,0],
+                      [0,1,0],
+                      [0,0,-1]])
     
     # This tests a shearing and a rotation together
-    Rall = np.matmul(Rboth,Rshear)
+    Rall = np.matmul(Rrefl,np.matmul(Rboth,Rshear))
+
 
     # And we make some propagation vectors to test:
 
@@ -277,22 +289,27 @@ def test_generalized_near_field():
 
     # This checks that it's not sensitive to the magnitude
     z_dir_large = np.array([0,0,10])
-
+    
     # And finally some offset vectors
 
     # This checks straight ahead
     z_offset = np.array([0,0,z])
+
     
     # This checks with an offset in x and y
     shear_offset = np.array([0.1*z,-0.03*z,z])
+
+    # This checks with an offset in x and y, with negative z
+    shear_back_offset = np.array([0.1*z,-0.03*z,-z])
+
     
-    
-    rot_mats = [I,I,I,Rboth, Rboth,Rboth, Rall, Rall, Rall]
-    offset_vecs = [z_offset]*8 + [shear_offset]
+    rot_mats = [Rrefl,I,Rinv, Rboth, Rboth,Rboth, Rall, Rall, Rall, I, Rall]
+    offset_vecs = [z_offset]*8 + [shear_offset] + [shear_back_offset]*2
     propagation_vecs = ['perp','offset',z_dir,
                         'perp','offset',z_dir_large,
-                        'perp','offset',z_dir_large]
-    purposes = ['standard']*3 + ['both-rot']*3 + ['shear-rot']*3
+                        'perp','offset',z_dir_large,
+                        z_dir, z_dir_large]
+    purposes = ['standard']*3 + ['both-rot']*3 + ['shear-rot']*3 + ['backward']*2
     
     for purpose,rot_mat,offset_vec, propagation_vec \
         in zip(purposes,rot_mats,offset_vecs,propagation_vecs):
@@ -325,14 +342,14 @@ def test_generalized_near_field():
 
         Ez_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
         Ez_t = cmath.torch_to_complex(Ez_t)
-
         # Check for at least 10^-3 relative accuracy in this scenario
-        #if not np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez)):
-        #    plt.close('all')
-        #    plt.imshow(np.abs(Ez))
-        #    plt.figure()
-        #    plt.imshow(np.abs(Ez_t))
-        #    plt.show()
+        if not np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez)):
+            plt.close('all')
+            plt.imshow(np.angle(Ez))
+            plt.figure()
+            plt.imshow(np.angle(Ez_t))
+            plt.show()
+            
         assert np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez))
         
             

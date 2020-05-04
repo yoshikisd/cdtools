@@ -167,6 +167,8 @@ class Bragg2DPtycho(CDIModel):
         else:
             self.k_map = None
             self.intensity_map = None
+
+        self.prop_dir = t.Tensor([0,0,1]).to(dtype=t.float32)
         
         
     @classmethod
@@ -356,7 +358,8 @@ class Bragg2DPtycho(CDIModel):
             for j in range(translations.size()[0]):
                 if self.propagate_probe:
                     propagator = ggasp(pr.shape, self.probe_basis, self.wavelength,
-                                       t.Tensor([0,0,0*props[j]]),
+                                       t.Tensor([0,0,props[j]]),
+                                       propagation_vector=self.prop_dir,
                                        dtype=pr.dtype,device=pr.device, propagate_along_offset=True)
                     prop_pr = tools.propagators.near_field(pr, propagator)
 
@@ -435,6 +438,7 @@ class Bragg2DPtycho(CDIModel):
         self.probe_support = self.probe_support.to(*args,**kwargs)
         self.obj_support = self.obj_support.to(*args,**kwargs)
         self.surface_normal = self.surface_normal.to(*args, **kwargs)
+        self.prop_dir = self.prop_dir.to(*args, **kwargs)
 
 
         
