@@ -452,7 +452,7 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     # input plane.
 
     # This may have a sign error - must be checked
-    phase_mask = np.exp(1j * np.tensordot(offset_vector,K_xyz,axes=1))
+    phase_mask = np.exp(-1j * np.tensordot(offset_vector,K_xyz,axes=1))
     
     # Next, we apply a shift to the k-space vectors which sets up
     # propagation such that a uniform phase object will propagate along the
@@ -474,7 +474,7 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
 
     # Only implement the shift if the flag is set to True
     if propagation_vector is not None:
-        
+            
         prop_perpendicular = np.dot(perpendicular_dir, propagation_vector)
         prop_parallel = propagation_vector - perpendicular_dir \
             * prop_perpendicular
@@ -487,12 +487,11 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
         else:  
             k_offset = prop_parallel * k0 / np.linalg.norm(propagation_vector)
 
-        K_xyz = K_xyz + k_offset[:,None,None] 
+        K_xyz = K_xyz - k_offset[:,None,None] 
 
         # There apparently is a sign correction that I need to apply
         #sign_correction = np.sign(np.dot(perpendicular_dir,propagation_vector))
         sign_correction = np.sign(np.dot(offset_vector,propagation_vector))
-    
 
         # we also need to remove the z-dependence on the phase
         # This time, though, the z-dependence actually has to do with

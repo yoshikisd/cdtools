@@ -9,6 +9,7 @@ import torch as t
 import pytest
 import scipy.misc
 from scipy.fftpack import fftshift, ifftshift
+from scipy import stats
 from matplotlib import pyplot as plt
 
 
@@ -206,10 +207,13 @@ def test_generalized_near_field():
     # explicitly included
 
     basis= np.array([[0,-1.5e-9],[-1e-9,0],[0,0]])
-    x = (np.arange(901) - 450) * 1.5e-9
-    y = (np.arange(1200) - 600) * 1e-9
-    Xs_0,Ys_0 = np.meshgrid(x,y)
-    Zs_0 = np.zeros(Xs_0.shape)
+    i_vec,j_vec = np.arange(901) - 450 ,np.arange(1200)-600
+    Is, Js = np.meshgrid(i_vec,j_vec,indexing='ij')
+    Xs_0,Ys_0,Zs_0 = np.tensordot(basis,np.stack([Is,Js]),axes=1)
+    #x = (np.arange(901) - 450) * 1.5e-9
+    #y = (np.arange(1200) - 600) * 1e-9
+    #Xs_0,Ys_0 = np.meshgrid(x,y)
+    #Zs_0 = np.zeros(Xs_0.shape)
 
     Positions = np.stack([Xs_0,Ys_0,Zs_0])
     
@@ -311,6 +315,14 @@ def test_generalized_near_field():
                         z_dir, z_dir_large]
     purposes = ['standard']*3 + ['both-rot']*3 + ['shear-rot']*3 + ['backward']*2
     
+    #rot_mats = [Ry.transpose()]
+    #offset = np.cross(np.dot(Ry.transpose(),basis)[:,0],
+    #                  np.dot(Ry.transpose(),basis)[:,1])
+    #offset /= np.linalg.norm(offset) / 3e-6
+    #offset_vecs = [-offset]#[shear_offset]
+    #propagation_vecs = [z_dir]
+    #purposes=['meh']
+    
     for purpose,rot_mat,offset_vec, propagation_vec \
         in zip(purposes,rot_mats,offset_vecs,propagation_vecs):
         
@@ -319,7 +331,7 @@ def test_generalized_near_field():
         new_basis = np.dot(rot_mat, basis)
         Xs_prop, Ys_prop, Zs_prop = np.stack([Xs,Ys,Zs_0]) \
             + offset_vec[:,None,None]
-        
+
         print('Propagate Along',propagation_vec)
         
         if str(propagation_vec) == 'perp':
@@ -344,10 +356,13 @@ def test_generalized_near_field():
         Ez_t = cmath.torch_to_complex(Ez_t)
         # Check for at least 10^-3 relative accuracy in this scenario
         if not np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez)):
+        #if True:
             plt.close('all')
+            plt.imshow(np.angle(E0))
+            plt.figure()
             plt.imshow(np.angle(Ez))
             plt.figure()
-            plt.imshow(np.angle(Ez_t))
+            plt.imshow(np.abs(Ez-Ez_t)/np.max(np.abs(Ez)))
             plt.show()
             
         assert np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez))
@@ -361,7 +376,35 @@ def test_generalized_near_field():
             
         print('Test Successful')
 
+    # One final test, to see if any of a few arbitrary rotations will
+    # change the predicted propagation if everything else is kept
+    # constant
+    Rrands = [stats.ortho_group.rvs(3) for i in range(3)]
+    Xs,Ys,Zs_0 = np.tensordot(Rboth,Positions,axes=1)
+    new_basis = np.dot(rot_mat, basis)
+    offset_vec = shear_back_offset
+    propagation_vec = z_dir
+    
+    E0 = get_E(Xs,Ys,Zs_0, correct=True)
+    asp = propagators.generate_generalized_angular_spectrum_propagator(
+                    E0.shape, new_basis, wavelength,offset_vec,
+                    dtype=t.float64, propagation_vector=propagation_vec)
+    Ez_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
+    Ez_t = cmath.torch_to_complex(Ez_t)
+        
 
+    for Rrand in Rrands:
+        Xs,Ys,Zs_0 = np.tensordot(Rrand, np.tensordot(Rboth,Positions,axes=1),axes=1)
+        rot_offset = np.dot(Rrand, offset_vec)
+        rot_basis = np.dot(Rrand, new_basis)
+        rot_prop = np.dot(Rrand, propagation_vec)
+        asp = propagators.generate_generalized_angular_spectrum_propagator(
+                    E0.shape, rot_basis, wavelength, rot_offset,
+                    dtype=t.float64, propagation_vector=rot_prop)
+        Ez_rot_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
+        Ez_rot_t = cmath.torch_to_complex(Ez_rot_t)       
+        assert np.max(np.abs(Ez_t-Ez_rot_t)) < 1e-3 * np.max(np.abs(Ez_t))
+        
 
 def test_inverse_near_field():
     
