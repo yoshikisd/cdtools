@@ -52,7 +52,7 @@ from matplotlib.widgets import Slider
 from matplotlib import ticker
 import numpy as np
 
-__all__ = ['CDIModel', 'SimplePtycho', 'FancyPtycho', 'Bragg2DPtycho']
+__all__ = ['CDIModel', 'SimplePtycho', 'FancyPtycho', 'Bragg2DPtycho', 'SMatrixPtycho']
 
 
 class CDIModel(t.nn.Module):
@@ -349,6 +349,7 @@ class CDIModel(t.nn.Module):
                         plt.title(name)
                     except (IndexError, KeyError, AttributeError) as e:
                         pass
+
             except (IndexError, KeyError, AttributeError) as e:
                 pass
 
@@ -471,3 +472,5 @@ from CDTools.models.simple_ptycho import SimplePtycho
 from CDTools.models.fancy_ptycho import FancyPtycho
 from CDTools.models.pinhole_plane_ptycho import PinholePlanePtycho
 from CDTools.models.bragg_2d_ptycho import Bragg2DPtycho
+from CDTools.models.s_matrix_ptycho import SMatrixPtycho
+from CDTools.models.multislice_2d_ptycho import Multislice2DPtycho

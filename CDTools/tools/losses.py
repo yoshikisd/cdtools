@@ -100,7 +100,7 @@ def intensity_mse(intensities, sim_intensities, mask=None):
 
 
     
-def poisson_nll(intensities, sim_intensities, mask=None):
+def poisson_nll(intensities, sim_intensities, mask=None, eps=1e-4):
     """ Returns the Poisson negative log likelihood for a simulated dataset's intensities
 
     Calculates the overall Poisson maximum likelihood metric using
@@ -133,12 +133,12 @@ def poisson_nll(intensities, sim_intensities, mask=None):
 
     """
     if mask is None:
-        return t.sum(sim_intensities -
-                     intensities * t.log(sim_intensities)) \
+        return t.sum(sim_intensities+eps -
+                     intensities * t.log(sim_intensities+eps)) \
                      / intensities.view(-1).shape[0]
     
     else:
         masked_intensities = intensities.masked_select(mask)
         masked_sims = sim_intensities.masked_select(mask)
         return t.sum(masked_sims - masked_intensities *
-                     t.log(masked_sims)) / masked_intensities.shape[0]
+                     t.log(masked_sims+eps)) / masked_intensities.shape[0]

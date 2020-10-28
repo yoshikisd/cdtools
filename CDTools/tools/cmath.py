@@ -304,3 +304,24 @@ def expi(x):
 
     """
     return t.stack((t.cos(x),t.sin(x)),dim=-1)
+
+
+def cexpi(z):
+    """Returns a complex-format tensor for exp(i* (z))
+    
+    Expects the input to be in the form of a complex-valued tensor
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        An array to be exponentiated
+    
+    Returns
+    -------
+    torch.Tensor
+        A complex-format tensor
+
+    """
+    real = t.cos(z[...,0]) * t.exp(-z[...,1])
+    imag = t.sin(z[...,0]) * t.exp(-z[...,1])
+    return t.stack((real, imag),dim=-1)

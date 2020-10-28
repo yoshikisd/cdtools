@@ -423,4 +423,97 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10):
         return t.stack(exit_waves)
 
 
+def ptycho_2D_sinc_s_matrix(probe, s_matrix, translations, shift_probe=True, padding=10):
+    """Returns a stack of exit waves accounting for subpixel shifts
+ 
+    This function returns a collection of exit waves, with the first
+    dimension as the translation index and the final dimensions
+    corresponding to the detector. The exit waves are calculated by
+    shifting the probe with each translation in turn, using sinc
+    interpolation (done via multiplication with a complex exponential
+    in Fourier space)
+
+    If shift_probe is True, it applies the subpixel shift to the probe,
+    otherwise the subpixel shift is applied to the object
+
+    This needs to be edited to use a slightly different meaning of the s-wave
+    format. Currently, each pixel in the latter two dimensions index a location
+    on the input wavefield, and the first two indexes index differences from
+    that pixel. It is easier to interpret the resulting matrix though if the
+    latter two indices index locations in the output plane.
+
+    Parameters
+    ----------
+    probe : torch.Tensor
+        An MxL probe function for the exit waves
+    s_matrix : torch.Tensor
+        The 4D S-Matrix tensor (2B+1x2B+1xObject Shape) to be probed
+    translations : torch.Tensor
+        The Nx2 array of translations to simulate
+    shift_probe : bool
+        Default True, Whether to subpixel shift the probe or object
+    padding : int
+         Default 10, if shifting the object, the padding to apply to the object to avoid circular shift effects
+
+    Returns
+    -------
+    exit_waves : torch.Tensor
+        An NxMxL tensor of the calculated exit waves
+    """
+    single_translation = False
+    if translations.dim() == 1:
+        translations = translations[None,:]
+        single_translation = True
+        
+    # Separate the translations into a part that chooses the window
+    # And a part that defines the windowing function
+    integer_translations = t.floor(translations)
+    subpixel_translations = translations - integer_translations
+    integer_translations = integer_translations.to(dtype=t.int32)
+    
+    exit_waves = []
+
+    B = s_matrix.shape[0]//2
+    
+    if shift_probe:
+        i = t.arange(probe.shape[0]) - probe.shape[0]//2
+        j = t.arange(probe.shape[1]) - probe.shape[1]//2
+        I,J = t.meshgrid(i,j)
+        I = 2 * np.pi * I.to(t.float32) / probe.shape[0]
+        J = 2 * np.pi * J.to(t.float32) / probe.shape[1]
+        I = I.to(dtype=probe.dtype,device=probe.device)
+        J = J.to(dtype=probe.dtype,device=probe.device)
+        
+        for tr, sp in zip(integer_translations,
+                          subpixel_translations):
+            fft_probe = fftshift(t.fft(probe, 2))
+            shifted_fft_probe = cmult(fft_probe, expi(-sp[0]*I - sp[1]*J))
+            shifted_probe = t.ifft(ifftshift(shifted_fft_probe),2)
+
+            s_matrix_slice = s_matrix[:,:,tr[0]:tr[0]+probe.shape[0],
+                                      tr[1]:tr[1]+probe.shape[1]]
+
+
+            output = t.zeros([s_matrix_slice.shape[2]+2*B,
+                              s_matrix_slice.shape[3]+2*B,2]).to(
+                                  device=s_matrix_slice.device,
+                                  dtype=s_matrix_slice.dtype)
+            
+            for i in range(s_matrix.shape[0]):
+                for j in range(s_matrix.shape[1]):
+                    output[i:i+probe.shape[0],j:j+probe.shape[1]] += \
+                        cmult(shifted_probe, s_matrix_slice[i,j,:,:,:])
+
+            exit_waves.append(output)
+            #exit_waves.append(cmult(shifted_probe, obj_slice))
+        
+    else:
+        raise NotImplementedError('Object shift not yet implemented')
+
+    if single_translation:
+        return exit_waves[0]
+    else:
+        return t.stack(exit_waves)
+
+
 

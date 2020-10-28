@@ -127,6 +127,7 @@ def plot_amplitude(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', 
     if basis is not None:
         if isinstance(basis,t.Tensor):
             basis = basis.detach().cpu().numpy()
+        # This fails if the 
         basis_norm = np.linalg.norm(basis, axis = 0)
         basis_norm = basis_norm * get_units_factor(units)
 
@@ -207,7 +208,7 @@ def plot_phase(im, fig=None, basis=None, units='$\\mu$m', cmap='auto', **kwargs)
         except:
             plt.imshow(phase, cmap = 'hsv', extent=extent)
     else:
-        plt.imshow(phase)#, cmap = cmap, extent=extent)
+        plt.imshow(phase, cmap = cmap, extent=extent)
 
     cbar = plt.colorbar()
     cbar.set_label('Phase (rad)')
@@ -221,6 +222,9 @@ def plot_phase(im, fig=None, basis=None, units='$\\mu$m', cmap='auto', **kwargs)
 
     return fig
 
+
+def plot_amplitude_surfacenorm():
+    pass
 
 def plot_colorized(im, fig=None, basis=None, units='$\\mu$m', **kwargs):
     """ Plots the colorized version of a complex array with dimensions NxM

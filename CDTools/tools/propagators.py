@@ -74,7 +74,7 @@ def inverse_far_field(wavefront):
     return fftshift(t.ifft(ifftshift(wavefront), 2, normalized=True))
 
 
-def generate_high_NA_k_intensity_map(sample_basis, det_basis,det_shape,distance, wavelength, *args, **kwargs):
+def generate_high_NA_k_intensity_map(sample_basis, det_basis,det_shape,distance, wavelength, *args, lens=False, **kwargs):
     """Generates k-space and intensity maps to allow for high-NA far-field propagation of light
 
     At high numerical apertures or for very tilted samples, the simple
@@ -97,6 +97,16 @@ def generate_high_NA_k_intensity_map(sample_basis, det_basis,det_shape,distance,
     The intensity map is simply an object, the shape of the detector, which
     encodes intensity corrections between 0 and 1 per pixel.
 
+    If the optional "lens" parameter is set to True, the intensity map will
+    be set to a uniform map, and the distortion of Fourier space due to the
+    flat nature of the detector (that is, the portion of the distortion
+    that exists even if the sample is not tilted) will be disabled. This is
+    to account for the fact that a good, infinity-conjugate imaging lens
+    will do it's best to correct for these abberations in the lens. Of course,
+    the lens will not be perfect, but in such a case it is a better
+    approximation to assume that the lens is perfect than to assume that it
+    is not there at all.
+
     Parameters
     ----------
     sample_basis: array
@@ -109,7 +119,8 @@ def generate_high_NA_k_intensity_map(sample_basis, det_basis,det_shape,distance,
         The sample-to-detector distance
     wavelength: float
         The wavelength of light being propagated
-
+    lens: bool
+        Whether the diffraction pattern is formed by a lens or not.
 
     Returns
     -------
@@ -153,15 +164,39 @@ def generate_high_NA_k_intensity_map(sample_basis, det_basis,det_shape,distance,
     samp_det_vec = np.cross(det_basis[:,0],det_basis[:,1])
     samp_det_vec *= distance / np.linalg.norm(samp_det_vec)
 
-    Rs = np.tensordot(det_basis,np.stack([Is,Js]),axes=1) \
-        + samp_det_vec[:,None,None]
+    # This could potentially correct for a mistake in the implied
+    # propagation direction (e.g. choosing e^ikx instead of e^-ikx)
+    #samp_det_vec *= -1
 
+    if lens == False:
+        # This correctly reproduces the sample-to-each-pixel vectors
+        # in the case where the diffraction pattern is actually formed
+        # by Fraunhoffer diffraction
+        Rs = np.tensordot(det_basis,np.stack([Is,Js]),axes=1) \
+            + samp_det_vec[:,None,None]
+    else:
+        # This forms a distorted set of vectors designed to produce the
+        # correct Fourier space map in the case where an imaging lens is
+        # used in the 2f geometry. One should not read too much meaning
+        # into these vectors, they are simply set up to produce the
+        # correct final K-map
+        Rs = np.tensordot(det_basis,np.stack([Is,Js]),axes=1)#
+        Rs += (samp_det_vec / np.linalg.norm(samp_det_vec))[:,None,None] * \
+            np.sqrt(np.sum((samp_det_vec)**2)-np.sum(Rs**2,axis=0))[None,:,:]
+        
     k0 = 2*np.pi/wavelength
     
     Ks = k0 * Rs / np.linalg.norm(Rs, axis=0)
 
+    # My attempt at seeing what happens if I flip the Ks
+    #Ks *= -1
+    
     # This is the cosine of the angle with the detector normal
     intensity_map = np.tensordot(samp_det_vec/(k0*distance),Ks,axes=1)
+    if lens:
+        # Set the intensity map to be uniform if a lens is being used
+        intensity_map = np.ones_like(intensity_map)
+    
     intensity_map = t.Tensor(intensity_map).to(*args, **kwargs)
 
 
@@ -171,6 +206,10 @@ def generate_high_NA_k_intensity_map(sample_basis, det_basis,det_shape,distance,
     # uniform phase.
     Ks -= k0 * samp_det_vec[:,None,None] / distance
 
+    # A potential alternative when Ks are flipped
+    #Ks += k0 * samp_det_vec[:,None,None] / distance
+
+    
     # Now we move on to finding the conversion into k-space
     # for the sample grid. It turns out we can do this by multiplying
     # them with the real space basis (dual of the reciprocal space
@@ -233,9 +272,13 @@ def high_NA_far_field(wavefront, k_map, intensity_map=None):
     low_NA_wavefield = far_field(wavefront)
     # I'm going to need to separately interpolate the real and complex parts
     # This can be done
-
+    
     k_map = k_map[None,:,:,:]
     # Will only work for a 4D wavefile stack.
+    #plt.figure()
+    #plt.pcolormesh(k_map[0,:,:,0].cpu().numpy(),k_map[0,:,:,1].cpu().numpy(),
+    #               np.ones_like(k_map[0,:-1,:-1,0].cpu().numpy()))
+    #plt.show()
     def process_wavefield_stack(low_NA_wavefield):
         real_output = grid_sample(low_NA_wavefield[None,:,:,:,0],k_map,mode='bilinear',padding_mode='zeros', align_corners=False)
         imag_output = grid_sample(low_NA_wavefield[None,:,:,:,1],k_map,mode='bilinear',padding_mode='zeros', align_corners=False)
