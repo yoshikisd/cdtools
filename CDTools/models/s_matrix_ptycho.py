@@ -358,8 +358,9 @@ class SMatrixPtycho(CDIModel):
         s_matrix = cmath.torch_to_complex(self.s_matrix.detach().cpu())
         background = self.background.detach().cpu().numpy()**2
         weights = self.weights.detach().cpu().numpy()
+        wavelength = self.wavelength.cpu().numpy()
         
         return {'basis':basis, 'translation':translations,
                 'probe':probe,'s_matrix':s_matrix,
                 'background':background,
-                'weights':weights}
+                'weights':weights, 'wavelength':wavelength}

@@ -440,7 +440,8 @@ def ptycho_2D_sinc_s_matrix(probe, s_matrix, translations, shift_probe=True, pad
     format. Currently, each pixel in the latter two dimensions index a location
     on the input wavefield, and the first two indexes index differences from
     that pixel. It is easier to interpret the resulting matrix though if the
-    latter two indices index locations in the output plane.
+    latter two indices index locations in the output plane. NOTE: I believe
+    this change has now been made 
 
     Parameters
     ----------
@@ -489,20 +490,30 @@ def ptycho_2D_sinc_s_matrix(probe, s_matrix, translations, shift_probe=True, pad
             fft_probe = fftshift(t.fft(probe, 2))
             shifted_fft_probe = cmult(fft_probe, expi(-sp[0]*I - sp[1]*J))
             shifted_probe = t.ifft(ifftshift(shifted_fft_probe),2)
+            
+            s_matrix_slice = s_matrix[:,:,tr[0]:tr[0]+probe.shape[0]+2*B,
+                                      tr[1]:tr[1]+probe.shape[1]+2*B]
 
-            s_matrix_slice = s_matrix[:,:,tr[0]:tr[0]+probe.shape[0],
-                                      tr[1]:tr[1]+probe.shape[1]]
 
-
-            output = t.zeros([s_matrix_slice.shape[2]+2*B,
-                              s_matrix_slice.shape[3]+2*B,2]).to(
+            output = t.zeros([probe.shape[0]+2*B,probe.shape[1]+2*B,2]).to(
                                   device=s_matrix_slice.device,
                                   dtype=s_matrix_slice.dtype)
+
             
             for i in range(s_matrix.shape[0]):
                 for j in range(s_matrix.shape[1]):
-                    output[i:i+probe.shape[0],j:j+probe.shape[1]] += \
-                        cmult(shifted_probe, s_matrix_slice[i,j,:,:,:])
+                    output [i:i+probe.shape[0],j:j+probe.shape[1]] += \
+                        cmult(shifted_probe, s_matrix_slice[i,j,i:i+probe.shape[0],j:j+probe.shape[1],:])
+            
+            #output = t.zeros([s_matrix_slice.shape[2]+2*B,
+            #                  s_matrix_slice.shape[3]+2*B,2]).to(
+            #                      device=s_matrix_slice.device,
+            #                      dtype=s_matrix_slice.dtype)
+            
+            #for i in range(s_matrix.shape[0]):
+            #    for j in range(s_matrix.shape[1]):
+            #        output[i:i+probe.shape[0],j:j+probe.shape[1]] += \
+            #            cmult(shifted_probe, s_matrix_slice[i,j,:,:,:])
 
             exit_waves.append(output)
             #exit_waves.append(cmult(shifted_probe, obj_slice))
