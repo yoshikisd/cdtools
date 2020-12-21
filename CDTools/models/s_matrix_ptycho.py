@@ -20,7 +20,8 @@ class SMatrixPtycho(CDIModel):
                  detector_slice=None,
                  surface_normal=np.array([0.,0.,1.]),
                  min_translation = t.Tensor([0,0]),
-                 background = None, translation_offsets=None, mask=None,
+                 background = None, translation_offsets=None,
+                 probe_planes = None, mask=None,
                  weights = None, translation_scale = 1, saturation=None,
                  oversampling=1):
         
@@ -50,10 +51,12 @@ class SMatrixPtycho(CDIModel):
         
         # We rescale the probe here so it learns at the same rate as the
         # object
-        if probe_guess.dim() > 3:
-            self.probe_norm = 1 * t.max(tools.cmath.cabs(probe_guess[0].to(t.float32)))
+        # Remember that for S-matrix we have several probes for different
+        # planes
+        if probe_guess.dim() > 4:
+            self.probe_norm = 1 * t.max(tools.cmath.cabs(probe_guess[0,0].to(t.float32)))
         else:
-            self.probe_norm = 1 * t.max(tools.cmath.cabs(probe_guess.to(t.float32)))         
+            self.probe_norm = 1 * t.max(tools.cmath.cabs(probe_guess[0].to(t.float32)))         
             
         self.probe = t.nn.Parameter(probe_guess.to(t.float32)
                                     / self.probe_norm)
@@ -61,13 +64,14 @@ class SMatrixPtycho(CDIModel):
         self.s_matrix = t.nn.Parameter(s_matrix_guess.to(t.float32))
         
         if background is None:
-            ew_shape = [s_matrix_guess.shape[0] - 1 + probe_guess.shape[1],
-                        s_matrix_guess.shape[1] - 1 + probe_guess.shape[2]]
+            ew_shape = [s_matrix_guess.shape[0] - 1 + probe_guess.shape[-3],
+                        s_matrix_guess.shape[1] - 1 + probe_guess.shape[-2]]
             if detector_slice is not None:
                 background = 1e-6 * t.ones(t.ones(ew_shape)[self.detector_slice].shape).to(t.float32)
             else:
                 background = 1e-6 * t.ones(ew_shape).to(t.float32)
-                
+
+
         self.background = t.nn.Parameter(t.Tensor(background).to(t.float32))
 
         if weights is None:
@@ -78,7 +82,14 @@ class SMatrixPtycho(CDIModel):
         if translation_offsets is None:
             self.translation_offsets = None
         else:
-            self.translation_offsets = t.nn.Parameter(t.Tensor(translation_offsets).to(t.float32)/ translation_scale) 
+            self.translation_offsets = t.nn.Parameter(t.Tensor(translation_offsets).to(t.float32)/ translation_scale)
+
+        # This maps indices to probe planes to be used. If none, it defaults
+        # to always being plane 0
+        if probe_planes is None:
+            self.probe_planes = None
+        else:
+            self.probe_planes = t.LongTensor(probe_planes)
 
         self.translation_scale = translation_scale
 
@@ -88,44 +99,94 @@ class SMatrixPtycho(CDIModel):
         
         
     @classmethod
-    def from_dataset(cls, dataset, probe_convergence_radius, locality_radius=1, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True):
+    def from_dataset(cls, dataset, probe_convergence_radius, locality_radius=1, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1):
+
+        datasets = [dataset]
+        propagation_distances = [propagation_distance]
+
+        # We only return the 0th element because in the general case, the
+        # constructor needs to return a stacked datset in addition to
+        # a model, but for the case of one dataset we only need to return
+        # the model.
+        return cls.from_datasets(datasets, probe_convergence_radius,
+                                 locality_radius=locality_radius,
+                                 probe_size=probe_size,
+                                 randomize_ang=randomize_ang,
+                                 padding=padding,
+                                 n_modes=n_modes,
+                                 translation_scale=translation_scale,
+                                 saturation=saturation,
+                                 propagation_distances=propagation_distances,
+                                 scattering_mode=scattering_mode,
+                                 oversampling=oversampling)[0]
+    
+    # This is for the multi-focal-plane case, where each dataset will correspond
+    # to a different focal plane. The guess propagation distance for each
+    # dataset can be set individually but otherwise the probes are
+    # reconstructed entirely separately. All datasets are assumed to have
+    # the same basic parameters (wavelength, detector geometry, etc) and share
+    # the same origin in the x-y plane.
+    @classmethod
+    def from_datasets(cls, datasets, probe_convergence_radius, locality_radius=1, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, propagation_distances=None, scattering_mode=None, oversampling=1):
         
-        wavelength = dataset.wavelength
-        det_basis = dataset.detector_geometry['basis']
-        det_shape = dataset[0][1].shape
-        distance = dataset.detector_geometry['distance']
+        wavelength = datasets[0].wavelength
+        det_basis = datasets[0].detector_geometry['basis']
+        det_shape = datasets[0][0][1].shape
+        distance = datasets[0].detector_geometry['distance']
 
-        # always do this on the cpu
-        get_as_args = dataset.get_as_args
-        dataset.get_as(device='cpu')
-        (indices, translations), patterns = dataset[:]
-        dataset.get_as(*get_as_args[0],**get_as_args[1])
-
-        # Set to none to avoid issues with things outside the detector
-        if auto_center:
-            center = tools.image_processing.centroid(t.sum(patterns,dim=0))
-        else:
-            center = None
-            
         # Then, generate the probe geometry from the dataset
         ewg = tools.initializers.exit_wave_geometry
         probe_basis, ew_shape, det_slice =  ewg(det_basis,
-                                                   det_shape,
-                                                   wavelength,
-                                                   distance,
-                                                   center=center,
-                                                   padding=padding,
-                                                   opt_for_fft=False,
-                                                   oversampling=oversampling)
-
+                                                det_shape,
+                                                wavelength,
+                                                distance,
+                                                padding=padding,
+                                                opt_for_fft=False,
+                                                oversampling=oversampling)
+        
+        if propagation_distances is None:
+            propagation_distances = [None] * len(datasets)
+        
         # This shrinks the probe to ensure that the output wavefield
         # is the correct shape
         probe_shape = t.Size(np.array(ew_shape) - (2*locality_radius))
+
+        # always do this on the cpu
+        probe_planes = []
+        translations = []
+        patterns = []
+        probes = []
+        for i, dataset in enumerate(datasets):
+            get_as_args = dataset.get_as_args
+            
+            dataset.get_as(device='cpu')
+            (indices, tx), pats = dataset[:]
+            dataset.get_as(*get_as_args[0],**get_as_args[1])
+            translations.append(tx)
+            probe_planes.extend([i]*tx.shape[0])
+            patterns.append(pats)
+
+            # Finally, initialize the probe and  object using this information
+            if locality_radius != 0:
+                probe = tools.initializers.SHARP_style_probe(dataset, ew_shape, det_slice, propagation_distance=propagation_distances[i], oversampling=oversampling)[locality_radius:-locality_radius,locality_radius:-locality_radius]
+            else:
+                probe = tools.initializers.SHARP_style_probe(dataset, ew_shape, det_slice, propagation_distance=propagation_distances[i], oversampling=oversampling)
+
+            # Now we initialize all the subdominant probe modes
+            probe_max = t.max(cmath.cabs(probe))
+            probe_stack = [0.01 * probe_max * t.rand(probe.shape,dtype=probe.dtype) for i in range(n_modes - 1)]
+            probe = t.stack([tools.propagators.inverse_far_field(probe),] + probe_stack)
+            probes.append(probe)
+
+        translations = t.cat(translations)
+        patterns = t.cat(patterns)
+        probes = t.stack(probes)
+
         
-        if hasattr(dataset, 'sample_info') and \
-           dataset.sample_info is not None and \
-           'orientation' in dataset.sample_info:
-            surface_normal = dataset.sample_info['orientation'][2]
+        if hasattr(datasets[0], 'sample_info') and \
+           datasets[0].sample_info is not None and \
+           'orientation' in datasets[0].sample_info:
+            surface_normal = datasets[0].sample_info['orientation'][2]
         else:
             surface_normal = np.array([0.,0.,1.])
 
@@ -151,25 +212,12 @@ class SMatrixPtycho(CDIModel):
         obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=200+2*locality_radius)
 
         if hasattr(dataset, 'background') and dataset.background is not None:
-            background = t.sqrt(dataset.background)
+            background = t.sqrt(datasets[0].background)
         else:
             background = None
 
-        # Finally, initialize the probe and  object using this information
-        if probe_size is None:
-            if locality_radius != 0:
-                probe = tools.initializers.SHARP_style_probe(dataset, ew_shape, det_slice, propagation_distance=propagation_distance, oversampling=oversampling)[locality_radius:-locality_radius,locality_radius:-locality_radius]
-            else:
-                probe = tools.initializers.SHARP_style_probe(dataset, ew_shape, det_slice, propagation_distance=propagation_distance, oversampling=oversampling)
-        else:
-            probe = tools.initializers.gaussian_probe(dataset, probe_basis, probe_shape, probe_size, propagation_distance=propagation_distance)
 
-
-        # Now we initialize all the subdominant probe modes
-        probe_max = t.max(cmath.cabs(probe))
-        probe_stack = [0.01 * probe_max * t.rand(probe.shape,dtype=probe.dtype) for i in range(n_modes - 1)]
-        probe = t.stack([tools.propagators.inverse_far_field(probe),] + probe_stack)
-
+        
         s_matrix = t.zeros([2*locality_radius+1,2*locality_radius+1,obj_size[0],
                             obj_size[1],2])
         s_matrix[locality_radius,locality_radius,:,:,:] = \
@@ -179,35 +227,43 @@ class SMatrixPtycho(CDIModel):
         
         det_geo = dataset.detector_geometry
 
-        translation_offsets = 0 * (t.rand((len(dataset),2)) - 0.5)
+        translation_offsets = 0 * (t.rand((translations.shape[0],2)) - 0.5)
 
-        weights = t.ones(len(dataset))
+        weights = t.ones(translations.shape[0])
         
-        if hasattr(dataset, 'mask') and dataset.mask is not None:
-            mask = dataset.mask.to(t.bool)
+        if hasattr(datasets[0], 'mask') and datasets[0].mask is not None:
+            mask = datasets[0].mask.to(t.bool)
         else:
             mask = None
 
         
-        probe_support = t.zeros_like(probe[0].to(dtype=t.float32))
-        xs, ys = np.mgrid[:probe.shape[1],:probe.shape[2]]
+        probe_support = t.zeros_like(probes[0,0].to(dtype=t.float32))
+
+        xs, ys = np.mgrid[:probes.shape[-3],:probes.shape[-2]]
         xs = xs - np.mean(xs)
         ys = ys - np.mean(ys)
         Rs = np.sqrt(xs**2 + ys**2)
-        probe_support[Rs<probe_convergence_radius] = 1
-        probe = probe * probe_support[None,:,:]
         
+        probe_support[Rs<probe_convergence_radius] = 1
+        probes = probes * probe_support[None,None,:,:]
 
-        return cls(wavelength, det_geo, probe_basis, probe, probe_support,
-                   s_matrix,
-                   detector_slice=det_slice,
-                   surface_normal=surface_normal,
-                   min_translation=min_translation,
-                   translation_offsets = translation_offsets,
-                   weights=weights, mask=mask, background=background,
-                   translation_scale=translation_scale,
-                   saturation=saturation,
-                   oversampling=oversampling)
+        
+        model = cls(wavelength, det_geo, probe_basis, probes, probe_support,
+                    s_matrix,
+                    detector_slice=det_slice,
+                    surface_normal=surface_normal,
+                    min_translation=min_translation,
+                    translation_offsets = translation_offsets,
+                    probe_planes = probe_planes,
+                    weights=weights, mask=mask, background=background,
+                    translation_scale=translation_scale,
+                    saturation=saturation,
+                    oversampling=oversampling)
+
+        # Now we need to produce a concatenated dataset to be used to
+        # train the model
+        dataset = Ptycho2DDataset(translations, patterns)
+        return model, dataset
                    
     
     def interaction(self, index, translations):
@@ -218,15 +274,22 @@ class SMatrixPtycho(CDIModel):
 
         if self.translation_offsets is not None:
             pix_trans += self.translation_scale * self.translation_offsets[index]
-            
-        all_exit_waves = []
-        for i in range(self.probe.shape[0]):
-            pr = tools.propagators.inverse_far_field(self.probe[i] * self.probe_fourier_support)
-            exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc_s_matrix(
-                pr, self.s_matrix, pix_trans, shift_probe=True)
-            
-            exit_waves = exit_waves 
+        if self.probe_planes is not None:
+            probes_set = self.probe[self.probe_planes[index]]
+        else:
+            probes_set = self.probe[[0]*translations.shape[0]]
 
+
+        all_exit_waves = []
+        for i in range(probes_set.shape[1]):
+            exit_waves = []
+            
+            for j in range(probes_set.shape[0]):
+                pr = tools.propagators.inverse_far_field(probes_set[j,i] * self.probe_fourier_support)
+                exit_wave = self.probe_norm * tools.interactions.ptycho_2D_sinc_s_matrix(pr, self.s_matrix, pix_trans[j], shift_probe=True)
+                exit_waves.append(exit_wave)
+            
+            exit_waves = t.stack(exit_waves)
 
             if exit_waves.dim() == 4:
                 exit_waves =  self.weights[index][:,None,None,None] * exit_waves
@@ -274,13 +337,15 @@ class SMatrixPtycho(CDIModel):
 
         if self.mask is not None:
             self.mask = self.mask.to(*args, **kwargs)
-
+        if self.probe_planes is not None:
+            self.probe_planes = self.probe_planes.to(*args, **kwargs)
             
         self.min_translation = self.min_translation.to(*args,**kwargs)
         self.probe_basis = self.probe_basis.to(*args,**kwargs)
         self.probe_norm = self.probe_norm.to(*args,**kwargs)
         self.probe_fourier_support = self.probe_fourier_support.to(*args,**kwargs)
         self.surface_normal = self.surface_normal.to(*args, **kwargs)
+        
 
         
     def sim_to_dataset(self, args_list):
@@ -329,16 +394,16 @@ class SMatrixPtycho(CDIModel):
 
     # Needs to be updated to allow for plotting to an existing figure
     plot_list = [
-        ('Dominant Probe Amplitude',
-         lambda self, fig: p.plot_amplitude(self.probe[0], fig=fig, basis=self.probe_basis)),
-        ('Dominant Probe Phase',
-         lambda self, fig: p.plot_phase(self.probe[0], fig=fig, basis=self.probe_basis)),
-        ('Subdominant Probe Amplitude',
-         lambda self, fig: p.plot_amplitude(self.probe[1], fig=fig, basis=self.probe_basis),
-         lambda self: len(self.probe) >=2),
-        ('Subdominant Probe Phase',
-         lambda self, fig: p.plot_phase(self.probe[1], fig=fig, basis=self.probe_basis),
-         lambda self: len(self.probe) >=2),
+        ('First Dominant Probe Amplitude',
+         lambda self, fig: p.plot_amplitude(self.probe[0,0], fig=fig, basis=self.probe_basis)),
+        ('First Dominant Probe Phase',
+         lambda self, fig: p.plot_phase(self.probe[0,0], fig=fig, basis=self.probe_basis)),
+        ('Second Dominant Probe Amplitude',
+         lambda self, fig: p.plot_amplitude(self.probe[1,0], fig=fig, basis=self.probe_basis),
+         lambda self: self.probe.shape[0] >=2),
+        ('Second Dominant Probe Phase',
+         lambda self, fig: p.plot_phase(self.probe[1,0], fig=fig, basis=self.probe_basis),
+         lambda self: self.probe.shape[0] >=2),
         ('Exit Wave Amplitude under Uniform Illumination', 
          lambda self, fig: p.plot_amplitude(t.sum(self.s_matrix.data,dim=(0,1)), fig=fig, basis=self.probe_basis)),
         ('Exit Wave Phase under Uniform Illumination',

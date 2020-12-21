@@ -384,12 +384,9 @@ class Bragg2DPtycho(CDIModel):
             exit_waves = []
             for j in range(translations.size()[0]):
                 if self.propagate_probe:
-                    #propagator = ggasp(pr.shape, self.probe_basis, self.wavelength,
-                    #                   t.Tensor([0,0,props[j]]),
-                    #                   propagation_vector=self.prop_dir,
-                    #                   dtype=pr.dtype,device=pr.device, propagate_along_offset=True)
                     # Minus sign is empirical
-                    propagator = cmath.expi((-props[j]*(2*np.pi)/self.wavelength)
+                    propagator = cmath.expi(
+                        (-1*props[j]*(2*np.pi)/self.wavelength)
                         * self.universal_propagator)
                     prop_pr = tools.propagators.near_field(pr, propagator)
                     #plt.close('all')

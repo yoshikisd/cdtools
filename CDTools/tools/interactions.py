@@ -14,8 +14,7 @@ import numpy as np
 
 __all__ = ['translations_to_pixel', 'pixel_to_translations',
            'project_translations_to_sample',
-           'ptycho_2D_round','ptycho_2D_linear','ptycho_2D_sinc',
-           'ptycho_2D_propagate']
+           'ptycho_2D_round','ptycho_2D_linear','ptycho_2D_sinc']
 
 
 

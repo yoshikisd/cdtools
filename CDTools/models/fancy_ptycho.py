@@ -143,7 +143,7 @@ class FancyPtycho(CDIModel):
             outgoing_dir = np.cross(det_basis[:,0], det_basis[:,1])
             outgoing_dir /= np.linalg.norm(outgoing_dir)
             surface_normal = outgoing_dir + np.array([0.,0.,1.])
-            surface_normal /= np.linalg.norm(outgoing_dir)
+            surface_normal /= np.linalg.norm(surface_normal)
 
 
         # Next generate the object geometry from the probe geometry and
@@ -237,10 +237,11 @@ class FancyPtycho(CDIModel):
             exit_waves = exit_waves * self.probe_support[...,:,:]
 
 
-            if exit_waves.dim() == 4:
-                exit_waves =  self.weights[index][:,None,None,None] * exit_waves
-            else:
-                exit_waves =  self.weights[index] * exit_waves
+            if hasattr(self,'weights') and self.weights is not None:
+                if exit_waves.dim() == 4:
+                    exit_waves =  self.weights[index][:,None,None,None] * exit_waves
+                else:
+                    exit_waves =  self.weights[index] * exit_waves
                 
             all_exit_waves.append(exit_waves)
 

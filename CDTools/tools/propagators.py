@@ -166,7 +166,10 @@ def generate_high_NA_k_intensity_map(sample_basis, det_basis,det_shape,distance,
 
     # This could potentially correct for a mistake in the implied
     # propagation direction (e.g. choosing e^ikx instead of e^-ikx)
-    #samp_det_vec *= -1
+    # This appears to be correct, based on empirical evidence from
+    # a grazing incidence reflection experiment at 10 degrees
+    # on the optical table
+    samp_det_vec *= -1
 
     if lens == False:
         # This correctly reproduces the sample-to-each-pixel vectors
@@ -247,7 +250,7 @@ def high_NA_far_field(wavefront, k_map, intensity_map=None):
     for penetrating radiation - may either not need a correction or need
     a different correction due to the volumetric nature of the pixels.
     
-    If the k-map map any pixels on the detector to pixels outside of the
+    If the k-map maps any pixels on the detector to pixels outside of the
     k-space range of the wavefront, these will be set to zero. This is in
     keeping with the typical assumption that the sample is band-limited to
     the Nyquist frequency for the array on which it is sampled.
@@ -309,7 +312,7 @@ def high_NA_far_field(wavefront, k_map, intensity_map=None):
 
 
 
-def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, remove_z_phase=False, **kwargs):
+def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, remove_z_phase=False, bandlimit=None, **kwargs):
     """Generates an angular-spectrum based near-field propagator from experimental quantities
 
     This function generates an angular-spectrum based near field
@@ -322,6 +325,11 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     Formally, this propagator is the complex conjugate of the fourier
     transform of the convolution kernel for light propagation in free
     space
+    
+    If the optional bandlimit parameter is set, the propagator will be set
+    to zero beyond an explicit bandlimiting frequency. This is helpful if the
+    propagator will be used in a repeated multiply/propagate framework such
+    as a multislice algorithm, where it helps to prevent aliasing.
 
     Parameters
     ----------
@@ -335,6 +343,8 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
         The distance to simulate propagation over
     remove_z_phase : bool
         Default False, whether to remove the dominant z-direction phase dependence
+    bandlimit : float
+        Optional, a fraction of the full detector radius beyond which to set the propagator to zero.
 
     Returns
     -------
@@ -359,6 +369,10 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     if remove_z_phase:
         propagator *= np.exp(-1j * k0 * z)
 
+    if bandlimit is not None:
+        Rs = np.sqrt((Ki / np.max(ki))**2 + (Kj / np.max(kj))**2)
+        propagator = propagator * (Rs < bandlimit)
+        
     # Take the conjugate explicitly here instead of negating
     # the previous expression to ensure that complex frequencies
     # get mapped to values <1 instead of >1
