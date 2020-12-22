@@ -9,11 +9,14 @@ import numpy as np
 import torch as t
 
 __all__ = ['exit_wave_geometry', 'calc_object_setup', 'gaussian',
-           'gaussian_probe', 'SHARP_style_probe'] 
+           'gaussian_probe', 'SHARP_style_probe', 'RPI_spectral_init'] 
 
 from CDTools.tools import cmath
-from CDTools.tools.propagators import inverse_far_field, generate_angular_spectrum_propagator, near_field
+from CDTools.tools.propagators import *
+from CDTools.tools.analysis import orthogonalize_probes
 from scipy.fftpack import next_fast_len
+from scipy.sparse import linalg as spla
+from torch.nn.functional import pad
 import numpy as np
 
 
@@ -368,4 +371,68 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, over
     
     return final_probe
 
+
+def RPI_spectral_init(pattern, probe, obj_shape, n_modes=1, mask=None, background=None):
+
+    # First, check if the probe is a single mode or many modes.
+    # If the probe is many modes, orthogonalize it and use the top mode
+    # for initialization
+    if probe.dim() == 4:
+        probe = orthogonalize_probes(probe)[0]
     
+    pad0 = (probe.shape[-3] - obj_shape[0])//2
+    pad1 = (probe.shape[-2] - obj_shape[1])//2
+
+    def a_dagger(im):
+        im = cmath.complex_to_torch(im.reshape(obj_shape)).to(dtype=t.float32)
+        im = inverse_far_field(pad(far_field(im), (0,0,pad1,pad1,pad0,pad0)))
+        exit_wave = cmath.cmult(probe,im)
+        farfield = cmath.torch_to_complex(far_field(exit_wave))
+        return farfield.ravel()
+
+    def a(measured):
+        measured = cmath.complex_to_torch(measured.reshape(pattern.shape[0],pattern.shape[1])).to(dtype=t.float32)
+        im = inverse_far_field(measured)
+        multiplied = cmath.cmult(cmath.cconj(probe), im)
+        backplane = far_field(multiplied)
+        clipped = backplane[pad0:pad0+obj_shape[0],
+                            pad1:pad1+obj_shape[1],:]
+        return cmath.torch_to_complex(inverse_far_field(clipped)).ravel()
+
+    patsize = pattern.shape[0]*pattern.shape[1]
+    imsize = obj_shape[0]*obj_shape[1]
+    probesize = probe.shape[0]*probe.shape[1]
+    A_dagger = spla.LinearOperator((patsize, imsize),matvec=a_dagger)
+    A = spla.LinearOperator((imsize,patsize),matvec=a)
+
+    # Correct the pattern for the background and mask
+    np_pattern = pattern.numpy()
+    if background is not None:
+        np_pattern = np_pattern - background.numpy()
+    if mask is not None:
+        np_pattern = np_pattern * mask.numpy()
+    np_pattern = np.abs(np_pattern.ravel())
+        
+    realspace_intensities = A * A_dagger * np.ones(imsize)
+    vec = A_dagger * realspace_intensities
+    def y(measured):
+        #return measured * np_pattern
+        # This normalizes the intensities to account for the fact
+        # that some pixels draw from way more spots on the detector than
+        # others
+        return measured * np_pattern / np.abs(vec)
+
+    Y = spla.LinearOperator((patsize, patsize),matvec=y)
+    eigval, z0 = spla.eigs(A * Y * A_dagger, k=n_modes, which='LM')
+    z0 = z0.transpose().reshape(n_modes,obj_shape[0], obj_shape[1])
+
+    # Now we set the overall scale and relative weights of the guess
+    scale_factor = np.sqrt(np.sum(np_pattern) /
+                           t.sum(cmath.cabssq(probe)).numpy())
+    relative_weights = eigval / np.sum(eigval**2)
+
+    z0 = z0 * (scale_factor * relative_weights[:,None,None])
+    # Now we have to normalize the modes by their eigenvalues
+
+    return cmath.complex_to_torch(z0).to(dtype=t.float32)
+

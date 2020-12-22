@@ -52,7 +52,7 @@ from matplotlib.widgets import Slider
 from matplotlib import ticker
 import numpy as np
 
-__all__ = ['CDIModel', 'SimplePtycho', 'FancyPtycho', 'Bragg2DPtycho', 'SMatrixPtycho']
+__all__ = ['CDIModel', 'SimplePtycho', 'FancyPtycho', 'Bragg2DPtycho', 'SMatrixPtycho', 'RPI']
 
 
 class CDIModel(t.nn.Module):
@@ -111,7 +111,8 @@ class CDIModel(t.nn.Module):
     def save_results(self):
         raise NotImplementedError()
 
-    def AD_optimize(self, iterations, data_loader,  optimizer, scheduler=None):
+    def AD_optimize(self, iterations, data_loader,  optimizer,\
+                    scheduler=None, regularization_factor=None):
         """Runs a round of reconstruction using the provided optimizer
         
         This is the basic automatic differentiation reconstruction tool
@@ -130,12 +131,13 @@ class CDIModel(t.nn.Module):
             The optimizer to run the reconstruction with
         scheduler : torch.optim.lr_scheduler._LRScheduler
             Optional, a learning rate scheduler to use
+        regularization_factor : float or list(float)
+            Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
         """
         # First, calculate the normalization
         normalization = 0
         for inputs, patterns in data_loader:
             normalization += t.sum(patterns).cpu().numpy()
-            
             
         for it in range(iterations):
             loss = 0
@@ -150,6 +152,10 @@ class CDIModel(t.nn.Module):
                     else:
                         loss = self.loss(patterns,sim_patterns)
 
+                    if regularization_factor is not None \
+                       and hasattr(self, 'regularizer'):
+                        loss += self.regularizer(regularization_factor)
+                        
                     loss.backward()
                     return loss
 
@@ -162,7 +168,9 @@ class CDIModel(t.nn.Module):
             yield loss
 
 
-    def Adam_optimize(self, iterations, dataset, batch_size=15, lr=0.005, schedule=False, amsgrad=False):
+    def Adam_optimize(self, iterations, dataset, batch_size=15, lr=0.005,
+                      schedule=False, amsgrad=False, subset=None,
+                      regularization_factor=None):
         """Runs a round of reconstruction using the Adam optimizer
         
         This is generally accepted to be the most robust algorithm for use
@@ -182,7 +190,18 @@ class CDIModel(t.nn.Module):
             Optional, The learning rate (alpha) to use
         schedule : float
             Optional, whether to use the ReduceLROnPlateau scheduler
+        subset : list(int) or int
+            Optional, a pattern index or list of pattern indices to use
+        regularization_factor : float or list(float)
+            Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
         """
+
+        if subset is not None:
+            # if just one pattern, turn into a list for convenience
+            if type(subset) == type(1):
+                subset = [subset]
+            dataset = torchdata.Subset(dataset, subset)
+            
         # Make a dataloader
         data_loader = torchdata.DataLoader(dataset, batch_size=batch_size,
                                            shuffle=True)
@@ -197,11 +216,14 @@ class CDIModel(t.nn.Module):
         else:
             scheduler = None
 
-        return self.AD_optimize(iterations, data_loader, optimizer, scheduler=scheduler)
+        return self.AD_optimize(iterations, data_loader, optimizer,
+                                scheduler=scheduler,
+                                regularization_factor=regularization_factor)
 
 
     def LBFGS_optimize(self, iterations, dataset, batch_size=None,
-                       lr=0.1,history_size=2):
+                       lr=0.1,history_size=2, subset=None,
+                       regularization_factor=None):
         """Runs a round of reconstruction using the L-BFGS optimizer
         
         This algorithm is often less stable that Adam, however in certain
@@ -221,7 +243,16 @@ class CDIModel(t.nn.Module):
             Optional, the learning rate to use
         history_size : int
             Optional, the length of the history to use.
+        subset : list(int) or int
+            Optional, a pattern index or list of pattern indices to ues
+        regularization_factor : float or list(float)
+            Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
         """
+        if subset is not None:
+            # if just one pattern, turn into a list for convenience
+            if type(subset) == type(1):
+                subset = [subset]
+            dataset = torchdata.Subset(dataset, subset)
         
         # Make a dataloader
         if batch_size is not None:
@@ -235,12 +266,13 @@ class CDIModel(t.nn.Module):
         optimizer = t.optim.LBFGS(self.parameters(),
                                   lr = lr, history_size=history_size)
 
-        return self.AD_optimize(iterations, data_loader, optimizer)
+        return self.AD_optimize(iterations, data_loader, optimizer,
+                                regularization_factor=regularization_factor)
 
 
     def SGD_optimize(self, iterations, dataset, batch_size=None,
                      lr=0.01, momentum=0, dampening=0, weight_decay=0,
-                     nesterov=False):
+                     nesterov=False, subset=None, regularization_factor=None):
         """Runs a round of reconstruction using the SGDoptimizer
         
         This algorithm is often less stable that Adam, but it is simpler
@@ -258,8 +290,18 @@ class CDIModel(t.nn.Module):
             Optional, the learning rate to use
         momentum : float
             Optional, the length of the history to use.
+        subset : list(int) or int
+            Optional, a pattern index or list of pattern indices to use
+        regularization_factor : float or list(float)
+            Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
         """
-        
+
+        if subset is not None:
+            # if just one pattern, turn into a list for convenience
+            if type(subset) == type(1):
+                subset = [subset]
+            dataset = torchdata.Subset(dataset, subset)
+            
         # Make a dataloader
         if batch_size is not None:
             data_loader = torchdata.DataLoader(dataset, batch_size=batch_size,
@@ -275,7 +317,8 @@ class CDIModel(t.nn.Module):
                                 weight_decay=weight_decay,
                                 nesterov=nesterov)
 
-        return self.AD_optimize(iterations, data_loader, optimizer)
+        return self.AD_optimize(iterations, data_loader, optimizer,
+                                regularization_factor=regularization_factor)
 
 
     # By default, the plot_list is empty
@@ -474,3 +517,4 @@ from CDTools.models.pinhole_plane_ptycho import PinholePlanePtycho
 from CDTools.models.bragg_2d_ptycho import Bragg2DPtycho
 from CDTools.models.s_matrix_ptycho import SMatrixPtycho
 from CDTools.models.multislice_2d_ptycho import Multislice2DPtycho
+from CDTools.models.rpi import RPI

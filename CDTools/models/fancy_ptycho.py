@@ -93,10 +93,10 @@ class FancyPtycho(CDIModel):
             self.obj_support = t.ones_like(self.obj)
 
         self.oversampling = oversampling
-        
+
         
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True, opt_for_fft=False):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -123,7 +123,7 @@ class FancyPtycho(CDIModel):
                                                    distance,
                                                    center=center,
                                                    padding=padding,
-                                                   opt_for_fft=False,
+                                                   opt_for_fft=opt_for_fft,
                                                    oversampling=oversampling)
 
 

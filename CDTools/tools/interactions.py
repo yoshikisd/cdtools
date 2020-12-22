@@ -10,11 +10,12 @@ from __future__ import division, print_function, absolute_import
 from CDTools.tools.cmath import *
 import torch as t
 import numpy as np
-
+from CDTools.tools import propagators 
 
 __all__ = ['translations_to_pixel', 'pixel_to_translations',
            'project_translations_to_sample',
-           'ptycho_2D_round','ptycho_2D_linear','ptycho_2D_sinc']
+           'ptycho_2D_round','ptycho_2D_linear','ptycho_2D_sinc',
+           'RPI_interaction']
 
 
 
@@ -524,6 +525,56 @@ def ptycho_2D_sinc_s_matrix(probe, s_matrix, translations, shift_probe=True, pad
         return exit_waves[0]
     else:
         return t.stack(exit_waves)
+    
+
+def RPI_interaction(probe, obj):
+    """Returns an exit wave from a high-res probe and a low-res obj
+ 
+    In this interaction, the probe and object arrays are assumed to cover
+    the same physical region of space, but with the probe array sampling that
+    region of space more finely. Thus, to do the interaction, the object
+    is first upsampled by padding it in Fourier space (equivalent to a sinc
+    interpolation) before being multiplied with the probe. This function is
+    called RPI_interaction because this interaction is central to the RPI
+    method and is not commonly used elsewhere.
+
+    This also works with object functions that have an extra first dimension
+    for an incoherently mixing model. 
 
 
+    Parameters
+    ----------
+    probe : torch.Tensor
+        An MxL probe function for simulating the exit waves
+    obj : torch.Tensor
+        An M'xL' or NxM'xL' object function for simulating the exit waves
 
+    Returns
+    -------
+    exit_wave : torch.Tensor
+        An MxL tensor of the calculated exit waves
+    """
+
+    # TODO: The upsampling only works for arrays of even dimension!
+    
+    # The far-field propagator is just a 2D FFT but with an fftshift
+    fftobj = propagators.far_field(obj)
+    # We calculate the padding that we need to do the upsampling
+    pad0 = (probe.shape[-3] - obj.shape[-3])//2
+    pad1 = (probe.shape[-2] - obj.shape[-2])//2
+    
+    if obj.dim() == 3:
+        fftobj = t.nn.functional.pad(fftobj, (0, 0, pad1, pad1, pad0, pad0))
+    elif obj.dim() == 4:
+        fftobj = t.nn.functional.pad(fftobj,
+                                     (0, 0, pad1, pad1, pad0, pad0, 0, 0))
+    else:
+        raise NotImplementedError('RPI interaction with obj of dimension higher than 4 (including complex dimension) is not supported.')
+        
+    # Again, just an inverse FFT but with an fftshift
+    upsampled_obj = propagators.inverse_far_field(fftobj)
+
+    if obj.dim() == 4:
+        return cmult(probe[None,...], upsampled_obj)
+    else:
+        return cmult(probe, upsampled_obj)

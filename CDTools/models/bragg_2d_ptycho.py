@@ -196,7 +196,7 @@ class Bragg2DPtycho(CDIModel):
 
         
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True, propagate_probe=True,correct_tilt=True, lens=False):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True, propagate_probe=True,correct_tilt=True, lens=False, opt_for_fft=False):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -223,7 +223,7 @@ class Bragg2DPtycho(CDIModel):
                                                    distance,
                                                    center=center,
                                                    padding=padding,
-                                                   opt_for_fft=False,
+                                                   opt_for_fft=opt_for_fft,
                                                    oversampling=oversampling)
         # now we grab the sample surface normal
         if hasattr(dataset, 'sample_info') and \
