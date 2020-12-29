@@ -11,6 +11,7 @@ from datetime import datetime
 import numpy as np
 from copy import copy
 
+__all__ = ['PinholePlanePtycho']
 
 class PinholePlanePtycho(CDIModel):
 

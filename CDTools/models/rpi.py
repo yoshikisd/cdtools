@@ -13,6 +13,8 @@ from datetime import datetime
 import numpy as np
 from copy import copy
 
+__all__ = ['RPI']
+
 #
 # This model has to work a bit differently from a ptychography model
 # because a typical RPI dataset will have lots of images, each of which

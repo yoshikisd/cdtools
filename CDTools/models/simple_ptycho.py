@@ -11,6 +11,8 @@ from matplotlib import pyplot as plt
 from datetime import datetime
 import numpy as np
 
+__all__ = ['SimplePtycho']
+
 class SimplePtycho(CDIModel):
     """A simple ptychography model for exploring ideas and extensions
 
