@@ -11,11 +11,6 @@ of the following functions:
 * to_cxi
 * inspect
 
-Example implementations of all these functions can be found in the code
-for the Ptycho2DDataset class.
-
-In addition, it is recommended to read through the tutorial section on
-defining a new ptychography dataset before attempting to do so
 """
 
 from __future__ import division, print_function, absolute_import

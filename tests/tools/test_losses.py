@@ -55,7 +55,7 @@ def test_intensity_mse():
     assert np.isclose(np_result, np.take(torch_result.numpy(),0))
     
 
-def test_poisson_ml():
+def test_poisson_nll():
     # Make some fake data
     data = np.random.rand(10,100,100)
     # And add some noise to it
@@ -67,14 +67,14 @@ def test_poisson_ml():
     # First, test without a mask
     np_result = np.sum(sim - data * np.log(sim))
     np_result /=  data.size
-    torch_result = losses.poisson_nll(t.from_numpy(data),t.from_numpy(sim))
+    torch_result = losses.poisson_nll(t.from_numpy(data),t.from_numpy(sim), eps=0)
     assert np.isclose(np_result, np.take(torch_result.numpy(),0))
 
     # Then, test with a mask
     np_result = np.sum(mask * (sim - data * np.log(sim)))
     np_result /=  np.count_nonzero(mask * np.ones_like(data))
     torch_result = losses.poisson_nll(t.from_numpy(data),t.from_numpy(sim),
-                         mask = t.from_numpy(mask))
+                                      mask = t.from_numpy(mask), eps=0)
     assert np.isclose(np_result, np.take(torch_result.numpy(),0))
 
 

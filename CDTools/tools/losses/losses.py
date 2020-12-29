@@ -100,7 +100,7 @@ def intensity_mse(intensities, sim_intensities, mask=None):
 
 
     
-def poisson_nll(intensities, sim_intensities, mask=None, eps=1e-4):
+def poisson_nll(intensities, sim_intensities, mask=None, eps=1e-6):
     """ Returns the Poisson negative log likelihood for a simulated dataset's intensities
 
     Calculates the overall Poisson maximum likelihood metric using
@@ -117,6 +117,9 @@ def poisson_nll(intensities, sim_intensities, mask=None, eps=1e-4):
     as long as their shapes match, and the provided mask array can be
     broadcast correctly along them.
 
+    The default value of eps is 1e-6 - a nonzero value here helps avoid
+    divergence of the log function near zero.
+
     Parameters
     ----------
     intensities : torch.Tensor
@@ -125,7 +128,9 @@ def poisson_nll(intensities, sim_intensities, mask=None, eps=1e-4):
         A tensor of simulated detector intensities
     mask : torch.Tensor
         A mask with ones for pixels to include and zeros for pixels to exclude
-
+    eps : float
+        Optional, a small number to add to the simulated intensities
+    
     Returns
     -------
     loss : torch.Tensor
