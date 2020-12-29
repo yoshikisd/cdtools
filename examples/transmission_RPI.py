@@ -18,10 +18,12 @@ background = ptycho_results['background']
 
 dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(ss_filename)
 
+
 # Next, we create a ptychography model from the dataset
 # Note that we explicitly as for two incoherent probe modes
 model = CDTools.models.RPI.from_dataset(dataset, probe, [900,900],
-                                        background=background, n_modes=2)
+                                        background=background, n_modes=2,
+                                        initialization='random')
 
 
 # Let's do this reconstruction on the GPU, shall we? 
@@ -35,7 +37,7 @@ for i, loss in enumerate(model.LBFGS_optimize(30, dataset, lr=0.4, regularizatio
     #model.inspect(dataset)
     print(i,loss)
     
-model.inspect(dataset)
+#model.inspect(dataset)
     
 # Now we use the regularizer to damp all but the top modes
 for i, loss in enumerate(model.LBFGS_optimize(50, dataset, lr=0.4, regularization_factor=[0.001,0.1])):

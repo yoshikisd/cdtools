@@ -191,3 +191,7 @@ def test_SHARP_style_probe(ptycho_cxi_1):
     assert probe.shape == t.Size([256,256,2])
 
 
+def test_RPI_spectral_init():
+    # Figure out a good way to test this
+    assert 0
+    RPI_spectral_init(pattern, probe, obj_shape, n_modes=1, mask=None, background=None)

@@ -225,5 +225,24 @@ def test_ptycho_2D_sinc(single_pixel_probe, random_obj):
     assert np.max(np.abs(exit_wave_np-exit_wave_torch)) < 0.005
 
 
+def test_RPI_interaction(random_probe, random_obj):
 
+    random_obj1 = cmath.complex_to_torch(random_obj[:79,:68])
+    random_probe1 = cmath.complex_to_torch(random_probe)
+    output = interactions.RPI_interaction(random_probe1, random_obj1)
+
+
+    random_obj1 = cmath.complex_to_torch(random_obj[:256,:256])
+    random_probe1 = cmath.complex_to_torch(random_probe)
+    output = interactions.RPI_interaction(random_probe1, random_obj1)
+
+    
+    random_obj1 = cmath.complex_to_torch(random_obj[:42,:103])
+    random_probe1 = cmath.complex_to_torch(random_probe)
+    output = interactions.RPI_interaction(random_probe1, random_obj1)
+
+    # Need to actually test against a numpy implementation
+    print(random_probe.shape)
+    print(random_obj.shape)
+    assert 0
     

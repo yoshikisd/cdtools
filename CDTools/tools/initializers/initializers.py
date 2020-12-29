@@ -380,12 +380,14 @@ def RPI_spectral_init(pattern, probe, obj_shape, n_modes=1, mask=None, backgroun
     if probe.dim() == 4:
         probe = orthogonalize_probes(probe)[0]
     
-    pad0 = (probe.shape[-3] - obj_shape[0])//2
-    pad1 = (probe.shape[-2] - obj_shape[1])//2
-
+    pad0l = (probe.shape[-3] - obj_shape[0])//2
+    pad0r = probe.shape[-3] - obj_shape[0] - pad0l
+    pad1l = (probe.shape[-2] - obj_shape[1])//2
+    pad1r = probe.shape[-2] - obj_shape[1] - pad1l
+    
     def a_dagger(im):
         im = cmath.complex_to_torch(im.reshape(obj_shape)).to(dtype=t.float32)
-        im = inverse_far_field(pad(far_field(im), (0,0,pad1,pad1,pad0,pad0)))
+        im = inverse_far_field(pad(far_field(im), (0,0,pad1l,pad1r,pad0l,pad0r)))
         exit_wave = cmath.cmult(probe,im)
         farfield = cmath.torch_to_complex(far_field(exit_wave))
         return farfield.ravel()
@@ -395,8 +397,8 @@ def RPI_spectral_init(pattern, probe, obj_shape, n_modes=1, mask=None, backgroun
         im = inverse_far_field(measured)
         multiplied = cmath.cmult(cmath.cconj(probe), im)
         backplane = far_field(multiplied)
-        clipped = backplane[pad0:pad0+obj_shape[0],
-                            pad1:pad1+obj_shape[1],:]
+        clipped = backplane[pad0l:pad0l+obj_shape[0],
+                            pad1l:pad1l+obj_shape[1],:]
         return cmath.torch_to_complex(inverse_far_field(clipped)).ravel()
 
     patsize = pattern.shape[0]*pattern.shape[1]

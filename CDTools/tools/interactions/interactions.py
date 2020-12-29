@@ -560,14 +560,16 @@ def RPI_interaction(probe, obj):
     # The far-field propagator is just a 2D FFT but with an fftshift
     fftobj = propagators.far_field(obj)
     # We calculate the padding that we need to do the upsampling
-    pad0 = (probe.shape[-3] - obj.shape[-3])//2
-    pad1 = (probe.shape[-2] - obj.shape[-2])//2
-    
+    pad0l = (probe.shape[-3] - obj.shape[-3])//2
+    pad0r = probe.shape[-3] - obj.shape[-3] - pad0l
+    pad1l = (probe.shape[-2] - obj.shape[-2])//2
+    pad1r = probe.shape[-2] - obj.shape[-2] - pad1l
+        
     if obj.dim() == 3:
-        fftobj = t.nn.functional.pad(fftobj, (0, 0, pad1, pad1, pad0, pad0))
+        fftobj = t.nn.functional.pad(fftobj, (0, 0, pad1l, pad1r, pad0l, pad0r))
     elif obj.dim() == 4:
-        fftobj = t.nn.functional.pad(fftobj,
-                                     (0, 0, pad1, pad1, pad0, pad0, 0, 0))
+        fftobj = t.nn.functional.pad(
+            fftobj, (0, 0, pad1l, pad1r, pad0l, pad0r, 0, 0))
     else:
         raise NotImplementedError('RPI interaction with obj of dimension higher than 4 (including complex dimension) is not supported.')
         
