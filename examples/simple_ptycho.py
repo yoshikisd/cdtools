@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 # First, we load an example dataset from a .cxi file
 filename = 'example_data/lab_ptycho_data.cxi'
 dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
-
+plt.ion()
 # Next, we create a ptychography model from the dataset
 model = CDTools.models.SimplePtycho.from_dataset(dataset)
 

@@ -337,7 +337,11 @@ class Ptycho2DDataset(CDataset):
                 idx = slider.val - 1
             elif event.key == 'down' or event.button == 'down' or event.key == 'left':
                 idx = slider.val + 1
-
+            else:
+                # This prevents errors from being thrown on irrelevant key
+                # or mouse input
+                return
+            
             # Handle the wraparound and trigger the update
             idx = int(idx) % len(self)
             slider.set_val(idx)

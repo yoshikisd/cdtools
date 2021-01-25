@@ -17,7 +17,8 @@ from torch.nn.functional import avg_pool2d
 # intensity pattern on a detector
 #
 
-__all__ = ['intensity', 'incoherent_sum', 'quadratic_background']
+__all__ = ['intensity', 'incoherent_sum', 'density_matrix',
+           'quadratic_background']
 
 
 def intensity(wavefield, detector_slice=None, epsilon=1e-7, saturation=None, oversampling=1):
@@ -66,6 +67,101 @@ def intensity(wavefield, detector_slice=None, epsilon=1e-7, saturation=None, ove
         return t.clamp(output + epsilon,0,saturation)
 
 
+def density_matrix(wavefields, density_matrix, detector_slice=None, epsilon=1e-7, saturation=None, oversampling=1):
+    """Returns the intensities associated with a given density matrix state
+
+    The essential idea is that the most general description of a light field
+    at the detector plane will consist of a density matrix state. Here, that
+    low rank density matrix state is encoded as a set of basis wavefields
+    and a density matrix in that basis.
+
+    For computational efficiency, the density matrix is coded in an unusual
+    format. The density matrix formally is a complex Hermetian matrix,
+    which also happens to be positive definite. Here, we store it as a
+    real-valued matrix, where the upper triangle corresponds to the real
+    part of the elements in the upper triangle, and the lower triangle
+    corresponds to the imaginary parts. The elements on the diagonal are
+    purely real, and are stored as they are.
+
+    As with other multi-mode measurement functions, the modes are stored in
+    the first index, and the index of the diffraction pattern in the stack
+    of diffraction patterns is the second index. The stack-direction index
+    can be omitted if only a single pattern needs to be simulated
+    
+    It is important to note that this method does not inforce the positive
+    definiteness of the density matrix, this it is possible for negative
+    values of intensity to appear if the underlying density matrix passed
+    to this method is not positive definite
+
+    Parameters
+    ----------
+    wavefields : torch.Tensor
+        An Lx(Jx)MxNx2 stack of complex wavefields
+    density_matrix : torch.Tensor
+        A (Jx)LxL stack of real-valued representations of density matrices, as per above
+    saturation : float
+        Optional, a maximum saturation value to clamp the resulting intensities to
+    oversampling : int
+        Default 1, the width of the region pixels in the wavefield to bin into a single detector pixel
+
+    Returns
+    -------
+    sim_patterns : torch.Tensor 
+        A real Lx(Jx)MxN array storing the incoherently summed intensities
+
+    """
+    
+    #if wavefields.dim() == 4:
+    #    wavefields.unsqueeze(1)
+    #    single_frame = True
+    #elif wavefields.dim() == 5:
+    #    single_frame=False
+        
+    output = t.zeros(wavefields.shape[1:-1],
+                     dtype=wavefields.dtype,
+                     device=wavefields.device)
+    
+    # flat is better than nested, but simple is better than complex...
+    for (i,j) in ((i,j) for i in range(density_matrix.shape[-2])
+                  for j in range(density_matrix.shape[-1])):
+        if i == j: # diagonal
+            output += density_matrix[...,i,j,None,None] \
+                * cmath.cabssq(wavefields[i])
+        if i < j: # upper triangle, real part 
+            output += 2 * density_matrix[...,i,j,None,None] \
+                * (wavefields[i,...,0] * wavefields[j,...,0]
+                   +  wavefields[i,...,1] * wavefields[j,...,1])
+        if i > j: # lower triangle, imaginary part
+            # We pull the i,jth element from the density matrix,
+            # but this correponds to wavefield j and wavefield i,
+            # unlike above where it was wavefield i and j (swapped order).
+            # We also get the one negative sign because this is the imaginary
+            # part
+            output += 2 * density_matrix[...,i,j,None,None] \
+                * (wavefields[j,...,0] * wavefields[i,...,1]
+                   -  wavefields[j,...,1] * wavefields[i,...,0])
+        
+    # Now we apply oversampling
+    if oversampling != 1:
+        if wavefields.dim() == 4:
+            output = avg_pool2d(output.unsqueeze(0), oversampling)[0]
+        else:
+            output = avg_pool2d(output, oversampling)
+            
+    # Then we grab the detector slice
+    if detector_slice is not None:
+        if wavefields.dim() == 4:
+            output = output[detector_slice]
+        else:
+            output = output[(np.s_[:],) + detector_slice]
+
+    if saturation is None:
+        return t.clamp(output,min=0) + epsilon
+    else:
+        return t.clamp(output + epsilon,0,saturation)
+    
+            
+            
 def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=None, oversampling=1):
     """Returns the incoherent sum of the intensities of the wavefields
     
@@ -94,7 +190,6 @@ def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=Non
     sim_patterns : torch.Tensor 
         A real JXMxN array storing the incoherently summed intensities
     """
-    # This syntax just adds an axis to the slice to preserve the J direction
 
     output = t.sum(cmath.cabssq(wavefields),dim=0) 
 
@@ -118,7 +213,7 @@ def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=Non
         return t.clamp(output + epsilon,0,saturation)
 
 
-def quadratic_background(wavefield, background, detector_slice=None, measurement=intensity, epsilon=1e-7, saturation=None, oversampling=1):
+def quadratic_background(wavefield, background, *args, detector_slice=None, measurement=intensity, epsilon=1e-7, saturation=None, oversampling=1):
     """Returns the intensity of a wavefield plus a background
     
     The intensity is calculated via the given measurment function 
@@ -148,10 +243,10 @@ def quadratic_background(wavefield, background, detector_slice=None, measurement
     """
     
     if detector_slice is None:
-        output = measurement(wavefield, epsilon=epsilon,
+        output = measurement(wavefield, *args, epsilon=epsilon,
                              oversampling=oversampling) + background**2
     else:
-        output = measurement(wavefield, detector_slice,
+        output = measurement(wavefield, *args, detector_slice=detector_slice,
                              epsilon=epsilon, oversampling=oversampling) \
                              + background**2
 

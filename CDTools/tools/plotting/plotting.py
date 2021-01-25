@@ -17,7 +17,7 @@ from matplotlib.colors import hsv_to_rgb
 
 __all__ = ['colorize', 'plot_amplitude', 'plot_phase',
            'plot_colorized', 'plot_translations', 'get_units_factor',
-           'plot_nanomap']
+           'plot_nanomap', 'plot_real', 'plot_imag']
 
 
 def colorize(z):
@@ -80,6 +80,140 @@ def get_units_factor(units):
     if u=='pm':
         factor=1e12
     return factor
+
+
+def plot_real(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', **kwargs):
+    """Plots the real part of a complex array with dimensions NxM
+
+    If a figure is given explicitly, it will clear that existing figure and
+    plot over it. Otherwise, it will generate a new figure.
+
+    If a basis is explicitly passed, the image will be plotted in real-space
+    coordinates
+
+    Parameters
+    ----------
+    im : array
+        An complex array with dimensions NxM
+    fig : matplotlib.figure.Figure
+        Default is a new figure, a matplotlib figure to use to plot
+    basis : np.array
+        Optional, the 3x2 probe basis
+    units : str
+        The length units to mark on the plot, default is um
+    cmap : str
+        Default is 'viridis', the colormap to plot with
+    \\**kwargs
+        All other args are passed to fig.add_subplot(111, \\**kwargs)
+
+    Returns
+    -------
+    used_fig : matplotlib.figure.Figure
+        The figure object that was actually plotted to.
+    """
+    if fig is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, **kwargs)
+    else:
+        plt.figure(fig.number)
+        plt.gcf().clear()
+
+    if isinstance(im, t.Tensor):
+        real = im[...,0].detach().cpu().numpy()
+    else:
+        real = np.real(im)
+
+    #Plot in a basis if it exists, otherwise dont
+    if basis is not None:
+        if isinstance(basis,t.Tensor):
+            basis = basis.detach().cpu().numpy()
+        # This fails if the 
+        basis_norm = np.linalg.norm(basis, axis = 0)
+        basis_norm = basis_norm * get_units_factor(units)
+
+        extent = [0, real.shape[-1]*basis_norm[1], 0, real.shape[-2]*basis_norm[0]]
+    else:
+        extent=None
+
+    plt.imshow(real, cmap = cmap, extent = extent)
+    cbar = plt.colorbar()
+    cbar.set_label('Real Part (a.u.)')
+
+    if basis is not None:
+        plt.xlabel('X (' + units + ')')
+        plt.ylabel('Y (' + units + ')')
+    else:
+        plt.xlabel('j (pixels)')
+        plt.ylabel('i (pixels)')
+
+    return fig
+
+
+def plot_imag(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', **kwargs):
+    """Plots the imaginary part of a complex array with dimensions NxM
+
+    If a figure is given explicitly, it will clear that existing figure and
+    plot over it. Otherwise, it will generate a new figure.
+
+    If a basis is explicitly passed, the image will be plotted in real-space
+    coordinates
+
+    Parameters
+    ----------
+    im : array
+        An complex array with dimensions NxM
+    fig : matplotlib.figure.Figure
+        Default is a new figure, a matplotlib figure to use to plot
+    basis : np.array
+        Optional, the 3x2 probe basis
+    units : str
+        The length units to mark on the plot, default is um
+    cmap : str
+        Default is 'viridis', the colormap to plot with
+    \\**kwargs
+        All other args are passed to fig.add_subplot(111, \\**kwargs)
+
+    Returns
+    -------
+    used_fig : matplotlib.figure.Figure
+        The figure object that was actually plotted to.
+    """
+    if fig is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, **kwargs)
+    else:
+        plt.figure(fig.number)
+        plt.gcf().clear()
+
+    if isinstance(im, t.Tensor):
+        imag = im[...,1].detach().cpu().numpy()
+    else:
+        imag = np.imag(im)
+
+    #Plot in a basis if it exists, otherwise dont
+    if basis is not None:
+        if isinstance(basis,t.Tensor):
+            basis = basis.detach().cpu().numpy()
+        # This fails if the 
+        basis_norm = np.linalg.norm(basis, axis = 0)
+        basis_norm = basis_norm * get_units_factor(units)
+
+        extent = [0, imag.shape[-1]*basis_norm[1], 0, imag.shape[-2]*basis_norm[0]]
+    else:
+        extent=None
+
+    plt.imshow(imag, cmap = cmap, extent = extent)
+    cbar = plt.colorbar()
+    cbar.set_label('Imaginary Part (a.u.)')
+
+    if basis is not None:
+        plt.xlabel('X (' + units + ')')
+        plt.ylabel('Y (' + units + ')')
+    else:
+        plt.xlabel('j (pixels)')
+        plt.ylabel('i (pixels)')
+
+    return fig
 
 
 def plot_amplitude(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', **kwargs):

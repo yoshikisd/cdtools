@@ -24,7 +24,7 @@ from __future__ import division, print_function, absolute_import
 
 # I don't believe that __all__ really needed, but it's nice to define it
 # to be explicit that import * is safe
-__all__ = ['CDIModel', 'SimplePtycho', 'FancyPtycho', 'Bragg2DPtycho', 'SMatrixPtycho', 'RPI']
+__all__ = ['CDIModel', 'SimplePtycho', 'FancyPtycho', 'Bragg2DPtycho', 'SMatrixPtycho', 'RPI', 'UnifiedModePtycho']
 
 from CDTools.models.base import CDIModel
 from CDTools.models.simple_ptycho import SimplePtycho
@@ -34,3 +34,5 @@ from CDTools.models.bragg_2d_ptycho import Bragg2DPtycho
 from CDTools.models.s_matrix_ptycho import SMatrixPtycho
 from CDTools.models.multislice_2d_ptycho import Multislice2DPtycho
 from CDTools.models.rpi import RPI
+from CDTools.models.unified_mode_ptycho import UnifiedModePtycho
+from CDTools.models.unified_mode_ptycho2 import UnifiedModePtycho2

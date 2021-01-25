@@ -36,6 +36,9 @@ from matplotlib import pyplot as plt
 from matplotlib.widgets import Slider
 from matplotlib import ticker
 import numpy as np
+import threading
+import queue
+import time
 
 __all__ = ['CDIModel']
 
@@ -97,7 +100,7 @@ class CDIModel(t.nn.Module):
         raise NotImplementedError()
 
     def AD_optimize(self, iterations, data_loader,  optimizer,\
-                    scheduler=None, regularization_factor=None):
+                    scheduler=None, regularization_factor=None, thread=True):
         """Runs a round of reconstruction using the provided optimizer
         
         This is the basic automatic differentiation reconstruction tool
@@ -118,44 +121,75 @@ class CDIModel(t.nn.Module):
             Optional, a learning rate scheduler to use
         regularization_factor : float or list(float)
             Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
+        thread : bool
+            Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
         """
         # First, calculate the normalization
         normalization = 0
         for inputs, patterns in data_loader:
             normalization += t.sum(patterns).cpu().numpy()
-            
-        for it in range(iterations):
+
+        def run_iteration(stop_event=None):
             loss = 0
             N = 0
             for inputs, patterns in data_loader:
                 N += 1
                 def closure():
+                    # This is just used to allow graceful exit when threading
+                    if stop_event is not None and stop_event.is_set():
+                        exit()
                     optimizer.zero_grad()
                     sim_patterns = self.forward(*inputs)
                     if hasattr(self, 'mask'):
                         loss = self.loss(patterns,sim_patterns, mask=self.mask)
                     else:
                         loss = self.loss(patterns,sim_patterns)
-
+                        
                     if regularization_factor is not None \
                        and hasattr(self, 'regularizer'):
                         loss += self.regularizer(regularization_factor)
-                        
+                    #print(loss)
                     loss.backward()
                     return loss
-
+                
                 loss += optimizer.step(closure).detach().cpu().numpy()
-
+                
             loss /= normalization
             if scheduler is not None:
                 scheduler.step(loss)
-                
-            yield loss
+
+            return loss
+
+        if thread:
+            result_queue = queue.Queue()
+            stop_event = threading.Event()
+            def target():
+                result_queue.put(run_iteration(stop_event))
+            
+        for it in range(iterations):
+            if thread:
+                calc = threading.Thread(target=target, name='calculator', daemon=True)
+                try:
+                    calc.start()
+                    while calc.is_alive():
+                        if hasattr(self, 'figs'):
+                            self.figs[0].canvas.start_event_loop(0.01) 
+                        else:
+                            calc.join()
+                except KeyboardInterrupt as e:
+                    stop_event.set()
+                    print('\nAsking execution thread to stop cleanly - please be patient.')
+                    calc.join()
+                    raise e
+                    
+                yield result_queue.get()
+            else:
+                yield run_iteration()
 
 
     def Adam_optimize(self, iterations, dataset, batch_size=15, lr=0.005,
                       schedule=False, amsgrad=False, subset=None,
-                      regularization_factor=None):
+                      regularization_factor=None, thread=True):
         """Runs a round of reconstruction using the Adam optimizer
         
         This is generally accepted to be the most robust algorithm for use
@@ -179,6 +213,8 @@ class CDIModel(t.nn.Module):
             Optional, a pattern index or list of pattern indices to use
         regularization_factor : float or list(float)
             Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
+        thread : bool
+            Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
         """
 
         if subset is not None:
@@ -203,12 +239,13 @@ class CDIModel(t.nn.Module):
 
         return self.AD_optimize(iterations, data_loader, optimizer,
                                 scheduler=scheduler,
-                                regularization_factor=regularization_factor)
+                                regularization_factor=regularization_factor,
+                                thread=thread)
 
 
     def LBFGS_optimize(self, iterations, dataset, batch_size=None,
                        lr=0.1,history_size=2, subset=None,
-                       regularization_factor=None):
+                       regularization_factor=None, thread=True):
         """Runs a round of reconstruction using the L-BFGS optimizer
         
         This algorithm is often less stable that Adam, however in certain
@@ -232,6 +269,8 @@ class CDIModel(t.nn.Module):
             Optional, a pattern index or list of pattern indices to ues
         regularization_factor : float or list(float)
             Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
+        thread : bool
+            Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
         """
         if subset is not None:
             # if just one pattern, turn into a list for convenience
@@ -252,12 +291,14 @@ class CDIModel(t.nn.Module):
                                   lr = lr, history_size=history_size)
 
         return self.AD_optimize(iterations, data_loader, optimizer,
-                                regularization_factor=regularization_factor)
+                                regularization_factor=regularization_factor,
+                                thread=thread)
 
 
     def SGD_optimize(self, iterations, dataset, batch_size=None,
                      lr=0.01, momentum=0, dampening=0, weight_decay=0,
-                     nesterov=False, subset=None, regularization_factor=None):
+                     nesterov=False, subset=None, regularization_factor=None,
+                     thread=True):
         """Runs a round of reconstruction using the SGDoptimizer
         
         This algorithm is often less stable that Adam, but it is simpler
@@ -279,6 +320,8 @@ class CDIModel(t.nn.Module):
             Optional, a pattern index or list of pattern indices to use
         regularization_factor : float or list(float)
             Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
+        thread : bool
+            Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
         """
 
         if subset is not None:
@@ -303,7 +346,8 @@ class CDIModel(t.nn.Module):
                                 nesterov=nesterov)
 
         return self.AD_optimize(iterations, data_loader, optimizer,
-                                regularization_factor=regularization_factor)
+                                regularization_factor=regularization_factor,
+                                thread=thread)
 
 
     # By default, the plot_list is empty
@@ -337,6 +381,7 @@ class CDIModel(t.nn.Module):
             Whether to update existing plots or plot new ones
         
         """
+                
         first_update = False
         if update and hasattr(self, 'figs') and self.figs:
             figs = self.figs
@@ -375,10 +420,10 @@ class CDIModel(t.nn.Module):
                     try:
                         plotter(self, fig, dataset)
                         plt.title(name)
-                    except (IndexError, KeyError, AttributeError) as e:
+                    except (IndexError, KeyError, AttributeError, np.linalg.LinAlgError) as e:
                         pass
 
-            except (IndexError, KeyError, AttributeError) as e:
+            except (IndexError, KeyError, AttributeError, np.linalg.LinAlgError) as e:
                 pass
 
             idx += 1
@@ -386,7 +431,7 @@ class CDIModel(t.nn.Module):
             if update:
                 plt.draw()
                 fig.canvas.start_event_loop(0.001)
-
+                
         if first_update:
             plt.pause(0.05 * len(self.figs))
 

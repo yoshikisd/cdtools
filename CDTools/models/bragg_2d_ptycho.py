@@ -170,12 +170,13 @@ class Bragg2DPtycho(CDIModel):
             # recall that here we always want the shape of the detector
             # before it's cut down by the detector slice to match the
             # physical detector region
-            det_shape = self.probe[0].shape[:-1]
-
+            probe_shape = self.probe[0].shape[:-1]
+            
             self.k_map, self.intensity_map = \
                 tools.propagators.generate_high_NA_k_intensity_map(
-                    self.probe_basis, self.detector_geometry['basis'],
-                    det_shape,
+                    self.probe_basis,
+                    self.detector_geometry['basis']/ oversampling,
+                    probe_shape,
                     self.detector_geometry['distance'],
                     self.wavelength,dtype=t.float32,
                     lens=lens)

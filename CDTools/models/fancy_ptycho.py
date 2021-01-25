@@ -144,7 +144,7 @@ class FancyPtycho(CDIModel):
             outgoing_dir = np.cross(det_basis[:,0], det_basis[:,1])
             outgoing_dir /= np.linalg.norm(outgoing_dir)
             surface_normal = outgoing_dir + np.array([0.,0.,1.])
-            surface_normal /= np.linalg.norm(surface_normal)
+            surface_normal /= -np.linalg.norm(surface_normal)
 
 
         # Next generate the object geometry from the probe geometry and

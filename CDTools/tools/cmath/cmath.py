@@ -13,7 +13,7 @@ import torch as t
 
 
 __all__ = ['complex_to_torch', 'torch_to_complex', 'cabssq', 'cabs', 'cconj',
-           'cmult', 'cdiv', 'cphase', 'fftshift', 'ifftshift', 'expi']
+           'cmult', 'cdiv', 'cphase', 'fftshift', 'ifftshift', 'expi', 'cexpi']
 
 
 #

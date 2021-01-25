@@ -3,6 +3,7 @@ from __future__ import division, print_function, absolute_import
 import CDTools
 from matplotlib import pyplot as plt
 import pickle
+import time
 
 # First, we load an example dataset from a .cxi file
 filename = 'example_data/AuBalls_700ms_30nmStep_3_6SS_filter.cxi'
@@ -18,8 +19,8 @@ dataset.get_as(device='cuda')
 
 for i, loss in enumerate(model.Adam_optimize(30, dataset, batch_size=100)):
     # And we liveplot the updates to the model as they happen
-    model.inspect(dataset)
     print(i,loss)
+    model.inspect(dataset)
 
 # And we save the reconstruction out to a file
 with open('example_reconstructions/gold_balls.pickle', 'wb') as f:

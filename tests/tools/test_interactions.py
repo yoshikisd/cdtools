@@ -4,6 +4,8 @@ from CDTools.tools import cmath
 from CDTools.tools import interactions
 import numpy as np
 import torch as t
+from numpy import fft
+from scipy.fftpack import fftshift, ifftshift
 import pytest
 
 
@@ -98,8 +100,35 @@ def test_pixel_to_translations():
 
 
 def test_project_translations_to_sample():
-    # Needs to be tested
-    assert 0
+    # First, try the case where everything is ones and simple
+    basis = t.Tensor([[0,-1,0],[-1,0,0]]).t()
+    translations = t.rand((10,3))
+    pixels, props = interactions.project_translations_to_sample(basis, translations)
+
+    assert np.allclose(pixels[:,0].numpy(),-translations[:,1])
+    assert np.allclose(pixels[:,1].numpy(),-translations[:,0])
+    assert np.allclose(props.numpy(),-translations[:,2:].numpy())
+
+    # Next, a simple tilt along one axis. This is a 45 degree rotation
+    # around the positive y-axis
+    # Thus, y-axis translations are unaffected, but x-axis translations
+    # induce a motion of 1/sqrt(2) in the j- pixel space, as well as
+    # creating a propagation (negative propagation for positive x)
+    basis = t.Tensor([[0,-1e-3,0],[-np.sqrt(2)*1e-3,0,np.sqrt(2)*1e-3]]).t()
+    translations = t.rand((10,3))
+    pixels, props = interactions.project_translations_to_sample(basis, translations)
+
+    print(props.numpy())
+    print(-translations[:,2:].numpy() - translations[:,:1].numpy())
+    assert np.allclose(pixels[:,0].numpy(),-translations[:,1]*1e3)
+    assert np.allclose(pixels[:,1].numpy(),-translations[:,0]*1e3/np.sqrt(2))
+    assert np.allclose(props.numpy(),-translations[:,2:].numpy() - translations[:,:1].numpy())
+
+    # Finally, we check a non-orthogonal case
+
+
+    
+    
 
 def test_ptycho_2D_round(random_probe, random_obj):
     # Test a stack of images
@@ -227,22 +256,39 @@ def test_ptycho_2D_sinc(single_pixel_probe, random_obj):
 
 def test_RPI_interaction(random_probe, random_obj):
 
-    random_obj1 = cmath.complex_to_torch(random_obj[:79,:68])
-    random_probe1 = cmath.complex_to_torch(random_probe)
-    output = interactions.RPI_interaction(random_probe1, random_obj1)
 
+    random_obj1 = random_obj[:79,:68]
+    random_probe1 = random_probe
+    t_random_obj1 = cmath.complex_to_torch(random_obj1)
+    t_random_probe1 = cmath.complex_to_torch(random_probe1)
+    t_output1 = interactions.RPI_interaction(t_random_probe1, t_random_obj1)
 
-    random_obj1 = cmath.complex_to_torch(random_obj[:256,:256])
-    random_probe1 = cmath.complex_to_torch(random_probe)
-    output = interactions.RPI_interaction(random_probe1, random_obj1)
+    obj1_fourier = fftshift(fft.fft2(ifftshift(random_obj1), norm='ortho'))
+    obj1_ups = np.zeros(random_probe1.shape[:2]).astype(np.complex128)
+    obj1_ups[(random_probe1.shape[0]-79)//2:
+             (random_probe1.shape[0]-79)//2 + 79,
+             (random_probe1.shape[1]-68)//2:
+             (random_probe1.shape[1]-68)//2 + 68] = obj1_fourier
+    output1 = random_probe1 * fftshift(fft.ifft2(ifftshift(obj1_ups),
+                                                norm='ortho'))
+    
+    assert np.allclose(cmath.torch_to_complex(t_output1), output1)
 
     
-    random_obj1 = cmath.complex_to_torch(random_obj[:42,:103])
-    random_probe1 = cmath.complex_to_torch(random_probe)
-    output = interactions.RPI_interaction(random_probe1, random_obj1)
+    random_obj2 = np.stack([random_obj[:64,:89]]*3)
+    random_probe2 = random_probe[3:,5:]
+    t_random_obj2 = cmath.complex_to_torch(random_obj2)
+    t_random_probe2 = cmath.complex_to_torch(random_probe2)
+    t_output2 = interactions.RPI_interaction(t_random_probe2, t_random_obj2)
 
-    # Need to actually test against a numpy implementation
-    print(random_probe.shape)
-    print(random_obj.shape)
-    assert 0
+    obj2_fourier = fftshift(fft.fft2(ifftshift(random_obj2), norm='ortho'))
+    obj2_ups = np.zeros((3,)+random_probe2.shape[:2]).astype(np.complex128)
+    obj2_ups[:,(random_probe2.shape[0]-64)//2:
+             (random_probe2.shape[0]-64)//2 + 64,
+             (random_probe2.shape[1]-89)//2:
+             (random_probe2.shape[1]-89)//2 + 89] = obj2_fourier
+    output2 = random_probe2 * fftshift(fft.ifft2(ifftshift(obj2_ups),
+                                                norm='ortho'))
+
+
     

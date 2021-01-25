@@ -205,7 +205,7 @@ def generate_high_NA_k_intensity_map(sample_basis, det_basis,det_shape,distance,
     
     intensity_map = t.Tensor(intensity_map).to(*args, **kwargs)
 
-
+    
     # This accounts for the implied phase ramp along the exit wave direction
     # In other words, it prevents the diffraction pattern from sliding off the
     # detector when the sample is tilted but represented by an object with

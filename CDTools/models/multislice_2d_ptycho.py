@@ -31,7 +31,7 @@ class Multislice2DPtycho(CDIModel):
         super(Multislice2DPtycho,self).__init__()
         self.wavelength = t.Tensor([wavelength])
         self.detector_geometry = copy(detector_geometry)
-        self.dz = dz
+        self.dz = -dz
         self.nz = nz
         det_geo = self.detector_geometry
         if hasattr(det_geo, 'distance'):
@@ -95,22 +95,28 @@ class Multislice2DPtycho(CDIModel):
 
         if obj_support is not None:
             self.obj_support = obj_support
-            self.obj.data = self.obj * obj_support
+            if self.obj.dim() == 3:
+                self.obj.data = self.obj * obj_support
+            elif self.obj.dim() == 4:
+                self.obj.data = self.obj * obj_support[None,...]
         else:
-            self.obj_support = t.ones_like(self.obj)
-
+            if self.obj.dim() == 3:
+                self.obj_support = t.ones_like(self.obj)
+            elif self.obj.dim() == 4:
+                self.obj_support = t.ones_like(self.obj[0])
         self.oversampling = oversampling
 
         spacing = np.linalg.norm(self.probe_basis,axis=0)
         shape = np.array(self.probe.shape[1:-1])
 
         self.bandlimit = bandlimit
-        
+
+        # Big question: Should there be a minus sign before self.dz, or not?
         self.as_prop = tools.propagators.generate_angular_spectrum_propagator(shape, spacing, self.wavelength, self.dz, bandlimit=self.bandlimit)
 
         
     @classmethod
-    def from_dataset(cls, dataset, dz, nz, probe_convergence_radius, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=4/5):
+    def from_dataset(cls, dataset, dz, nz, probe_convergence_radius, probe_size=None, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=4/5, replicate_slice=False):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -185,8 +191,14 @@ class Multislice2DPtycho(CDIModel):
         probe_stack = [0.01 * probe_max * t.rand(probe.shape,dtype=probe.dtype) for i in range(n_modes - 1)]
         probe = t.stack([probe,] + probe_stack)
 
-        obj = tools.cmath.expi(randomize_ang * (t.rand(obj_size)-0.5))
-                              
+        # Consider a different start
+        obj = t.zeros(obj_size+(2,))
+        #obj = tools.cmath.expi(t.zeros(obj_size))
+        # If we will use a separate object per slice
+        if not replicate_slice:
+            obj = t.stack([obj]*nz)
+            
+        
         det_geo = dataset.detector_geometry
 
         translation_offsets = 0 * (t.rand((len(dataset),2)) - 0.5)
@@ -212,7 +224,10 @@ class Multislice2DPtycho(CDIModel):
             ro = restrict_obj
             os = np.array(obj_size)
             ps = np.array(probe_shape)
-            obj_support = t.zeros_like(obj.to(dtype=t.float32))
+            if replicate_slice:
+                obj_support = t.zeros_like(obj.to(dtype=t.float32))
+            else:
+                obj_support = t.zeros_like(obj[0].to(dtype=t.float32))
             obj_support[ps[0]//2-ro:os[0]+ro-ps[0]//2,
                         ps[1]//2-ro:os[1]+ro-ps[1]//2] = 1
         else:
@@ -251,7 +266,13 @@ class Multislice2DPtycho(CDIModel):
 
         if self.translation_offsets is not None:
             pix_trans += self.translation_scale * self.translation_offsets[index]
-            
+        if len(pix_trans.shape) == 1:
+            pix_trans = [pix_trans]
+            index = [index]
+            strip_first_index = True
+        else:
+            strip_first_index = False
+
         all_exit_waves = []
         for i in range(self.probe.shape[0]):
             # For a Fourier-space probe
@@ -263,44 +284,31 @@ class Multislice2DPtycho(CDIModel):
             #print(self.probe_norm)
             #for i in range(self.nz):
             exit_waves = []
-            if len(pix_trans.shape) == 1:
-                pix_trans = [pix_trans]
+                
             for trans in pix_trans:
                 exit_wave = self.probe_norm * pr
-                for i in range(self.nz-1):
-                    
-                    exit_wave = tools.interactions.ptycho_2D_sinc(exit_wave,
-                                            self.obj_support * cmath.cexpi(self.obj/self.nz),#self.obj.data,
-                                            trans,
-                                            shift_probe=True)
-                    #exit_wave = tools.interactions.ptycho_2D_round(exit_wave,
-                    #                        self.obj_support * cmath.cexpi(self.obj.data/self.nz),
-                    #                        trans)
-                    exit_wave = tools.propagators.near_field(exit_wave,self.as_prop)
+                for i in range(self.nz):
+                    # If only one object slice
+                    if self.obj.dim() == 3:
+                        exit_wave = tools.interactions.ptycho_2D_sinc(
+                            exit_wave,
+                            self.obj_support*cmath.cexpi(self.obj/self.nz),
+                            trans, shift_probe=True)
+                    # If separate slices
+                    elif self.obj.dim() == 4:
+                        exit_wave = tools.interactions.ptycho_2D_sinc(
+                            exit_wave,
+                            self.obj_support*cmath.cexpi(self.obj[i]/self.nz),
+                            trans, shift_probe=True)
+                        
+                    exit_wave = tools.propagators.near_field(
+                        exit_wave,self.as_prop)
                     
                     #tools.plotting.plot_amplitude(exit_wave)
                     #plt.show()
-
-                # only final layer gets a derivative
-                exit_wave = tools.interactions.ptycho_2D_sinc(exit_wave,
-                                            self.obj_support * cmath.cexpi(self.obj/self.nz),#self.obj,
-                                            trans,
-                                            shift_probe=True)
-                #exit_wave = tools.interactions.ptycho_2D_round(exit_wave,
-                #                        self.obj_support * cmath.cexpi(self.obj/self.nz),
-                #                        trans)
-                # One final propagation to enforce the bandlimit
-                exit_wave = tools.propagators.near_field(exit_wave,self.as_prop)
-                exit_waves.append(exit_wave)
                 
+                exit_waves.append(exit_wave)
             exit_waves = t.stack(exit_waves)
-            
-
-            if np.array(index).size == 1:
-                index = [index]
-                strip_first_index = True
-            else:
-                strip_first_index = False
             
             if exit_waves.dim() == 4:
                 exit_waves =  self.weights[index][:,None,None,None] * exit_waves
@@ -312,7 +320,6 @@ class Multislice2DPtycho(CDIModel):
                 
             all_exit_waves.append(exit_waves)
 
-        
         return t.stack(all_exit_waves)
     
         
@@ -422,14 +429,10 @@ class Multislice2DPtycho(CDIModel):
         ('Subdominant Probe Phase',
          lambda self, fig: p.plot_phase(self.probe[1], fig=fig, basis=self.probe_basis),
          lambda self: len(self.probe) >=2),
-        #('Object Amplitude', 
-        # lambda self, fig: p.plot_amplitude(self.obj, fig=fig, basis=self.probe_basis)),
-        #('Object Phase',
-        # lambda self, fig: p.plot_phase(self.obj, fig=fig, basis=self.probe_basis)),
-        ('Real Part of T', 
-         lambda self, fig: p.plot_amplitude(self.obj[:,:,0].detach().cpu().numpy(), fig=fig, basis=self.probe_basis)),
-        ('Imaginary Part of T',
-         lambda self, fig: p.plot_amplitude(self.obj[:,:,1].detach().cpu().numpy(), fig=fig, basis=self.probe_basis)),
+        ('Integrated Real Part of T', 
+         lambda self, fig: p.plot_real(t.mean(self.obj.detach().cpu(),dim=0), fig=fig, basis=self.probe_basis)),
+        ('Integrated Imaginary Part of T',
+         lambda self, fig: p.plot_imag(t.mean(self.obj.detach().cpu(),dim=0), fig=fig, basis=self.probe_basis)),
         ('Corrected Translations',
          lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig)),
         ('Background',

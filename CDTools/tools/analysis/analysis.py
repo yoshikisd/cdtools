@@ -12,14 +12,14 @@ import numpy as np
 from CDTools.tools import cmath
 from CDTools.tools import image_processing as ip
 from scipy import fftpack
+from scipy import linalg as sla
 
-__all__ = ['orthogonalize_probes','standardize', 'synthesize_reconstructions',
+__all__ = ['orthogonalize_probes', 'standardize', 'synthesize_reconstructions',
            'calc_consistency_prtf', 'calc_deconvolved_cross_correlation',
-           'calc_frc']
+           'calc_frc', 'calc_vn_entropy', 'calc_top_mode_fraction']
 
 
-from matplotlib import pyplot as plt
-def orthogonalize_probes(probes):
+def orthogonalize_probes(probes, density_matrix=None, keep_transform=False, normalize=False):
     """Orthogonalizes a set of incoherently mixing probes
 
     The strategy is to define a reduced orthogonal basis that spans
@@ -27,55 +27,104 @@ def orthogonalize_probes(probes):
     defined by the probes in that basis. After diagonalization, the
     eigenvectors can be recast into the original basis and returned
 
+    By default, it assumes that the set of probes are defined just as
+    standard incoherently mixing probe modes, and orthogonalizes them.
+    However, if a density matrix is explicitly given, it will instead
+    consider the problem of extracting the eigenbasis of the matrix
+    probes * denstity_matrix * probes^dagger, where probes is the
+    column matrix of the given probe functions. This latter problem arises
+    in the generalization of the probe mixing model, and reduces to the
+    simpler case when the density matrix is equal to the identity matrix
+    
+    If the parameter "keep_transform" is set, the function will additionally
+    return the matrix A such that A * ortho_probes^dagger = probes^dagger
+
+    If the parameter "normalize" is False (as is the default), the variation
+    in intensities in the probe modes will be kept in the probe modes, as is
+    natural for a purely incoherent model. If it is set to "True", the
+    returned probe modes will all be normalized instead.
+
     Parameters
     ----------
     probes : array
         An l x n x m complex array representing  a stack of probes
+    density_matrix : np.array
+        An optional l x l density matrix further elaborating on the state
+    keep_transform : bool
+        Default False, whether to return the map from probes to ortho_probes
+    normalize : bool
+        Default False, whether to normalize the probe modes
 
     Returns
     -------
     ortho_probes: array
         An l x n x m complex array representing a stack of probes
     """
-
+    
     try:
         probes = cmath.torch_to_complex(probes.detach().cpu())
         send_to_torch = True
     except:
         send_to_torch = False
 
-    bases = []
-    coefficients = np.zeros((probes.shape[0],probes.shape[0]), dtype=np.complex64)
-    for i, probe in enumerate(probes):
-        ortho_probe = np.copy(probe)
-        for j, basis in enumerate(bases):
-            coefficients[j,i] = np.sum(basis.conj()*ortho_probe)
-            ortho_probe -= basis * coefficients[j,i]
+    from matplotlib import pyplot as plt
+    # We can do the orthogonalization with an SVD, so first we have to
+    # reshape the final two dimensions (the image shape) into a single
+    # vectorized dimension. This matrix is probes^dagger, hence the
+    # conjugation
+    probes_mat = probes.reshape(probes.shape[0],
+                                probes.shape[1]*probes.shape[2])
 
+    if density_matrix is None:
+        density_matrix = np.eye(probes.shape[0])
+    
+        
+    # next we want to extract the eigendecomposition of the density matrix
+    # itself
+    w,v = sla.eigh(density_matrix)
+    w,v = np.linalg.eigh(density_matrix)
+    w = w[::-1]
+    v = v[:,::-1]
 
-        coefficients[i,i] = np.sqrt(np.sum(np.abs(ortho_probe)**2))
-        bases.append(ortho_probe / coefficients[i,i])
+    # We do this just to avoid total failure when the density
+    # matrix is not positive definite.
+    w = np.abs(w)
+    # Note: this will fail if any w are less than zero
+    # Probably should figure out a good way to deal with that
+    B_dagger = np.dot(np.diag(np.sqrt(w)), v.conj().transpose())
 
+    #u,s,vh = np.linalg.svd(np.dot(B_dagger,probes_mat), full_matrices=False)
+    u,s,vh = sla.svd(np.dot(B_dagger,probes_mat), full_matrices=False)
+    
 
-    density_mat = coefficients.dot(np.conj(coefficients).transpose())
-    eigvals, eigvecs = np.linalg.eigh(density_mat)
+    if normalize:
+        ortho_probes = vh.reshape(probes.shape[0],
+                                  probes.shape[1],
+                                  probes.shape[2])
 
-    ortho_probes = []
-    for i in range(len(eigvals)):
-        coefficients = np.sqrt(eigvals[i]) * eigvecs[:,i]
-        probe = np.zeros(bases[0].shape, dtype=np.complex64)
-        for coefficient, basis in zip(coefficients, bases):
-            probe += basis * coefficient
-        ortho_probes.append(probe)
-
-
-    if send_to_torch:
-        return cmath.complex_to_torch(np.stack(ortho_probes[::-1]))
+        B_dagger_inv = np.linalg.pinv(B_dagger)
+        A = np.dot(B_dagger_inv,np.dot(u,np.diag(s)))
+        #A_dagger = np.dot(np.linalg.pinv(np.diag(s)),
+        #                  np.dot(np.transpose(u).conj(),B_dagger))
     else:
-        return np.stack(ortho_probes[::-1])
+        ortho_probes = np.dot(np.diag(s),vh).reshape(probes.shape[0],
+                                                     probes.shape[1],
+                                                     probes.shape[2])
+        B_dagger_inv = np.linalg.pinv(B_dagger)
+        A = np.dot(B_dagger_inv,u)
+        #A_dagger = np.dot(np.transpose(u).conj(),B_dagger)
+    
+    if send_to_torch:
+        ortho_probes = cmath.complex_to_torch(np.stack(ortho_probes))
+        A = cmath.complex_to_torch(A)
+        #A_dagger = cmath.complex_to_torch(A_dagger)
 
+    if keep_transform:
+        return ortho_probes, A#_dagger
+    else:
+        return ortho_probes 
 
-
+    
 def standardize(probe, obj, obj_slice=None, correct_ramp=False):
     """Standardizes a probe and object to prepare them for comparison
 
@@ -512,3 +561,66 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
         threshold = t.tensor(threshold)
 
     return bins[:-1], frc, threshold
+
+
+def calc_vn_entropy(matrix):
+    """Calculates the Von Neumann entropy of a density matrix
+    
+    Will either accept a single matrix, or a stack of matrices. Matrices
+    are assumed to be Hermetian and positive definite, to be well-formed
+    density matrices
+    
+    Parameters
+    ----------
+    matrix : np.array
+        The nxn matrix or lxnxn stack of matrices to calculate the entropy of
+
+    
+    Returns
+    -------
+    entropy: float or np.array
+        The entropy or entropies of the arrays
+    """
+
+    if len(matrix.shape) == 3:
+        # Get the eigenvalues
+        eigs = [np.linalg.eigh(mat)[0] for mat in matrix]
+        # Normalize them to match standard density matrix form
+        eigs = [eig / np.sum(eig) for eig in eigs]
+        # And calculate the VN entropy!
+        entropies = [-np.sum(eig*np.log(eig)) for eig in eigs]
+        return np.array(entropies)
+    else:
+        eig = np.linalg.eigh(matrix)[0]
+        entropy = -np.sum(eig*np.log(eig))/np.sum(eig)
+        return -np.trace(np.dot(matrix,sla.logm(matrix))) 
+
+def calc_top_mode_fraction(matrix):
+    """Calculates the fraction of total power in the top mode of a density matrix
+    
+    Will either accept a single matrix, or a stack of matrices. Matrices
+    are assumed to be Hermetian and positive definite, to be well-formed
+    density matrices
+    
+    Parameters
+    ----------
+    matrix : np.array
+        The nxn matrix or lxnxn stack of matrices to work from
+
+    
+    Returns
+    -------
+    entropy: float or np.array
+        The fraction of power in the top mode of each matrix
+    """
+
+    if len(matrix.shape) == 3:
+        # Get the eigenvalues
+        eigs = [np.linalg.eigh(mat)[0] for mat in matrix]
+        # Normalize them to match standard density matrix form
+        fractions = [np.max(eig) / np.sum(eig) for eig in eigs]
+        return np.array(fractions)
+    else:
+        eig = np.linalg.eigh(matrix)[0]
+        fraction = np.max(eig) / np.sum(eig)
+        return fraction

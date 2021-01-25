@@ -140,7 +140,15 @@ def project_translations_to_sample(sample_basis, translations):
     describing the location of the probe's intersection with the sample
     plane, assuming the basis found in sample_basis is used. Second, an
     amount that the probe must be propagated along the z-axis to reach
-    that location on the sample plane.
+    the sample plane at the given location. This includes both the effect of
+    the tilted sample plane and any explicitly defined motion along the z axis
+    of the probe-forming optic as included in the input translations.
+
+
+    Note that because of the sign convention (that this function returns th
+    relative amount the probe needs to be propagated to reach any given
+    location), a positive motion along the z-axis of the probe forming optics
+    will lead to a negative propagation distance.
     
     The assumed geometry is incoming radiation with a wavevector parallel
     to the +z axis, [0,0,1].
@@ -177,6 +185,8 @@ def project_translations_to_sample(sample_basis, translations):
         dtype=surface_normal.dtype)
     
     # Here we're setting up a matrix-vector equation mat*answer=input
+    # At some point ger will need to be replaced by outer, but for now
+    # outer many places still don't have new enough versions of torch.
     mat = t.cat((I - t.ger(propagation_dir,propagation_dir),
                  surface_normal.unsqueeze(0)))
     
@@ -205,8 +215,9 @@ def project_translations_to_sample(sample_basis, translations):
         single_translation = True
 
     pixel_translations = t.mm(translations, sample_projection)
-    propagations = t.mm(translations, prop_projection)
-    
+    propagations = t.mm(translations, prop_projection) \
+        - t.mm(translations,propagation_dir[:,None])
+
     if single_translation:
         return pixel_translations[0], propagations[0]
     else:

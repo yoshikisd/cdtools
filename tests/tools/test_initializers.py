@@ -192,6 +192,32 @@ def test_SHARP_style_probe(ptycho_cxi_1):
 
 
 def test_RPI_spectral_init():
-    # Figure out a good way to test this
-    assert 0
-    RPI_spectral_init(pattern, probe, obj_shape, n_modes=1, mask=None, background=None)
+    # I think we can only really meaningfully test that it doesn't throw errors,
+    # since the original implementation is in numpy and there aren't any clear
+    # cases that can be calculated analytically.
+
+    pattern = np.random.rand(230,253).astype(np.float32)
+    probe = np.random.rand(230,253).astype(np.complex64)
+    obj_shape = [37,53]
+    mask = t.Tensor(np.random.rand(*pattern.shape) > 0.04)
+    background = t.Tensor(np.random.rand(*pattern.shape) .astype(np.float32)* 0.05)
+
+    probe = cmath.complex_to_torch(probe)
+    pattern = t.Tensor(pattern)
+    
+    obj = initializers.RPI_spectral_init(pattern, probe, obj_shape)
+    assert list(obj.shape) == [1]+obj_shape+[2]
+
+    obj = initializers.RPI_spectral_init(pattern, probe, obj_shape,
+                                         n_modes=2, mask=mask)
+    assert list(obj.shape) == [2]+obj_shape+[2]
+
+    obj = initializers.RPI_spectral_init(pattern, probe, obj_shape,
+                                         n_modes=2, background=background)
+    assert list(obj.shape) == [2]+obj_shape+[2]
+
+    obj = initializers.RPI_spectral_init(pattern, probe, obj_shape,
+                                         n_modes=2, mask=mask,
+                                         background=background)
+    assert list(obj.shape) == [2]+obj_shape+[2]
+
