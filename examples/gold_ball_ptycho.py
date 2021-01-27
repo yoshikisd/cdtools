@@ -17,16 +17,17 @@ model = CDTools.models.FancyPtycho.from_dataset(dataset, n_modes=2)
 model.to(device='cuda')
 dataset.get_as(device='cuda')
 
-for i, loss in enumerate(model.Adam_optimize(30, dataset, batch_size=100)):
+#for i, loss in enumerate(model.Adam_optimize(20, dataset, batch_size=50)):
+for i, loss in enumerate(model.LBFGS_optimize(20, dataset, lr=1, history_size=5)):
     # And we liveplot the updates to the model as they happen
     print(i,loss)
     model.inspect(dataset)
 
 # And we save the reconstruction out to a file
-with open('example_reconstructions/gold_balls.pickle', 'wb') as f:
-    pickle.dump(model.save_results(dataset),f)
+#with open('example_reconstructions/gold_balls.pickle', 'wb') as f:
+#    pickle.dump(model.save_results(dataset),f)
 
 # Finally, we plot the results
-model.inspect(dataset)
-model.compare(dataset)
-plt.show()
+#model.inspect(dataset)
+#model.compare(dataset)
+#plt.show()

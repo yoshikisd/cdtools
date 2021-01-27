@@ -100,7 +100,8 @@ class CDIModel(t.nn.Module):
         raise NotImplementedError()
 
     def AD_optimize(self, iterations, data_loader,  optimizer,\
-                    scheduler=None, regularization_factor=None, thread=True):
+                    scheduler=None, regularization_factor=None, thread=True,
+                    calculation_width=10):
         """Runs a round of reconstruction using the provided optimizer
         
         This is the basic automatic differentiation reconstruction tool
@@ -123,6 +124,8 @@ class CDIModel(t.nn.Module):
             Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
         thread : bool
             Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
+        calculation_width : int
+            Default 10, how many translations to pass through at once for each round of gradient accumulation
         """
         # First, calculate the normalization
         normalization = 0
@@ -135,22 +138,37 @@ class CDIModel(t.nn.Module):
             for inputs, patterns in data_loader:
                 N += 1
                 def closure():
-                    # This is just used to allow graceful exit when threading
-                    if stop_event is not None and stop_event.is_set():
-                        exit()
                     optimizer.zero_grad()
-                    sim_patterns = self.forward(*inputs)
-                    if hasattr(self, 'mask'):
-                        loss = self.loss(patterns,sim_patterns, mask=self.mask)
-                    else:
-                        loss = self.loss(patterns,sim_patterns)
-                        
+                    
+                    input_chunks = [[inp[i:i + calculation_width]
+                                     for inp in inputs]
+                                    for i in range(0, len(inputs[0]),
+                                                   calculation_width)]
+                    pattern_chunks = [patterns[i:i + calculation_width]
+                                      for i in range(0, len(inputs[0]),
+                                                     calculation_width)]
+                    
+                    total_loss = 0
+                    for inp, pats in zip(input_chunks, pattern_chunks):
+                        # This is just used to allow graceful exit when threading
+                        if stop_event is not None and stop_event.is_set():
+                            exit()
+
+                        sim_patterns = self.forward(*inp)
+                        if hasattr(self, 'mask'):
+                            
+                            loss = self.loss(pats,sim_patterns, mask=self.mask)
+                        else:
+                            loss = self.loss(pats,sim_patterns)
+
+                        loss.backward()
+                        total_loss += loss.detach()    
+                            
                     if regularization_factor is not None \
                        and hasattr(self, 'regularizer'):
-                        loss += self.regularizer(regularization_factor)
-                    #print(loss)
-                    loss.backward()
-                    return loss
+                        loss = self.regularizer(regularization_factor)
+                        loss.backward()
+                    return total_loss
                 
                 loss += optimizer.step(closure).detach().cpu().numpy()
                 
@@ -189,7 +207,8 @@ class CDIModel(t.nn.Module):
 
     def Adam_optimize(self, iterations, dataset, batch_size=15, lr=0.005,
                       schedule=False, amsgrad=False, subset=None,
-                      regularization_factor=None, thread=True):
+                      regularization_factor=None, thread=True,
+                      calculation_width=10):
         """Runs a round of reconstruction using the Adam optimizer
         
         This is generally accepted to be the most robust algorithm for use
@@ -215,6 +234,9 @@ class CDIModel(t.nn.Module):
             Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
         thread : bool
             Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
+        calculation_width : int
+            Default 1, how many translations to pass through at once for each round of gradient accumulation
+
         """
 
         if subset is not None:
@@ -240,12 +262,14 @@ class CDIModel(t.nn.Module):
         return self.AD_optimize(iterations, data_loader, optimizer,
                                 scheduler=scheduler,
                                 regularization_factor=regularization_factor,
-                                thread=thread)
+                                thread=thread,
+                                calculation_width=calculation_width)
 
 
     def LBFGS_optimize(self, iterations, dataset, batch_size=None,
                        lr=0.1,history_size=2, subset=None,
-                       regularization_factor=None, thread=True):
+                       regularization_factor=None, thread=True,
+                       calculation_width=10):
         """Runs a round of reconstruction using the L-BFGS optimizer
         
         This algorithm is often less stable that Adam, however in certain
@@ -271,6 +295,7 @@ class CDIModel(t.nn.Module):
             Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
         thread : bool
             Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
+        
         """
         if subset is not None:
             # if just one pattern, turn into a list for convenience
@@ -283,7 +308,7 @@ class CDIModel(t.nn.Module):
             data_loader = torchdata.DataLoader(dataset, batch_size=batch_size,
                                                shuffle=True)
         else:
-            data_loader = torchdata.DataLoader(dataset)
+            data_loader = torchdata.DataLoader(dataset, batch_size=len(dataset))
 
 
         # Define the optimizer
@@ -292,13 +317,14 @@ class CDIModel(t.nn.Module):
 
         return self.AD_optimize(iterations, data_loader, optimizer,
                                 regularization_factor=regularization_factor,
-                                thread=thread)
+                                thread=thread,
+                                calculation_width=calculation_width)
 
 
     def SGD_optimize(self, iterations, dataset, batch_size=None,
                      lr=0.01, momentum=0, dampening=0, weight_decay=0,
                      nesterov=False, subset=None, regularization_factor=None,
-                     thread=True):
+                     thread=True, calculation_width=10):
         """Runs a round of reconstruction using the SGDoptimizer
         
         This algorithm is often less stable that Adam, but it is simpler
@@ -322,6 +348,9 @@ class CDIModel(t.nn.Module):
             Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
         thread : bool
             Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
+        calculation_width : int
+            Default 1, how many translations to pass through at once for each round of gradient accumulation
+
         """
 
         if subset is not None:
@@ -347,7 +376,8 @@ class CDIModel(t.nn.Module):
 
         return self.AD_optimize(iterations, data_loader, optimizer,
                                 regularization_factor=regularization_factor,
-                                thread=thread)
+                                thread=thread,
+                                calculation_width=calculation_width)
 
 
     # By default, the plot_list is empty
