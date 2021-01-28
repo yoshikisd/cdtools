@@ -237,30 +237,33 @@ def ptycho_2D_round(probe, obj, translations):
     Parameters
     ----------
     probe : torch.Tensor
-        An MxL probe function for the exit waves
+        A (P)xMxL probe function for the exit waves
     object : torch.Tensor
         The object function to be probed
     translations : torch.Tensor
-        The Nx2 array of (i,j) translations to simulate
+        The (N)x2 array of (i,j) translations to simulate
     
     Returns
     -------
     exit_waves : torch.Tensor 
-        An NxMxL tensor of the calculated exit waves
+        An (N)x(P)xMxL tensor of the calculated exit waves
     """
+
     single_translation = False
     if translations.dim() == 1:
         translations = translations[None,:]
         single_translation = True
+
         
     integer_translations = t.round(translations).to(dtype=t.int32)
-    selections = [obj[tr[0]:tr[0]+probe.shape[0],
-                      tr[1]:tr[1]+probe.shape[1]]
-                  for tr in integer_translations]
+    selections = t.stack([obj[tr[0]:tr[0]+probe.shape[-3],
+                              tr[1]:tr[1]+probe.shape[-2]]
+                          for tr in integer_translations])
+
     if single_translation:
-        return [cmult(probe,selection) for selection in selections][0]
+        return cmult(probe,selection)[0]
     else:
-        return t.stack([cmult(probe,selection) for selection in selections])
+        return cmult(probe,selections)
 
 
 

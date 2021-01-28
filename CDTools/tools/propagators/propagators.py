@@ -601,7 +601,7 @@ def near_field(wavefront, angular_spectrum_propagator):
     Parameters
     ----------
     wavefront : torch.Tensor
-        The JxNxMx2 stack of complex wavefronts to be propagated
+        The (Leading Dims)xNxMx2 stack of complex wavefronts to be propagated
     angular_spectrum_propagator : torch.Tensor
         The NxM phase mask to be applied during propagation
 

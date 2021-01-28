@@ -277,46 +277,55 @@ class Multislice2DPtycho(CDIModel):
         prs = tools.propagators.inverse_far_field(self.probe*self.probe_fourier_support[None,:,:])
         # Here is where the mixing would happen, if it happened
 
+        all_exit_waves = []
         for i in range(self.probe.shape[0]):
             pr = prs[i]
             
             #exit_waves =  pr
             #print(self.probe_norm)
             #for i in range(self.nz):
-            exit_waves = []
                 
-            for trans in pix_trans:
-                exit_wave = self.probe_norm * pr
-                for i in range(self.nz):
-                    # If only one object slice
-                    if self.obj.dim() == 3:
-                        exit_wave = tools.interactions.ptycho_2D_sinc(
-                            exit_wave,
-                            self.obj_support*cmath.cexpi(self.obj/self.nz),
-                            trans, shift_probe=True)
-                    # If separate slices
-                    elif self.obj.dim() == 4:
-                        exit_wave = tools.interactions.ptycho_2D_sinc(
-                            exit_wave,
-                            self.obj_support*cmath.cexpi(self.obj[i]/self.nz),
-                            trans, shift_probe=True)
-                        
-                    exit_wave = tools.propagators.near_field(
-                        exit_wave,self.as_prop)
+            exit_waves = self.probe_norm * pr
+            for i in range(self.nz):
+                # If only one object slice
+                if self.obj.dim() == 3:
                     
-                    #tools.plotting.plot_amplitude(exit_wave)
-                    #plt.show()
-                
-                exit_waves.append(exit_wave)
-            exit_waves = t.stack(exit_waves)
-            
-            if exit_waves.dim() == 4:
-                exit_waves =  self.weights[index][:,None,None,None] * exit_waves
-            else:
-                exit_waves =  self.weights[index] * exit_waves
+                    #exit_wave = tools.interactions.ptycho_2D_sinc(
+                    #    exit_wave,
+                    #    self.obj_support*cmath.cexpi(self.obj/self.nz),
+                    #    pix_trans, shift_probe=True)
+                    exit_waves = tools.interactions.ptycho_2D_round(
+                        exit_waves,
+                        self.obj_support*cmath.cexpi(self.obj/self.nz),
+                        trans)
+                    
+                elif self.obj.dim() == 4:
+                    # If separate slices
+                    #exit_wave = tools.interactions.ptycho_2D_sinc(
+                    #    exit_wave,
+                    #    self.obj_support*cmath.cexpi(self.obj[i]/self.nz),
+                    #    trans, shift_probe=True)
+                    # I see, it needs to know that if exit_wave is the
+                    # same shape as the translations, it should be broadcast
+                    # along that dimension
+                    exit_waves = tools.interactions.ptycho_2D_round(
+                        exit_waves,
+                        self.obj_support*cmath.cexpi(self.obj[i]/self.nz),
+                        pix_trans)
 
-            if strip_first_index:
-                exit_waves = exit_waves[0,...]
+                exit_waves = tools.propagators.near_field(
+                    exit_waves,self.as_prop)
+                    
+
+                if exit_waves.dim() == 4:
+                    # If the index is a list and not a single index
+                    exit_waves =  self.weights[index][:,None,None,None] * exit_waves
+                else:
+                    # If the index a single index
+                    exit_waves =  self.weights[index] * exit_waves
+
+                if strip_first_index:
+                    exit_waves = exit_waves[0,...]
                 
             all_exit_waves.append(exit_waves)
 
