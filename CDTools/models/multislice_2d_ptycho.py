@@ -25,8 +25,9 @@ class Multislice2DPtycho(CDIModel):
                  weights = None, translation_scale = 1, saturation=None,
                  #probe_support = None,
                  probe_fourier_support=None,
-                 obj_support=None, oversampling=1,
-                 bandlimit=4/5):
+                 oversampling=1,
+                 bandlimit=4/5,
+                 subpixel=True):
         
         super(Multislice2DPtycho,self).__init__()
         self.wavelength = t.Tensor([wavelength])
@@ -48,6 +49,7 @@ class Multislice2DPtycho(CDIModel):
         self.surface_normal = t.Tensor(surface_normal)
         
         self.saturation = saturation
+        self.subpixel = subpixel
         
         if mask is None:
             self.mask = mask
@@ -88,22 +90,12 @@ class Multislice2DPtycho(CDIModel):
         self.translation_scale = translation_scale
 
         self.probe_fourier_support = t.Tensor(probe_fourier_support).to(t.float32)
+        # In case real-space-support gets added back
         #if probe_support is not None:
         #    self.probe_support = probe_support
         #else:
         #    self.probe_support = t.ones_like(self.probe[0])
 
-        if obj_support is not None:
-            self.obj_support = obj_support
-            if self.obj.dim() == 3:
-                self.obj.data = self.obj * obj_support
-            elif self.obj.dim() == 4:
-                self.obj.data = self.obj * obj_support[None,...]
-        else:
-            if self.obj.dim() == 3:
-                self.obj_support = t.ones_like(self.obj)
-            elif self.obj.dim() == 4:
-                self.obj_support = t.ones_like(self.obj[0])
         self.oversampling = oversampling
 
         spacing = np.linalg.norm(self.probe_basis,axis=0)
@@ -115,7 +107,7 @@ class Multislice2DPtycho(CDIModel):
 
         
     @classmethod
-    def from_dataset(cls, dataset, dz, nz, probe_convergence_radius, probe_size=None, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=4/5, replicate_slice=False):
+    def from_dataset(cls, dataset, dz, nz, probe_convergence_radius, probe_size=None, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=4/5, replicate_slice=False, subpixel=True):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -219,18 +211,6 @@ class Multislice2DPtycho(CDIModel):
         else:
             probe_support = None;
 
-        if restrict_obj != -1:
-            ro = restrict_obj
-            os = np.array(obj_size)
-            ps = np.array(probe_shape)
-            if replicate_slice:
-                obj_support = t.zeros_like(obj.to(dtype=t.float32))
-            else:
-                obj_support = t.zeros_like(obj[0].to(dtype=t.float32))
-            obj_support[ps[0]//2-ro:os[0]+ro-ps[0]//2,
-                        ps[1]//2-ro:os[1]+ro-ps[1]//2] = 1
-        else:
-            obj_support = None
 
         probe_support = t.zeros_like(probe[0].to(dtype=t.float32))
 
@@ -252,9 +232,9 @@ class Multislice2DPtycho(CDIModel):
                    saturation=saturation,
                    #probe_support=probe_support,
                    probe_fourier_support=probe_support,
-                   obj_support=obj_support,
                    oversampling=oversampling,
-                   bandlimit=bandlimit)
+                   bandlimit=bandlimit,
+                   subpixel=subpixel)
                    
     
     def interaction(self, index, translations):
@@ -265,71 +245,52 @@ class Multislice2DPtycho(CDIModel):
 
         if self.translation_offsets is not None:
             pix_trans += self.translation_scale * self.translation_offsets[index]
-        if len(pix_trans.shape) == 1:
-            pix_trans = [pix_trans]
-            index = [index]
-            strip_first_index = True
-        else:
-            strip_first_index = False
-
 
         # For a Fourier-space probe
         prs = tools.propagators.inverse_far_field(self.probe*self.probe_fourier_support[None,:,:])
         # Here is where the mixing would happen, if it happened
 
-        all_exit_waves = []
-        for i in range(self.probe.shape[0]):
-            pr = prs[i]
-            
-            #exit_waves =  pr
-            #print(self.probe_norm)
-            #for i in range(self.nz):
-                
-            exit_waves = self.probe_norm * pr
-            for i in range(self.nz):
-                # If only one object slice
-                if self.obj.dim() == 3:
-                    
-                    #exit_wave = tools.interactions.ptycho_2D_sinc(
-                    #    exit_wave,
-                    #    self.obj_support*cmath.cexpi(self.obj/self.nz),
-                    #    pix_trans, shift_probe=True)
-                    exit_waves = tools.interactions.ptycho_2D_round(
-                        exit_waves,
-                        self.obj_support*cmath.cexpi(self.obj/self.nz),
-                        trans)
-                    
-                elif self.obj.dim() == 4:
-                    # If separate slices
-                    #exit_wave = tools.interactions.ptycho_2D_sinc(
-                    #    exit_wave,
-                    #    self.obj_support*cmath.cexpi(self.obj[i]/self.nz),
-                    #    trans, shift_probe=True)
-                    # I see, it needs to know that if exit_wave is the
-                    # same shape as the translations, it should be broadcast
-                    # along that dimension
-                    exit_waves = tools.interactions.ptycho_2D_round(
-                        exit_waves,
-                        self.obj_support*cmath.cexpi(self.obj[i]/self.nz),
-                        pix_trans)
-
-                exit_waves = tools.propagators.near_field(
-                    exit_waves,self.as_prop)
-                    
-
-                if exit_waves.dim() == 4:
-                    # If the index is a list and not a single index
-                    exit_waves =  self.weights[index][:,None,None,None] * exit_waves
+        exit_waves = self.probe_norm * prs
+        for i in range(self.nz):
+            # If only one object slice
+            if self.obj.dim() == 3:
+                if i == 0 and self.subpixel:
+                    # We only need to apply the subpixel shift to the first
+                    # slice, because it shifts the probe
+                    exit_waves = tools.interactions.ptycho_2D_sinc(
+                        exit_waves, cmath.cexpi(self.obj/self.nz),
+                        pix_trans, shift_probe=True,
+                        multiple_modes=True)
                 else:
-                    # If the index a single index
-                    exit_waves =  self.weights[index] * exit_waves
+                    exit_waves = tools.interactions.ptycho_2D_round(
+                        exit_waves,cmath.cexpi(self.obj/self.nz),
+                        pix_trans, multiple_modes=True)
+                    
+            elif self.obj.dim() == 4:
+                # If separate slices
+                if i == 0 and self.subpixel:
+                    exit_waves = tools.interactions.ptycho_2D_sinc(
+                        exit_waves, cmath.cexpi(self.obj[i]/self.nz),
+                        pix_trans, shift_probe=True,
+                        multiple_modes=True)
+                else:
+                    exit_waves = tools.interactions.ptycho_2D_round(
+                        exit_waves, cmath.cexpi(self.obj[i]/self.nz),
+                        pix_trans, multiple_modes=True)
 
-                if strip_first_index:
-                    exit_waves = exit_waves[0,...]
+            exit_waves = tools.propagators.near_field(
+                exit_waves,self.as_prop)
+                    
+
+            if exit_waves.dim() == 5:
+                # If the index is a list and not a single index
+                exit_waves =  self.weights[index][...,None,None,None,None] * exit_waves
+            else:
+                # If the index a single index
+                exit_waves =  self.weights[index] * exit_waves
                 
-            all_exit_waves.append(exit_waves)
 
-        return t.stack(all_exit_waves)
+        return exit_waves
     
         
     def forward_propagator(self, wavefields):
@@ -375,7 +336,7 @@ class Multislice2DPtycho(CDIModel):
         self.probe_norm = self.probe_norm.to(*args,**kwargs)
         #self.probe_support = self.probe_support.to(*args,**kwargs)
         self.probe_fourier_support = self.probe_fourier_support.to(*args,**kwargs)
-        self.obj_support = self.obj_support.to(*args,**kwargs)
+        
         self.surface_normal = self.surface_normal.to(*args, **kwargs)
         self.as_prop = self.as_prop.to(*args, **kwargs)
         

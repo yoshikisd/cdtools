@@ -156,7 +156,6 @@ class CDIModel(t.nn.Module):
 
                         sim_patterns = self.forward(*inp)
                         if hasattr(self, 'mask'):
-                            
                             loss = self.loss(pats,sim_patterns, mask=self.mask)
                         else:
                             loss = self.loss(pats,sim_patterns)
@@ -266,7 +265,7 @@ class CDIModel(t.nn.Module):
                                 calculation_width=calculation_width)
 
 
-    def LBFGS_optimize(self, iterations, dataset, batch_size=None,
+    def LBFGS_optimize(self, iterations, dataset, 
                        lr=0.1,history_size=2, subset=None,
                        regularization_factor=None, thread=True,
                        calculation_width=10):
@@ -276,6 +275,9 @@ class CDIModel(t.nn.Module):
         situations or geometries it can be shockingly efficient. Like all
         the other optimization routines, it is defined as a generator
         function which yields the average loss each epoch.
+        
+        Note: There is no batch size, because it is a usually a bad idea to use
+        LBFGS on anything but all the data at onece
 
         Parameters
         ----------
@@ -283,8 +285,6 @@ class CDIModel(t.nn.Module):
             How many epochs of the algorithm to run
         dataset : CDataset
             The dataset to reconstruct against
-        batch_size : int
-            Optional, the size of the minibatches to use
         lr : float
             Optional, the learning rate to use
         history_size : int
@@ -303,12 +303,9 @@ class CDIModel(t.nn.Module):
                 subset = [subset]
             dataset = torchdata.Subset(dataset, subset)
         
-        # Make a dataloader
-        if batch_size is not None:
-            data_loader = torchdata.DataLoader(dataset, batch_size=batch_size,
-                                               shuffle=True)
-        else:
-            data_loader = torchdata.DataLoader(dataset, batch_size=len(dataset))
+        # Make a dataloader. This basically does nothing but load all the
+        # data at once
+        data_loader = torchdata.DataLoader(dataset, batch_size=len(dataset))
 
 
         # Define the optimizer

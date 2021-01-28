@@ -226,7 +226,7 @@ def project_translations_to_sample(sample_basis, translations):
 
     
 
-def ptycho_2D_round(probe, obj, translations):
+def ptycho_2D_round(probe, obj, translations, multiple_modes=False):
     """Returns a stack of exit waves without accounting for subpixel shifts
 
     This function returns a collection of exit waves, with the first
@@ -234,15 +234,25 @@ def ptycho_2D_round(probe, obj, translations):
     corresponding to the detector. The exit waves are calculated by
     shifting the probe by the rounded value of the translation
     
+    If multiple_modes is set to False, any additional dimensions in the
+    ptycho_2D_round function will be assumed to correspond to the translation
+    index. If multiple_modes is set to true, the (-4th) dimension of the probe
+    will always be assumed to be defining a set of (P) incoherently mixing
+    modes to be broadcast all translation indices. If any additional dimensions
+    closer to the start exist, they will be assumed to be translation indices
+    
+    
     Parameters
     ----------
     probe : torch.Tensor
-        A (P)xMxL probe function for the exit waves
+        A (P)xMxLx2 probe function to illuminate the object
     object : torch.Tensor
         The object function to be probed
     translations : torch.Tensor
         The (N)x2 array of (i,j) translations to simulate
-    
+    multuple_modes : bool
+        Default False, whether to assume the probe contains multiple modes
+
     Returns
     -------
     exit_waves : torch.Tensor 
@@ -260,11 +270,17 @@ def ptycho_2D_round(probe, obj, translations):
                               tr[1]:tr[1]+probe.shape[-2]]
                           for tr in integer_translations])
 
-    if single_translation:
-        return cmult(probe,selection)[0]
+    if multiple_modes:
+        # if the probe dimension is 4, then this hasn't yet been broadcast
+        # over the translation dimensions
+        output = cmult(probe,selections[:,None,:,:,:])
     else:
-        return cmult(probe,selections)
+        output = cmult(probe,selections)
 
+    if single_translation:
+        return output[0]
+    else:
+        return output
 
 
 
@@ -363,9 +379,7 @@ def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
         return t.stack(exit_waves)
 
 
-
-
-def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10):
+def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multiple_modes=True):
     """Returns a stack of exit waves accounting for subpixel shifts
  
     This function returns a collection of exit waves, with the first
@@ -376,25 +390,32 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10):
     in Fourier space)
 
     If shift_probe is True, it applies the subpixel shift to the probe,
-    otherwise the subpixel shift is applied to the object
+    otherwise the subpixel shift is applied to the object [not yet implemented]
+
+    If multiple_modes is set to False, any additional dimensions in the
+    ptycho_2D_round function will be assumed to correspond to the translation
+    index. If multiple_modes is set to true, the (-4th) dimension of the probe
+    will always be assumed to be defining a set of (P) incoherently mixing
+    modes to be broadcast all translation indices. If any additional dimensions
+    closer to the start exist, they will be assumed to be translation indices
 
     Parameters
     ----------
     probe : torch.Tensor
-        An MxL probe function for the exit waves
+        An (P)xMxLx2 probe function for the exit waves
     object : torch.Tensor
         The object function to be probed
     translations : torch.Tensor
-        The Nx2 array of translations to simulate
+        The (N)x2 array of translations to simulate
     shift_probe : bool
         Default True, Whether to subpixel shift the probe or object
-    padding : int
-         Default 10, if shifting the object, the padding to apply to the object to avoid circular shift effects
+    multuple_modes : bool
+        Default False, whether to assume the probe contains multiple modes
 
     Returns
     -------
     exit_waves : torch.Tensor
-        An NxMxL tensor of the calculated exit waves
+        An (N)x(P)xMxLx2 tensor of the calculated exit waves
     """
     single_translation = False
     if translations.dim() == 1:
@@ -406,35 +427,47 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10):
     integer_translations = t.floor(translations)
     subpixel_translations = translations - integer_translations
     integer_translations = integer_translations.to(dtype=t.int32)
+
+    selections = t.stack([obj[tr[0]:tr[0]+probe.shape[-3],
+                              tr[1]:tr[1]+probe.shape[-2]]
+                          for tr in integer_translations])
     
     exit_waves = []
     if shift_probe:
-        i = t.arange(probe.shape[0]) - probe.shape[0]//2
-        j = t.arange(probe.shape[1]) - probe.shape[1]//2
+        i = t.arange(probe.shape[-3],device=probe.device,dtype=probe.dtype) \
+            - probe.shape[-3]//2
+        j = t.arange(probe.shape[-2],device=probe.device,dtype=probe.dtype) \
+            - probe.shape[-2]//2
         I,J = t.meshgrid(i,j)
-        I = 2 * np.pi * I.to(t.float32) / probe.shape[0]
-        J = 2 * np.pi * J.to(t.float32) / probe.shape[1]
-        I = I.to(dtype=probe.dtype,device=probe.device)
-        J = J.to(dtype=probe.dtype,device=probe.device)
-        
-        for tr, sp in zip(integer_translations,
-                          subpixel_translations):
-            fft_probe = fftshift(t.fft(probe, 2))
-            shifted_fft_probe = cmult(fft_probe, expi(-sp[0]*I - sp[1]*J))
-            shifted_probe = t.ifft(ifftshift(shifted_fft_probe),2)
+        I = 2 * np.pi * I / probe.shape[-3]
+        J = 2 * np.pi * J / probe.shape[-2]
 
-            obj_slice = obj[tr[0]:tr[0]+probe.shape[0],
-                            tr[1]:tr[1]+probe.shape[1]]
+        phase_masks = expi(-subpixel_translations[:,0,None,None]*I
+                           -subpixel_translations[:,1,None,None]*J)
+        fft_probe = fftshift(t.fft(probe, 2))
+        if multiple_modes:
+            # if the probe dimension is 4, then this hasn't yet been broadcast
+            # over the translation dimensions
+            shifted_fft_probe = cmult(fft_probe,phase_masks[:,None,:,:,:])
+        else:
+            shifted_fft_probe = cmult(fft_probe,phase_masks)
 
-            exit_waves.append(cmult(shifted_probe, obj_slice))
+        shifted_probe = t.ifft(ifftshift(shifted_fft_probe),2)
+
+        if multiple_modes:
+            # if the probe dimension is 4, then this hasn't yet been broadcast
+            # over the translation dimensions
+            output = cmult(shifted_probe,selections[:,None,:,:,:])
+        else:
+            output = cmult(shifted_probe,selections)
         
     else:
         raise NotImplementedError('Object shift not yet implemented')
 
     if single_translation:
-        return exit_waves[0]
+        return output[0]
     else:
-        return t.stack(exit_waves)
+        return output
 
 
 def ptycho_2D_sinc_s_matrix(probe, s_matrix, translations, shift_probe=True, padding=10):
