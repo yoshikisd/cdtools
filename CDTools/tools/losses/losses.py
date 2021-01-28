@@ -139,7 +139,7 @@ def poisson_nll(intensities, sim_intensities, mask=None, eps=1e-6):
     """
     if mask is None:
         return t.sum(sim_intensities+eps -
-                     intensities * t.log(sim_intensities+eps)) \
+                     (intensities+eps) * t.log(sim_intensities+eps)) \
                      / intensities.view(-1).shape[0]
     
     else:

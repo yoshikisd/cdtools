@@ -111,7 +111,6 @@ class Multislice2DPtycho(CDIModel):
 
         self.bandlimit = bandlimit
 
-        # Big question: Should there be a minus sign before self.dz, or not?
         self.as_prop = tools.propagators.generate_angular_spectrum_propagator(shape, spacing, self.wavelength, self.dz, bandlimit=self.bandlimit)
 
         
@@ -273,12 +272,13 @@ class Multislice2DPtycho(CDIModel):
         else:
             strip_first_index = False
 
-        all_exit_waves = []
+
+        # For a Fourier-space probe
+        prs = tools.propagators.inverse_far_field(self.probe*self.probe_fourier_support[None,:,:])
+        # Here is where the mixing would happen, if it happened
+
         for i in range(self.probe.shape[0]):
-            # For a Fourier-space probe
-            pr = tools.propagators.inverse_far_field(self.probe[i] * self.probe_fourier_support)
-            # For a real-space probe
-            #pr = self.probe[i] * self.probe_support
+            pr = prs[i]
             
             #exit_waves =  pr
             #print(self.probe_norm)
@@ -341,11 +341,8 @@ class Multislice2DPtycho(CDIModel):
 
     
     def loss(self, sim_data, real_data, mask=None):
-        regularizer = t.mean(t.abs(self.obj))
-        loss = tools.losses.amplitude_mse(real_data, sim_data, mask=mask)
-        lambd = 1
-        return loss + lambd * regularizer
-        #return tools.losses.poisson_nll(real_data, sim_data, mask=mask)
+        return tools.losses.amplitude_mse(real_data, sim_data, mask=mask)
+        #return tools.losses.poisson_nll(real_data, sim_data, mask=mask,eps=0.5)
 
     
     def to(self, *args, **kwargs):
