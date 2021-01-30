@@ -10,6 +10,7 @@ from matplotlib import pyplot as plt
 from datetime import datetime
 import numpy as np
 from copy import copy
+from functools import reduce
 
 __all__ = ['Multislice2DPtycho']
 
@@ -26,8 +27,10 @@ class Multislice2DPtycho(CDIModel):
                  #probe_support = None,
                  probe_fourier_support=None,
                  oversampling=1,
-                 bandlimit=4/5,
-                 subpixel=True):
+                 bandlimit=None,
+                 subpixel=True,
+                 exponentiate_obj=True,
+                 fourier_probe=False, units='um'):
         
         super(Multislice2DPtycho,self).__init__()
         self.wavelength = t.Tensor([wavelength])
@@ -50,6 +53,9 @@ class Multislice2DPtycho(CDIModel):
         
         self.saturation = saturation
         self.subpixel = subpixel
+        self.exponentiate_obj = exponentiate_obj
+        self.fourier_probe = fourier_probe
+        self.units = units
         
         if mask is None:
             self.mask = mask
@@ -90,24 +96,19 @@ class Multislice2DPtycho(CDIModel):
         self.translation_scale = translation_scale
 
         self.probe_fourier_support = t.Tensor(probe_fourier_support).to(t.float32)
-        # In case real-space-support gets added back
-        #if probe_support is not None:
-        #    self.probe_support = probe_support
-        #else:
-        #    self.probe_support = t.ones_like(self.probe[0])
 
         self.oversampling = oversampling
 
         spacing = np.linalg.norm(self.probe_basis,axis=0)
         shape = np.array(self.probe.shape[1:-1])
-
+        
         self.bandlimit = bandlimit
-
+        
         self.as_prop = tools.propagators.generate_angular_spectrum_propagator(shape, spacing, self.wavelength, self.dz, bandlimit=self.bandlimit)
 
         
     @classmethod
-    def from_dataset(cls, dataset, dz, nz, probe_convergence_radius, probe_size=None, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=4/5, replicate_slice=False, subpixel=True):
+    def from_dataset(cls, dataset, dz, nz, probe_convergence_radius, probe_size=None, padding=0, n_modes=1, translation_scale = 1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=None, replicate_slice=False, subpixel=True, exponentiate_obj=True, units='um', fourier_probe=False):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -175,7 +176,8 @@ class Multislice2DPtycho(CDIModel):
             probe = tools.initializers.gaussian_probe(dataset, probe_basis, probe_shape, probe_size, propagation_distance=propagation_distance)
 
         # For a Fourier space probe
-        probe = tools.propagators.inverse_far_field(probe)
+        if fourier_probe:
+            probe = tools.propagators.far_field(probe)
             
         # Now we initialize all the subdominant probe modes
         probe_max = t.max(cmath.cabs(probe))
@@ -183,8 +185,10 @@ class Multislice2DPtycho(CDIModel):
         probe = t.stack([probe,] + probe_stack)
 
         # Consider a different start
-        obj = t.zeros(obj_size+(2,))
-        #obj = tools.cmath.expi(t.zeros(obj_size))
+        if exponentiate_obj:
+            obj = t.zeros(obj_size+(2,))
+        else:
+            obj = tools.cmath.expi(t.zeros(obj_size))
         # If we will use a separate object per slice
         if not replicate_slice:
             obj = t.stack([obj]*nz)
@@ -201,19 +205,7 @@ class Multislice2DPtycho(CDIModel):
         else:
             mask = None
 
-        if probe_support_radius is not None:
-            probe_support = t.zeros_like(probe[0].to(dtype=t.float32))
-            p_cent = np.array(probe.shape[1:3]).astype(int) // 2
-            psr = int(probe_support_radius)
-            probe_support[p_cent[0]-psr:p_cent[0]+psr,
-                          p_cent[1]-psr:p_cent[1]+psr] = 1
-            probe = probe * probe_support[None,:,:]
-        else:
-            probe_support = None;
-
-
-        probe_support = t.zeros_like(probe[0].to(dtype=t.float32))
-
+        probe_support = t.zeros_like(probe[0])
         xs, ys = np.mgrid[:probe.shape[-3],:probe.shape[-2]]
         xs = xs - np.mean(xs)
         ys = ys - np.mean(ys)
@@ -234,7 +226,9 @@ class Multislice2DPtycho(CDIModel):
                    probe_fourier_support=probe_support,
                    oversampling=oversampling,
                    bandlimit=bandlimit,
-                   subpixel=subpixel)
+                   subpixel=subpixel,
+                   exponentiate_obj=exponentiate_obj,
+                   units=units, fourier_probe=fourier_probe)
                    
     
     def interaction(self, index, translations):
@@ -247,9 +241,17 @@ class Multislice2DPtycho(CDIModel):
             pix_trans += self.translation_scale * self.translation_offsets[index]
 
         # For a Fourier-space probe
-        prs = tools.propagators.inverse_far_field(self.probe*self.probe_fourier_support[None,:,:])
+        if self.fourier_probe:
+            prs  =tools.propagators.inverse_far_field(self.probe*self.probe_fourier_support[None,:,:])
+        else:
+            prs = self.probe*self.probe_fourier_support[None,:,:]
         # Here is where the mixing would happen, if it happened
 
+        if self.exponentiate_obj:
+            obj = cmath.cexpi(self.obj/self.nz)
+        else:
+            obj = self.obj
+        
         exit_waves = self.probe_norm * prs
         for i in range(self.nz):
             # If only one object slice
@@ -258,36 +260,35 @@ class Multislice2DPtycho(CDIModel):
                     # We only need to apply the subpixel shift to the first
                     # slice, because it shifts the probe
                     exit_waves = tools.interactions.ptycho_2D_sinc(
-                        exit_waves, cmath.cexpi(self.obj/self.nz),
-                        pix_trans, shift_probe=True,
-                        multiple_modes=True)
+                        exit_waves, obj, pix_trans,
+                        shift_probe=True, multiple_modes=True)
                 else:
                     exit_waves = tools.interactions.ptycho_2D_round(
-                        exit_waves,cmath.cexpi(self.obj/self.nz),
-                        pix_trans, multiple_modes=True)
+                        exit_waves, obj, pix_trans,
+                        multiple_modes=True)
                     
             elif self.obj.dim() == 4:
                 # If separate slices
                 if i == 0 and self.subpixel:
                     exit_waves = tools.interactions.ptycho_2D_sinc(
-                        exit_waves, cmath.cexpi(self.obj[i]/self.nz),
-                        pix_trans, shift_probe=True,
-                        multiple_modes=True)
+                        exit_waves, obj[i], pix_trans,
+                        shift_probe=True, multiple_modes=True)
                 else:
                     exit_waves = tools.interactions.ptycho_2D_round(
-                        exit_waves, cmath.cexpi(self.obj[i]/self.nz),
-                        pix_trans, multiple_modes=True)
+                        exit_waves, obj[i], pix_trans,
+                        multiple_modes=True)
 
-            exit_waves = tools.propagators.near_field(
-                exit_waves,self.as_prop)
+            if i < self.nz-1: #on all but the last iteration
+                exit_waves = tools.propagators.near_field(
+                    exit_waves,self.as_prop)
                     
-
-            if exit_waves.dim() == 5:
-                # If the index is a list and not a single index
-                exit_waves =  self.weights[index][...,None,None,None,None] * exit_waves
-            else:
-                # If the index a single index
-                exit_waves =  self.weights[index] * exit_waves
+        
+        if exit_waves.dim() == 5:
+            # If the index is a list and not a single index
+            exit_waves =  self.weights[index][...,None,None,None,None] * exit_waves
+        else:
+            # If the index a single index
+            exit_waves =  self.weights[index] * exit_waves
                 
 
         return exit_waves
@@ -386,22 +387,34 @@ class Multislice2DPtycho(CDIModel):
 
     # Needs to be updated to allow for plotting to an existing figure
     plot_list = [
-        ('Dominant Probe Amplitude',
-         lambda self, fig: p.plot_amplitude(self.probe[0], fig=fig, basis=self.probe_basis)),
-        ('Dominant Probe Phase',
-         lambda self, fig: p.plot_phase(self.probe[0], fig=fig, basis=self.probe_basis)),
-        ('Subdominant Probe Amplitude',
-         lambda self, fig: p.plot_amplitude(self.probe[1], fig=fig, basis=self.probe_basis),
+        ('Dominant Probe Fourier Space Amplitude',
+         lambda self, fig: p.plot_amplitude(self.probe[0] if self.fourier_probe else tools.propagators.inverse_far_field(self.probe[0]), fig=fig)),
+        ('Dominant Probe Fourier Space Phase',
+         lambda self, fig: p.plot_phase(self.probe[0] if self.fourier_probe else tools.propagators.inverse_far_field(self.probe[0]), fig=fig)),
+        ('Dominant Probe Real Space Amplitude',
+         lambda self, fig: p.plot_amplitude(self.probe[0] if not self.fourier_probe else tools.propagators.inverse_far_field(self.probe[0]), fig=fig, basis=self.probe_basis, units=self.units)),
+        ('Dominant Probe Real Space Phase',
+         lambda self, fig: p.plot_phase(self.probe[0] if not self.fourier_probe else tools.propagators.inverse_far_field(self.probe[0]), fig=fig, basis=self.probe_basis, units=self.units)),
+        ('Subdominant Probe Real Space Amplitude',
+         lambda self, fig: p.plot_amplitude(self.probe[1] if not self.fourier_probe else tools.propagators.inverse_far_field(self.probe[1]), fig=fig, basis=self.probe_basis, units=self.units),
          lambda self: len(self.probe) >=2),
-        ('Subdominant Probe Phase',
-         lambda self, fig: p.plot_phase(self.probe[1], fig=fig, basis=self.probe_basis),
+        ('Subdominant Probe Real Space Phase',
+         lambda self, fig: p.plot_phase(self.probe[1] if not self.fourier_probe else tools.propagators.inverse_far_field(self.probe[1]), fig=fig, basis=self.probe_basis, units=self.units),
          lambda self: len(self.probe) >=2),
         ('Integrated Real Part of T', 
-         lambda self, fig: p.plot_real(t.mean(self.obj.detach().cpu(),dim=0), fig=fig, basis=self.probe_basis)),
+         lambda self, fig: p.plot_real(t.sum(self.obj.detach().cpu(),dim=0), fig=fig, basis=self.probe_basis, units=self.units),
+         lambda self: self.exponentiate_obj),
         ('Integrated Imaginary Part of T',
-         lambda self, fig: p.plot_imag(t.mean(self.obj.detach().cpu(),dim=0), fig=fig, basis=self.probe_basis)),
+         lambda self, fig: p.plot_imag(t.sum(self.obj.detach().cpu(),dim=0), fig=fig, basis=self.probe_basis, units=self.units),
+         lambda self: self.exponentiate_obj),
+        ('Amplitude of Stacked Object Function', 
+         lambda self, fig: p.plot_amplitude(reduce(cmath.cmult, self.obj.detach().cpu()), fig=fig, basis=self.probe_basis, units=self.units),
+         lambda self: not self.exponentiate_obj),
+        ('Phase of Stacked Object Function',
+         lambda self, fig: p.plot_phase(reduce(cmath.cmult, self.obj.detach().cpu()), fig=fig, basis=self.probe_basis, units=self.units),
+         lambda self: not self.exponentiate_obj),
         ('Corrected Translations',
-         lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig)),
+         lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig, units=self.units)),
         ('Background',
          lambda self, fig: plt.figure(fig.number) and plt.imshow(self.background.detach().cpu().numpy()**2))
     ]
@@ -410,7 +423,12 @@ class Multislice2DPtycho(CDIModel):
     def save_results(self, dataset):
         basis = self.probe_basis.detach().cpu().numpy()
         translations = self.corrected_translations(dataset).detach().cpu().numpy()
-        probe = cmath.torch_to_complex(self.probe.detach().cpu())
+        if self.fourier_probe:
+            probe = tools.propagators.inverse_far_field(self.probe)
+        else:
+            probe = self.probe
+            
+        probe = cmath.torch_to_complex(probe.detach().cpu())
         probe = probe * self.probe_norm.detach().cpu().numpy()
         obj = cmath.torch_to_complex(self.obj.detach().cpu())
         background = self.background.detach().cpu().numpy()**2

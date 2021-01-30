@@ -226,28 +226,22 @@ class FancyPtycho(CDIModel):
         if self.translation_offsets is not None:
             pix_trans += self.translation_scale * self.translation_offsets[index]
             
-        all_exit_waves = []
-        for i in range(self.probe.shape[0]):
-            # from storing the probe in Fourier space
-            #pr = tools.propagators.inverse_far_field(self.probe[i]) * self.probe_support
-            pr = self.probe[i] * self.probe_support
-            exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(pr,
-                                                           self.obj_support * self.obj,
-                                                           pix_trans,
-                                                           shift_probe=True)
-            exit_waves = exit_waves * self.probe_support[...,:,:]
+        prs = self.probe * self.probe_support[...,:,:]    
+        exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
+            prs, self.obj_support * self.obj,pix_trans,
+            shift_probe=True, multiple_modes=True)
+
+        exit_waves = exit_waves * self.probe_support[...,:,:]
 
 
-            if hasattr(self,'weights') and self.weights is not None:
-                if exit_waves.dim() == 4:
-                    exit_waves =  self.weights[index][:,None,None,None] * exit_waves
-                else:
-                    exit_waves =  self.weights[index] * exit_waves
-                
-            all_exit_waves.append(exit_waves)
-
+        if hasattr(self,'weights') and self.weights is not None:
+            if exit_waves.dim() == 5:
+                exit_waves =  self.weights[index][:,None,None,None,None] \
+                    * exit_waves
+            else:
+                exit_waves =  self.weights[index] * exit_waves
         
-        return t.stack(all_exit_waves)
+        return exit_waves
     
         
     def forward_propagator(self, wavefields):
