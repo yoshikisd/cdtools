@@ -82,7 +82,146 @@ def get_units_factor(units):
     return factor
 
 
-def plot_real(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', **kwargs):
+def plot_image(im, plot_func=lambda x: x, fig=None, basis=None, units='$\\mu$m', cmap='viridis', cmap_label=None, **kwargs):
+    """Plots an image with a colorbar and on an appropriate spatial grid
+    
+    If a figure is given explicitly, it will clear that existing figure and
+    plot over it. Otherwise, it will generate a new figure.
+
+    If a basis is explicitly passed, the image will be plotted in real-space
+    coordinates
+
+    Finally, if a function is passed to the plot_func argument, this function
+    will be called on each slice of data before it is plotted. This is used
+    internally to enable the plot_real, plot_image, plot_phase, etc. functions.
+    
+
+    Parameters
+    ----------
+    im : array
+        An complex array with dimensions NxM
+    plot_func : callable
+        A function which maps numpy arrays to the image to be plotted
+    fig : matplotlib.figure.Figure
+        Default is a new figure, a matplotlib figure to use to plot
+    basis : np.array
+        Optional, the 3x2 probe basis
+    units : str
+        The length units to mark on the plot, default is um
+    cmap : str
+        Default is 'viridis', the colormap to plot with
+    cmap_label : str
+        What to label the colorbar when plotting
+    \\**kwargs
+        All other args are passed to fig.add_subplot(111, \\**kwargs)
+
+    Returns
+    -------
+    used_fig : matplotlib.figure.Figure
+        The figure object that was actually plotted to.
+    """
+    
+    # convert to numpy
+    if isinstance(im, t.Tensor):
+        # If final dimension is 2, assume it is a complex array. If not,
+        # assume it represents a real array
+        if im.shape[-1] == 2:
+            im = cmath.torch_to_complex(im.detach().cpu())
+        else:
+            im = im.detach().cpu().numpy()
+
+    if fig is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, **kwargs)
+
+    # This nukes everything and updates either the appropriate image from the
+    # stack of images, or the only image if only a single image has been
+    # given
+    def make_plot(idx):
+        plt.figure(fig.number)
+        title = plt.gca().get_title()
+        fig.clear()
+
+        
+        # If im only has two dimensions, this reshape will add a leading
+        # dimension, and update will be called on index 0. If it has 3 or more
+        # dimensions, then all the leading dimensions will be compressed into
+        # one long dimension which can be scrolled through.
+        s = im.shape
+        reshaped_im = im.reshape(-1,s[-2],s[-1])
+        num_images = reshaped_im.shape[0]
+        fig.plot_idx = idx % num_images
+        
+        to_plot = plot_func(reshaped_im[fig.plot_idx])
+        
+        #Plot in a basis if it exists, otherwise dont
+        if basis is not None:
+            if isinstance(basis,t.Tensor):
+                np_basis = basis.detach().cpu().numpy()
+            else:
+                np_basis = basis
+            # This fails if the basis is not rectangular
+            basis_norm = np.linalg.norm(np_basis, axis = 0)
+            basis_norm = basis_norm * get_units_factor(units)
+
+            extent = [0, to_plot.shape[-1]*basis_norm[1], 0,
+                      to_plot.shape[-2]*basis_norm[0]]
+        else:
+            extent=None
+
+        plt.imshow(to_plot, cmap = cmap, extent = extent)
+        cbar = plt.colorbar()
+        if cmap_label is not None:
+            cbar.set_label(cmap_label)
+
+        if basis is not None:
+            plt.xlabel('X (' + units + ')')
+            plt.ylabel('Y (' + units + ')')
+        else:
+            plt.xlabel('j (pixels)')
+            plt.ylabel('i (pixels)')
+
+            
+        plt.title(title)
+
+        if len(im.shape) >= 3:
+            plt.text(0.03, 0.03, str(fig.plot_idx), fontsize=14, transform=plt.gcf().transFigure)
+        return fig
+
+    if hasattr(fig, 'plot_idx'):
+        result = make_plot(fig.plot_idx)
+    else:
+        result = make_plot(0)
+
+    update = make_plot
+        
+    
+    def on_action(event):
+        if not hasattr(event, 'button'):
+            event.button = None
+        if not hasattr(event, 'key'):
+            event.key = None
+                
+        if event.key == 'up' or event.button == 'up':
+            update(fig.plot_idx - 1)
+        elif event.key == 'down' or event.button == 'down':
+            update(fig.plot_idx + 1)
+        plt.draw()
+
+    if len(im.shape) >=3:
+        if not hasattr(fig,'my_callbacks'):
+            fig.my_callbacks = []
+
+        for cid in fig.my_callbacks:
+            fig.canvas.mpl_disconnect(cid)
+        fig.my_callbacks = []
+        fig.my_callbacks.append(fig.canvas.mpl_connect('key_press_event',on_action))
+        fig.my_callbacks.append(fig.canvas.mpl_connect('scroll_event',on_action))
+    
+    return result
+    
+
+def plot_real(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', cmap_label='Real Part (a.u.)', **kwargs):
     """Plots the real part of a complex array with dimensions NxM
 
     If a figure is given explicitly, it will clear that existing figure and
@@ -103,6 +242,8 @@ def plot_real(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', **kwa
         The length units to mark on the plot, default is um
     cmap : str
         Default is 'viridis', the colormap to plot with
+    cmap_label : str
+        What to label the colorbar when plotting
     \\**kwargs
         All other args are passed to fig.add_subplot(111, \\**kwargs)
 
@@ -111,45 +252,14 @@ def plot_real(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', **kwa
     used_fig : matplotlib.figure.Figure
         The figure object that was actually plotted to.
     """
-    if fig is None:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, **kwargs)
-    else:
-        plt.figure(fig.number)
-        plt.gcf().clear()
-
-    if isinstance(im, t.Tensor):
-        real = im[...,0].detach().cpu().numpy()
-    else:
-        real = np.real(im)
-
-    #Plot in a basis if it exists, otherwise dont
-    if basis is not None:
-        if isinstance(basis,t.Tensor):
-            basis = basis.detach().cpu().numpy()
-        # This fails if the 
-        basis_norm = np.linalg.norm(basis, axis = 0)
-        basis_norm = basis_norm * get_units_factor(units)
-
-        extent = [0, real.shape[-1]*basis_norm[1], 0, real.shape[-2]*basis_norm[0]]
-    else:
-        extent=None
-
-    plt.imshow(real, cmap = cmap, extent = extent)
-    cbar = plt.colorbar()
-    cbar.set_label('Real Part (a.u.)')
-
-    if basis is not None:
-        plt.xlabel('X (' + units + ')')
-        plt.ylabel('Y (' + units + ')')
-    else:
-        plt.xlabel('j (pixels)')
-        plt.ylabel('i (pixels)')
-
-    return fig
+    plot_func = lambda x: np.real(x)
+    return plot_image(im, plot_func=plot_func, fig=fig, basis=basis,
+                      units=units, cmap=cmap, cmap_label=cmap_label,
+                      **kwargs)
+    
 
 
-def plot_imag(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', **kwargs):
+def plot_imag(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', cmap_label='Imaginary Part (a.u.)', **kwargs):
     """Plots the imaginary part of a complex array with dimensions NxM
 
     If a figure is given explicitly, it will clear that existing figure and
@@ -170,6 +280,8 @@ def plot_imag(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', **kwa
         The length units to mark on the plot, default is um
     cmap : str
         Default is 'viridis', the colormap to plot with
+    cmap_label : str
+        What to label the colorbar when plotting
     \\**kwargs
         All other args are passed to fig.add_subplot(111, \\**kwargs)
 
@@ -178,53 +290,21 @@ def plot_imag(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', **kwa
     used_fig : matplotlib.figure.Figure
         The figure object that was actually plotted to.
     """
-    if fig is None:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, **kwargs)
-    else:
-        plt.figure(fig.number)
-        plt.gcf().clear()
-
-    if isinstance(im, t.Tensor):
-        imag = im[...,1].detach().cpu().numpy()
-    else:
-        imag = np.imag(im)
-
-    #Plot in a basis if it exists, otherwise dont
-    if basis is not None:
-        if isinstance(basis,t.Tensor):
-            basis = basis.detach().cpu().numpy()
-        # This fails if the 
-        basis_norm = np.linalg.norm(basis, axis = 0)
-        basis_norm = basis_norm * get_units_factor(units)
-
-        extent = [0, imag.shape[-1]*basis_norm[1], 0, imag.shape[-2]*basis_norm[0]]
-    else:
-        extent=None
-
-    plt.imshow(imag, cmap = cmap, extent = extent)
-    cbar = plt.colorbar()
-    cbar.set_label('Imaginary Part (a.u.)')
-
-    if basis is not None:
-        plt.xlabel('X (' + units + ')')
-        plt.ylabel('Y (' + units + ')')
-    else:
-        plt.xlabel('j (pixels)')
-        plt.ylabel('i (pixels)')
-
-    return fig
+    plot_func = lambda x: np.imag(x)
+    return plot_image(im, plot_func=plot_func, fig=fig, basis=basis,
+                      units=units, cmap=cmap, cmap_label=cmap_label,
+                      **kwargs)
 
 
-def plot_amplitude(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', **kwargs):
+def plot_amplitude(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', cmap_label='Amplitude (a.u.)', **kwargs):
     """Plots the amplitude of a complex array with dimensions NxM
 
     If a figure is given explicitly, it will clear that existing figure and
     plot over it. Otherwise, it will generate a new figure.
 
     If a basis is explicitly passed, the image will be plotted in real-space
-    coordinates
-
+    coordinates.
+    
     Parameters
     ----------
     im : array
@@ -237,6 +317,8 @@ def plot_amplitude(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', 
         The length units to mark on the plot, default is um
     cmap : str
         Default is 'viridis', the colormap to plot with
+    cmap_label : str
+        What to label the colorbar when plotting
     \\**kwargs
         All other args are passed to fig.add_subplot(111, \\**kwargs)
 
@@ -245,45 +327,13 @@ def plot_amplitude(im, fig = None, basis=None, units='$\\mu$m', cmap='viridis', 
     used_fig : matplotlib.figure.Figure
         The figure object that was actually plotted to.
     """
-    if fig is None:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, **kwargs)
-    else:
-        plt.figure(fig.number)
-        plt.gcf().clear()
-
-    if isinstance(im, t.Tensor):
-        absolute = cmath.cabs(im).detach().cpu().numpy()
-    else:
-        absolute = np.absolute(im)
-
-    #Plot in a basis if it exists, otherwise dont
-    if basis is not None:
-        if isinstance(basis,t.Tensor):
-            basis = basis.detach().cpu().numpy()
-        # This fails if the 
-        basis_norm = np.linalg.norm(basis, axis = 0)
-        basis_norm = basis_norm * get_units_factor(units)
-
-        extent = [0, absolute.shape[-1]*basis_norm[1], 0, absolute.shape[-2]*basis_norm[0]]
-    else:
-        extent=None
-
-    plt.imshow(absolute, cmap = cmap, extent = extent)
-    cbar = plt.colorbar()
-    cbar.set_label('Amplitude (a.u.)')
-
-    if basis is not None:
-        plt.xlabel('X (' + units + ')')
-        plt.ylabel('Y (' + units + ')')
-    else:
-        plt.xlabel('j (pixels)')
-        plt.ylabel('i (pixels)')
-
-    return fig
+    plot_func = lambda x: np.absolute(x)
+    return plot_image(im, plot_func=plot_func, fig=fig, basis=basis,
+                      units=units, cmap=cmap, cmap_label=cmap_label,
+                      **kwargs)
 
 
-def plot_phase(im, fig=None, basis=None, units='$\\mu$m', cmap='auto', **kwargs):
+def plot_phase(im, fig=None, basis=None, units='$\\mu$m', cmap='auto', cmap_label='Phase (rad)', **kwargs):
     """ Plots the phase of a complex array with dimensions NxMx2
 
     If a figure is given explicitly, it will clear that existing figure and
@@ -304,6 +354,8 @@ def plot_phase(im, fig=None, basis=None, units='$\\mu$m', cmap='auto', **kwargs)
         The length units to mark on the plot, default is um
     cmap : str
         Default is 'viridis', the colormap to plot with
+    cmap_label : str
+        What to label the colorbar when plotting
     \\**kwargs
         All other args are passed to fig.add_subplot(111, \\**kwargs)
 
@@ -312,49 +364,18 @@ def plot_phase(im, fig=None, basis=None, units='$\\mu$m', cmap='auto', **kwargs)
     used_fig : matplotlib.figure.Figure
         The figure object that was actually plotted to.
     """
-    if fig is None:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, **kwargs)
-    else:
-        plt.figure(fig.number)
-        plt.gcf().clear()
-
-    if isinstance(im, t.Tensor):
-        phase = cmath.cphase(im).detach().cpu().numpy()
-    else:
-        phase = np.angle(im)
-
-    if basis is not None:
-        if isinstance(basis,t.Tensor):
-            basis = basis.detach().cpu().numpy()
-        basis_norm = np.linalg.norm(basis, axis = 0)
-        basis_norm = basis_norm * get_units_factor(units)
-
-        extent = [0, phase.shape[-1]*basis_norm[1], 0, phase.shape[-2]*basis_norm[0]]
-    else:
-        extent=None
-
-
-    # If the user has matplotlib >=3.0, use the preferred colormap
     if cmap == 'auto':
-        try:
-            plt.imshow(phase, cmap = 'twilight', extent=extent)
-        except:
-            plt.imshow(phase, cmap = 'hsv', extent=extent)
-    else:
-        plt.imshow(phase, cmap = cmap, extent=extent)
+        if 'twilight' in plt.colormaps():
+            cmap = 'twilight'
+        elif 'hsv' in plt.colormaps():
+            cmap = 'hsv'
+        else:
+            raise AttributeError('Neither twilight or hsv colormap exists in this screwed up matplotlib install')
 
-    cbar = plt.colorbar()
-    cbar.set_label('Phase (rad)')
-
-    if basis is not None:
-        plt.xlabel('X (' + units + ')')
-        plt.ylabel('Y (' + units + ')')
-    else:
-        plt.xlabel('j (pixels)')
-        plt.ylabel('i (pixels)')
-
-    return fig
+    plot_func = lambda x: np.angle(x)
+    return plot_image(im, plot_func=plot_func, fig=fig, basis=basis,
+                      units=units, cmap=cmap, cmap_label=cmap_label,
+                      **kwargs)
 
 
 def plot_amplitude_surfacenorm():
@@ -390,38 +411,9 @@ def plot_colorized(im, fig=None, basis=None, units='$\\mu$m', **kwargs):
     used_fig : matplotlib.figure.Figure
         The figure object that was actually plotted to.
     """
-    if fig is None:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, **kwargs)
-    else:
-        plt.figure(fig.number)
-        plt.gcf().clear()
-
-    if isinstance(im, t.Tensor):
-        im = cmath.torch_to_complex(im.detach().cpu())
-
-    if basis is not None:
-        if isinstance(basis,t.Tensor):
-            basis = basis.detach().cpu().numpy()
-        basis_norm = np.linalg.norm(basis, axis = 0)
-        basis_norm = basis_norm * get_units_factor(units)
-
-        extent = [0, im.shape[-1]*basis_norm[1], 0, im.shape[-2]*basis_norm[0]]
-    else:
-        extent=None
-
-    colorized = colorize(im)
-    plt.imshow(colorized, extent=extent)
-
-    if basis is not None:
-        plt.xlabel('X (' + units + ')')
-        plt.ylabel('Y (' + units + ')')
-    else:
-        plt.xlabel('j (pixels)')
-        plt.ylabel('i (pixels)')
-
-    return fig
-
+    plot_func = lambda x: colorize(x)
+    return plot_image(im, plot_func=plot_func, fig=fig, basis=basis,
+                      units=units, cmap=cmap, **kwargs)
 
 
 def plot_translations(translations, fig=None, units='$\\mu$m', lines=True, **kwargs):

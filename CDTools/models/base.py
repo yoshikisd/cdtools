@@ -311,7 +311,7 @@ class CDIModel(t.nn.Module):
         # Define the optimizer
         optimizer = t.optim.LBFGS(self.parameters(),
                                   lr = lr, history_size=history_size)
-
+        
         return self.AD_optimize(iterations, data_loader, optimizer,
                                 regularization_factor=regularization_factor,
                                 thread=thread,

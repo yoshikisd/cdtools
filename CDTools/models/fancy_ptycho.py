@@ -153,6 +153,7 @@ class FancyPtycho(CDIModel):
 
         obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=200)
 
+
         if hasattr(dataset, 'background') and dataset.background is not None:
             background = t.sqrt(dataset.background)
         else:
@@ -336,16 +337,10 @@ class FancyPtycho(CDIModel):
 
     # Needs to be updated to allow for plotting to an existing figure
     plot_list = [
-        ('Dominant Probe Amplitude',
-         lambda self, fig: p.plot_amplitude(self.probe[0], fig=fig, basis=self.probe_basis)),
-        ('Dominant Probe Phase',
-         lambda self, fig: p.plot_phase(self.probe[0], fig=fig, basis=self.probe_basis)),
-        ('Subdominant Probe Amplitude',
-         lambda self, fig: p.plot_amplitude(self.probe[1], fig=fig, basis=self.probe_basis),
-         lambda self: len(self.probe) >=2),
-        ('Subdominant Probe Phase',
-         lambda self, fig: p.plot_phase(self.probe[1], fig=fig, basis=self.probe_basis),
-         lambda self: len(self.probe) >=2),
+        ('Probe Amplitude (scroll to view modes)',
+         lambda self, fig: p.plot_amplitude(self.probe, fig=fig, basis=self.probe_basis)),
+        ('Probe Phase (scroll to view modes)',
+         lambda self, fig: p.plot_phase(self.probe, fig=fig, basis=self.probe_basis)),
         ('Object Amplitude', 
          lambda self, fig: p.plot_amplitude(self.obj, fig=fig, basis=self.probe_basis)),
         ('Object Phase',

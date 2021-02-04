@@ -10,8 +10,7 @@ dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
 # dataset.inspect()
 # plt.show()
 
-#model = CDTools.models.UnifiedModePtycho.from_dataset(dataset, oversampling=2,n_modes=3)#, probe_support_radius=90)
-model = CDTools.models.UnifiedModePtycho2.from_dataset(dataset, oversampling=1,n_modes=3)#, probe_support_radius=90)
+model = CDTools.models.UnifiedModePtycho.from_dataset(dataset, oversampling=1,n_modes=3, dm_rank=-1)#, probe_support_radius=90)
 #model = CDTools.models.FancyPtycho.from_dataset(dataset, oversampling=1)
 
 model.to(device='cuda')

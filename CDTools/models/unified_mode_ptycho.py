@@ -18,7 +18,7 @@ class UnifiedModePtycho(CDIModel):
 
     def __init__(self, wavelength, detector_geometry,
                  probe_basis,
-                 probe_guess, obj_guess, rhos_guess,
+                 probe_guess, obj_guess, Ws_guess,
                  detector_slice=None,
                  surface_normal=np.array([0.,0.,1.]),
                  min_translation = t.Tensor([0,0]),
@@ -71,7 +71,10 @@ class UnifiedModePtycho(CDIModel):
                 
         self.background = t.nn.Parameter(t.Tensor(background).to(t.float32))
 
-        self.rhos = t.nn.Parameter(t.Tensor(rhos_guess).to(t.float32))
+        if type(Ws_guess) == type(t.zeros(1)):
+            self.Ws = t.nn.Parameter(Ws_guess.to(t.float32))        
+        else:
+            self.Ws = t.nn.Parameter(cmath.complex_to_torch(Ws_guess).to(t.float32))
         
         if translation_offsets is None:
             self.translation_offsets = None
@@ -95,7 +98,7 @@ class UnifiedModePtycho(CDIModel):
 
         
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True, opt_for_fft=False, mixing_mode='unified'):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True, opt_for_fft=False, dm_rank=0):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -175,13 +178,22 @@ class UnifiedModePtycho(CDIModel):
 
         translation_offsets = 0 * (t.rand((len(dataset),2)) - 0.5)
 
-        # 
-        if mixing_mode.lower().strip() == 'unified':
-            rhos = t.zeros(len(dataset),n_modes,n_modes)
-            rhos[:,0,0] = 1
-            for i in range(1,n_modes):
-                rhos[:,i,i] = 1/n_modes
-        
+        # dm_rank defines the rank of the shot-by-shot density matrices
+        if dm_rank > n_modes:
+            raise KeyError('Density matrix rank cannot be greater than the number of modes')
+        elif dm_rank != 0:
+            if dm_rank == -1:
+                dm_rank = n_modes
+            Ws = t.zeros(len(dataset),dm_rank,n_modes,2)
+            Ws[:,0,0,0] = 1
+            for i in range(1,dm_rank):
+                Ws[:,i,i,0] = 1/np.sqrt(n_modes)
+        else:
+            # dm_rank=0 is a special case defining a purely stable, incoherent
+            # mode mixing model. This is passed on by defining a set of weights
+            # which only has one index
+            Ws = t.ones(len(dataset))
+                
         if hasattr(dataset, 'mask') and dataset.mask is not None:
             mask = dataset.mask.to(t.bool)
         else:
@@ -207,7 +219,7 @@ class UnifiedModePtycho(CDIModel):
         else:
             obj_support = None
 
-        return cls(wavelength, det_geo, probe_basis, probe, obj, rhos,
+        return cls(wavelength, det_geo, probe_basis, probe, obj, Ws,
                    detector_slice=det_slice,
                    surface_normal=surface_normal,
                    min_translation=min_translation,
@@ -229,22 +241,61 @@ class UnifiedModePtycho(CDIModel):
         if self.translation_offsets is not None:
             pix_trans += self.translation_scale * self.translation_offsets[index]
 
+        Ws = self.Ws[index]
+
+        # This probably needs to be fixed, I doubt it will really still work
+        # to deal with single-pattern sims.
+        #if type(index) == type(0):
+        #    print('hi')
+        #    index = [index]
+        #    Ws = [Ws]
+        #    pix_trans = [pix_trans]
+        #    single_frame = True
+        #else:
+        #    single_frame = False
+
         probes = []
         all_exit_waves = []
-        for i in range(self.probe.shape[0]):
-            # from storing the probe in Fourier space
-            #pr = tools.propagators.inverse_far_field(self.probe[i]) * self.probe_support
-            pr = self.probe[i] * self.probe_support
-            exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(pr,
-                                                           self.obj_support * self.obj,
-                                                           pix_trans,
-                                                           shift_probe=True)
-            exit_waves = exit_waves * self.probe_support[...,:,:]
-                
-            all_exit_waves.append(exit_waves)
+
+        # This is the case if a purely stable, incoherent model is defined.
+        #if len(Ws[0].shape) == 0:
+            # What we do here is generate an identity matrix, and multiply
+            # that identity matrix by the per-frame weight.
+            #Ws = [W * t.stack([t.eye(self.probe.shape[0]),
+            #                   t.zeros([self.probe.shape[0]]*2)],dim=-1).to(
+            #                       dtype=W.dtype, device=W.device)
+            #      for W in Ws]
+            #print(Ws)
+            
+        # This restricts the basis probes with the probe support
+        basis_prs = self.probe * self.probe_support[...,:,:]    
 
         
-        return t.stack(all_exit_waves)
+        if len(Ws[0].shape) == 0:
+            # If a purely stable coherent illumination is defined
+            prs = cmath.cmult(Ws[...,None,None,None,:],basis_prs)
+        else:
+            # If a frame-by-frame weight matrix is defined
+            # This takes the dot product of all the weight matrices with
+            # the probes. The output has dimensions of translation, then
+            # coherent mode index, then x,y, and then complex index
+            prs = t.sum(cmath.cmult(Ws[...,None,None,:], basis_prs),
+                    axis=-4)
+
+        exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
+            prs, self.obj_support * self.obj,pix_trans,
+            shift_probe=True, multiple_modes=True)
+        
+        exit_waves = exit_waves * self.probe_support[...,:,:]
+
+        if hasattr(self,'weights') and self.weights is not None:
+            if exit_waves.dim() == 5:
+                exit_waves =  self.weights[index][:,None,None,None,None] \
+                    * exit_waves
+            else:
+                exit_waves =  self.weights[index] * exit_waves
+        
+        return exit_waves
     
         
     def forward_propagator(self, wavefields):
@@ -255,27 +306,13 @@ class UnifiedModePtycho(CDIModel):
         return tools.propagators.inverse_far_field(wavefields)
 
     
-    def measurement(self, wavefields, indices):
-        #return tools.measurements.density_matrix(wavefields,self.rhos[indices],
-        #                    detector_slice=self.detector_slice,
-        #                    saturation=self.saturation,
-        #                    oversampling=self.oversampling)
+    def measurement(self, wavefields):
         return tools.measurements.quadratic_background(wavefields,
-                            self.background, self.rhos[indices], 
+                            self.background, 
                             detector_slice=self.detector_slice,
-                            measurement=tools.measurements.density_matrix,
+                            measurement=tools.measurements.incoherent_sum,
                             saturation=self.saturation,
                             oversampling=self.oversampling)
-
-
-    def forward(self, *args):
-        """The complete forward model
-        
-        We need to override this to enable the wavefield mixing at the
-        level of the measurement function
-        """
-        indices = args[0]
-        return self.measurement(self.forward_propagator(self.interaction(*args)),indices)
 
     def loss(self, sim_data, real_data, mask=None):
         return tools.losses.amplitude_mse(real_data, sim_data, mask=mask)
@@ -344,22 +381,15 @@ class UnifiedModePtycho(CDIModel):
                                  mask=mask)
 
     def get_rhos(self):
-
-        rhos_out = np.zeros([self.rhos.shape[0],
-                             self.rhos.shape[1],self.rhos.shape[2]],
+        # If this is not a purely stable model
+        if len(self.Ws.shape) >= 2:
+            Ws = cmath.torch_to_complex(self.Ws.detach().cpu())
+            rhos_out = np.matmul(np.swapaxes(Ws,1,2), Ws.conj())
+            return rhos_out
+        else:
+            return np.array([np.eye(self.probe.shape[0])]*self.Ws.shape[0],
                             dtype=np.complex64)
-        for (i,j) in ((i,j) for i in range(rhos_out.shape[1])
-                      for j in range(rhos_out.shape[2])):
-            if i == j:
-                rhos_out[:,i,j] += self.rhos.data[:,i,j].cpu().detach().numpy()
-            if i < j: # upper triangle, real part
-                rhos_out[:,i,j] += self.rhos.data[:,i,j].cpu().detach().numpy()
-                rhos_out[:,j,i] += self.rhos.data[:,i,j].cpu().detach().numpy()
-            if i > j: # upper triangle, real part
-                rhos_out[:,j,i] += 1j * self.rhos.data[:,i,j].cpu().detach().numpy()
-                rhos_out[:,i,j] -= 1j * self.rhos.data[:,i,j].cpu().detach().numpy()
-        return rhos_out
-    
+        
     def tidy_probes(self, normalization=1):
         """Tidies up the probes
         
@@ -368,6 +398,18 @@ class UnifiedModePtycho(CDIModel):
         density matrices to operate in that updated basis
         
         """
+
+        # Must also implement a version that works appropriately with
+        # a purely incoherent model
+        
+        #
+        # Note to future: We could probably do this more cleanly with an
+        # SVD directly on the Ws matrix, instead of an eigendecomposition
+        # of the rho matrix. This could avoid potential stability issues
+        # due to the existence of zero eigenvalues in the full rho matrix
+        # when dm_rank < n_modes
+        # 
+        
         rhos = self.get_rhos()
         overall_rho = np.mean(rhos,axis=0)
         probe = cmath.torch_to_complex(self.probe.detach().cpu())
@@ -377,24 +419,26 @@ class UnifiedModePtycho(CDIModel):
                                         normalize=True)
         Aconj = A.conj()
         Atrans = np.transpose(A)
-        new_rhos = np.swapaxes(np.dot(Atrans,np.dot(rhos,Aconj)),0,1)
+        new_rhos = np.matmul(Atrans,np.matmul(rhos,Aconj))
 
         new_rhos /= normalization
         ortho_probes *= np.sqrt(normalization)
-        #print(np.dot(Aconjinv,rhos).shape)
-        #print(np.dot(rhos,Aconj).shape)
-        new_rhos = cmath.complex_to_torch(new_rhos).to(
-            dtype=self.rhos.dtype,device=self.rhos.device)
 
-        # This repacks the data into the format used internally
-        for (i,j) in ((i,j) for i in range(new_rhos.shape[1])
-                      for j in range(new_rhos.shape[2])):
-            if i == j:
-                self.rhos.data[:,i,j] = new_rhos[:,i,j,0]
-            if i < j: # upper triangle, real part
-                self.rhos.data[:,i,j] = new_rhos[:,i,j,0]
-                self.rhos.data[:,j,i] = new_rhos[:,i,j,1]
+        dm_rank = self.Ws.shape[1]
+        
+        new_Ws = []
+        for rho in new_rhos:
+            # These are returned from smalles to largest - we want to keep
+            # the largest ones
+            w,v = np.linalg.eigh(rho)
+            w = w[::-1][:dm_rank]
+            v = v[:,::-1][:,:dm_rank]
+            new_Ws.append(np.dot(np.diag(np.sqrt(w)),v.transpose()))
 
+        new_Ws = np.array(new_Ws)
+
+        self.Ws.data = cmath.complex_to_torch(new_Ws).to(
+            dtype=self.Ws.dtype,device=self.Ws.device)
         
         self.probe.data = cmath.complex_to_torch(ortho_probes).to(
             device=self.probe.device,dtype=self.probe.dtype)
@@ -408,21 +452,16 @@ class UnifiedModePtycho(CDIModel):
 
     # Needs to be updated to allow for plotting to an existing figure
     plot_list = [
-        ('Dominant Probe Amplitude',
-         lambda self, fig: p.plot_amplitude(self.probe[0], fig=fig, basis=self.probe_basis)),
-        ('Dominant Probe Phase',
-         lambda self, fig: p.plot_phase(self.probe[0], fig=fig, basis=self.probe_basis)),
-        ('Subdominant Probe Amplitude',
-         lambda self, fig: p.plot_amplitude(self.probe[1], fig=fig, basis=self.probe_basis),
-         lambda self: len(self.probe) >=2),
-        ('Subdominant Probe Phase',
-         lambda self, fig: p.plot_phase(self.probe[1], fig=fig, basis=self.probe_basis),
-         lambda self: len(self.probe) >=2),
+        ('Basis Probe Amplitudes',
+         lambda self, fig: p.plot_amplitude(self.probe, fig=fig, basis=self.probe_basis)),
+        ('Basis Probe Phases',
+         lambda self, fig: p.plot_phase(self.probe, fig=fig, basis=self.probe_basis)),
         ('Average Density Matrix Amplitudes',
          lambda self, fig: p.plot_amplitude(np.mean(np.abs(self.get_rhos()),axis=0), fig=fig),
-         lambda self: len(self.probe) >=2),
-        ('Von Neumann Entropy (only accurate after tidy_probes)',
-          lambda self, fig, dataset: p.plot_nanomap(self.corrected_translations(dataset), analysis.calc_vn_entropy(self.get_rhos()), fig=fig)),
+         lambda self: len(self.Ws.shape) >=2),
+        ('% Power in Top Mode (only accurate after tidy_probes)',
+         lambda self, fig, dataset: p.plot_nanomap(self.corrected_translations(dataset), analysis.calc_top_mode_fraction(self.get_rhos()), fig=fig),
+         lambda self: len(self.Ws.shape) >=2),
         ('Object Amplitude', 
          lambda self, fig: p.plot_amplitude(self.obj, fig=fig, basis=self.probe_basis)),
         ('Object Phase',
@@ -441,9 +480,9 @@ class UnifiedModePtycho(CDIModel):
         probe = probe * self.probe_norm.detach().cpu().numpy()
         obj = cmath.torch_to_complex(self.obj.detach().cpu())
         background = self.background.detach().cpu().numpy()**2
-        weights = self.weights.detach().cpu().numpy()
+        Ws = cmath.torch_to_complex(self.Ws.detach().cpu())
         
         return {'basis':basis, 'translation':translations,
                 'probe':probe,'obj':obj,
                 'background':background,
-                'weights':weights}
+                'Ws':Ws}

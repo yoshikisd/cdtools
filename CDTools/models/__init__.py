@@ -35,4 +35,3 @@ from CDTools.models.s_matrix_ptycho import SMatrixPtycho
 from CDTools.models.multislice_2d_ptycho import Multislice2DPtycho
 from CDTools.models.rpi import RPI
 from CDTools.models.unified_mode_ptycho import UnifiedModePtycho
-from CDTools.models.unified_mode_ptycho2 import UnifiedModePtycho2

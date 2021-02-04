@@ -17,8 +17,8 @@ model = CDTools.models.FancyPtycho.from_dataset(dataset, n_modes=2)
 model.to(device='cuda')
 dataset.get_as(device='cuda')
 
-#for i, loss in enumerate(model.Adam_optimize(20, dataset, batch_size=50)):
-for i, loss in enumerate(model.LBFGS_optimize(20, dataset, lr=1, history_size=5)):
+for i, loss in enumerate(model.Adam_optimize(20, dataset, batch_size=50)):
+#for i, loss in enumerate(model.LBFGS_optimize(20, dataset, lr=1, history_size=5)):
     # And we liveplot the updates to the model as they happen
     print(i,loss)
     model.inspect(dataset)
