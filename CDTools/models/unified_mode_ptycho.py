@@ -242,36 +242,12 @@ class UnifiedModePtycho(CDIModel):
             pix_trans += self.translation_scale * self.translation_offsets[index]
 
         Ws = self.Ws[index]
-
-        # This probably needs to be fixed, I doubt it will really still work
-        # to deal with single-pattern sims.
-        #if type(index) == type(0):
-        #    print('hi')
-        #    index = [index]
-        #    Ws = [Ws]
-        #    pix_trans = [pix_trans]
-        #    single_frame = True
-        #else:
-        #    single_frame = False
-
-        probes = []
-        all_exit_waves = []
-
-        # This is the case if a purely stable, incoherent model is defined.
-        #if len(Ws[0].shape) == 0:
-            # What we do here is generate an identity matrix, and multiply
-            # that identity matrix by the per-frame weight.
-            #Ws = [W * t.stack([t.eye(self.probe.shape[0]),
-            #                   t.zeros([self.probe.shape[0]]*2)],dim=-1).to(
-            #                       dtype=W.dtype, device=W.device)
-            #      for W in Ws]
-            #print(Ws)
-            
+             
         # This restricts the basis probes with the probe support
         basis_prs = self.probe * self.probe_support[...,:,:]    
 
         
-        if len(Ws[0].shape) == 0:
+        if len(self.Ws[0].shape) == 0:
             # If a purely stable coherent illumination is defined
             prs = cmath.cmult(Ws[...,None,None,None,:],basis_prs)
         else:

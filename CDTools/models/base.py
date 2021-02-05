@@ -53,6 +53,10 @@ class CDIModel(t.nn.Module):
     functions.
     """
 
+    def __init__(self):
+        super(CDIModel,self).__init__()
+        self.iteration_count = 0
+        
     def from_dataset(self, dataset):
         raise NotImplementedError()
 
@@ -135,6 +139,7 @@ class CDIModel(t.nn.Module):
         def run_iteration(stop_event=None):
             loss = 0
             N = 0
+            t0 = time.time()
             for inputs, patterns in data_loader:
                 N += 1
                 def closure():
@@ -175,6 +180,9 @@ class CDIModel(t.nn.Module):
             if scheduler is not None:
                 scheduler.step(loss)
 
+            self.latest_loss = loss
+            self.latest_iteration_time = time.time() - t0
+            self.iteration_count += 1
             return loss
 
         if thread:
@@ -377,6 +385,15 @@ class CDIModel(t.nn.Module):
                                 calculation_width=calculation_width)
 
 
+    def report(self):
+        """Returns a string informing on the latest reconstruction iteration"""
+        if hasattr(self, 'latest_loss'):
+            return 'Iteration ' + str(self.iteration_count) + \
+                  ' completed in %0.2f s with loss ' %\
+                  self.latest_iteration_time + str(self.latest_loss)
+        else:
+            return 'No reconstruction iterations performed yet!'
+        
     # By default, the plot_list is empty
     plot_list = []
     
@@ -490,10 +507,7 @@ class CDIModel(t.nn.Module):
                 return
             
             im.norecurse=True
-            im.colorbar.set_clim(vmin=np.min(im.get_array()),vmax=np.max(im.get_array()))
-            im.colorbar.ax.set_ylim(0,1)
-            im.colorbar.set_ticks(ticker.LinearLocator(numticks=5))
-            im.colorbar.draw_all()
+            im.set_clim(vmin=np.min(im.get_array()),vmax=np.max(im.get_array()))
 
         
         def update(idx):
@@ -530,6 +544,7 @@ class CDIModel(t.nn.Module):
                 cb3.ax.callbacks.connect('xlim_changed', lambda ax: update_colorbar(diff))
                 
             else:
+
                 sim = axes[0].images[-1]
                 sim.set_data(sim_data)
                 update_colorbar(sim)
