@@ -30,7 +30,10 @@ class Multislice2DPtycho(CDIModel):
                  bandlimit=None,
                  subpixel=True,
                  exponentiate_obj=True,
-                 fourier_probe=False, units='um'):
+                 fourier_probe=False,
+                 apodization=None,
+                 phase_only=False,
+                 units='um'):
         
         super(Multislice2DPtycho,self).__init__()
         self.wavelength = t.Tensor([wavelength])
@@ -56,6 +59,7 @@ class Multislice2DPtycho(CDIModel):
         self.exponentiate_obj = exponentiate_obj
         self.fourier_probe = fourier_probe
         self.units = units
+        self.phase_only=phase_only
         
         if mask is None:
             self.mask = mask
@@ -73,7 +77,7 @@ class Multislice2DPtycho(CDIModel):
                                     / self.probe_norm)
         
         self.obj = t.nn.Parameter(obj_guess.to(t.float32))
-        
+
         if background is None:
             if detector_slice is not None:
                 background = 1e-6 * t.ones(self.probe[0][self.detector_slice].shape[:-1])
@@ -97,6 +101,11 @@ class Multislice2DPtycho(CDIModel):
 
         self.probe_fourier_support = t.Tensor(probe_fourier_support).to(t.float32)
 
+        if apodization is not None:
+            self.apodization = t.Tensor(apodization).to(t.float32)
+        else:
+            self.apodization = None
+            
         self.oversampling = oversampling
 
         spacing = np.linalg.norm(self.probe_basis,axis=0)
@@ -108,7 +117,7 @@ class Multislice2DPtycho(CDIModel):
 
         
     @classmethod
-    def from_dataset(cls, dataset, dz, nz, probe_convergence_radius, probe_size=None, padding=0, n_modes=1, translation_scale = 1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=None, replicate_slice=False, subpixel=True, exponentiate_obj=True, units='um', fourier_probe=False):
+    def from_dataset(cls, dataset, dz, nz, probe_convergence_radius, probe_size=None, padding=0, n_modes=1, translation_scale = 1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=None, replicate_slice=False, subpixel=True, exponentiate_obj=True, units='um', fourier_probe=False, apodize_prop=False, phase_only=False):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -157,7 +166,6 @@ class Multislice2DPtycho(CDIModel):
             surface_normal = outgoing_dir + np.array([0.,0.,1.])
             surface_normal /= np.linalg.norm(outgoing_dir)
 
-
         # Next generate the object geometry from the probe geometry and
         # the translations
         pix_translations = tools.interactions.translations_to_pixel(probe_basis, translations, surface_normal=surface_normal)
@@ -175,14 +183,17 @@ class Multislice2DPtycho(CDIModel):
         else:
             probe = tools.initializers.gaussian_probe(dataset, probe_basis, probe_shape, probe_size, propagation_distance=propagation_distance)
 
+        # Now we initialize all the subdominant probe modes
+        probe_max = t.max(cmath.cabs(probe))
+        if n_modes >=2:
+            probe_stack = list(0.01*tools.initializers.generate_subdominant_modes(probe,n_modes-1,circular=False))
+            #probe_stack = [0.01 * probe_max * t.rand(probe.shape,dtype=probe.dtype) for i in range(n_modes - 1)]
+            probe = t.stack([probe,] + probe_stack)
+
         # For a Fourier space probe
         if fourier_probe:
             probe = tools.propagators.far_field(probe)
-            
-        # Now we initialize all the subdominant probe modes
-        probe_max = t.max(cmath.cabs(probe))
-        probe_stack = [0.01 * probe_max * t.rand(probe.shape,dtype=probe.dtype) for i in range(n_modes - 1)]
-        probe = t.stack([probe,] + probe_stack)
+
 
         # Consider a different start
         if exponentiate_obj:
@@ -193,7 +204,17 @@ class Multislice2DPtycho(CDIModel):
         if not replicate_slice:
             obj = t.stack([obj]*nz)
             
-        
+        if apodize_prop:
+            shape = probe.shape[-3:-1]
+            #window_x = (1+np.cos(np.pi+2*np.pi*np.arange(shape[0])/shape[0]))/2
+            #window_y = (1+np.cos(np.pi+2*np.pi*np.arange(shape[1])/shape[1]))/2
+            window_x = np.cos(-np.pi/2+np.pi*np.arange(shape[0])/shape[0])
+            window_y = np.cos(-np.pi/2+np.pi*np.arange(shape[1])/shape[1])
+            Wx, Wy = np.meshgrid(window_x,window_y, indexing='ij')
+            apodization=t.Tensor(Wx*Wy).to(dtype=probe.dtype)
+        else:
+            apodization=None
+            
         det_geo = dataset.detector_geometry
 
         translation_offsets = 0 * (t.rand((len(dataset),2)) - 0.5)
@@ -228,7 +249,9 @@ class Multislice2DPtycho(CDIModel):
                    bandlimit=bandlimit,
                    subpixel=subpixel,
                    exponentiate_obj=exponentiate_obj,
-                   units=units, fourier_probe=fourier_probe)
+                   units=units, fourier_probe=fourier_probe,
+                   apodization=apodization,
+                   phase_only=phase_only)
                    
     
     def interaction(self, index, translations):
@@ -247,8 +270,12 @@ class Multislice2DPtycho(CDIModel):
             prs = self.probe*self.probe_fourier_support[None,:,:]
         # Here is where the mixing would happen, if it happened
 
+            
         if self.exponentiate_obj:
-            obj = cmath.cexpi(self.obj/self.nz)
+            if self.phase_only:
+                obj = cmath.expi(self.obj[...,0])
+            else:
+                obj = cmath.cexpi(self.obj)
         else:
             obj = self.obj
         
@@ -266,6 +293,10 @@ class Multislice2DPtycho(CDIModel):
                     exit_waves = tools.interactions.ptycho_2D_round(
                         exit_waves, obj, pix_trans,
                         multiple_modes=True)
+                if self.apodization is not None:
+                    exit_waves = exit_waves * self.apodization[None,:,:,None]
+                
+
                     
             elif self.obj.dim() == 4:
                 # If separate slices
@@ -277,6 +308,8 @@ class Multislice2DPtycho(CDIModel):
                     exit_waves = tools.interactions.ptycho_2D_round(
                         exit_waves, obj[i], pix_trans,
                         multiple_modes=True)
+                if self.apodization is not None:
+                   exit_waves = exit_waves * self.apodization[None,:,:,None]
 
             if i < self.nz-1: #on all but the last iteration
                 exit_waves = tools.propagators.near_field(
@@ -330,6 +363,8 @@ class Multislice2DPtycho(CDIModel):
 
         if self.mask is not None:
             self.mask = self.mask.to(*args, **kwargs)
+        if self.apodization is not None:
+            self.apodization = self.apodization.to(*args,**kwargs)
 
             
         self.min_translation = self.min_translation.to(*args,**kwargs)
@@ -337,6 +372,7 @@ class Multislice2DPtycho(CDIModel):
         self.probe_norm = self.probe_norm.to(*args,**kwargs)
         #self.probe_support = self.probe_support.to(*args,**kwargs)
         self.probe_fourier_support = self.probe_fourier_support.to(*args,**kwargs)
+        
         
         self.surface_normal = self.surface_normal.to(*args, **kwargs)
         self.as_prop = self.as_prop.to(*args, **kwargs)
@@ -396,13 +432,13 @@ class Multislice2DPtycho(CDIModel):
         ('Probe Real Space Phase',
          lambda self, fig: p.plot_phase(self.probe if not self.fourier_probe else tools.propagators.inverse_far_field(self.probe), fig=fig, basis=self.probe_basis, units=self.units)),
         ('Slice by Slice Real Part of T', 
-         lambda self, fig: p.plot_real(self.obj.detach().cpu(), fig=fig, basis=self.probe_basis, units=self.units),
+         lambda self, fig: p.plot_real(self.obj.detach().cpu(), fig=fig, basis=self.probe_basis, units=self.units, cmap='cividis'),
          lambda self: self.exponentiate_obj),
         ('Slice by Slice Imaginary Part of T',
          lambda self, fig: p.plot_imag(self.obj.detach().cpu(), fig=fig, basis=self.probe_basis, units=self.units),
          lambda self: self.exponentiate_obj),
         ('Integrated Real Part of T', 
-         lambda self, fig: p.plot_real(t.sum(self.obj.detach().cpu(),dim=0), fig=fig, basis=self.probe_basis, units=self.units),
+         lambda self, fig: p.plot_real(t.sum(self.obj.detach().cpu(),dim=0), fig=fig, basis=self.probe_basis, units=self.units, cmap='cividis'),
          lambda self: self.exponentiate_obj),
         ('Integrated Imaginary Part of T',
          lambda self, fig: p.plot_imag(t.sum(self.obj.detach().cpu(),dim=0), fig=fig, basis=self.probe_basis, units=self.units),
@@ -411,13 +447,13 @@ class Multislice2DPtycho(CDIModel):
          lambda self, fig: p.plot_amplitude(self.obj.detach().cpu(), fig=fig, basis=self.probe_basis, units=self.units),
          lambda self: not self.exponentiate_obj),
         ('Slice by Slice Phase of Object Function',
-         lambda self, fig: p.plot_phase(self.obj.detach().cpu(), fig=fig, basis=self.probe_basis, units=self.units),
+         lambda self, fig: p.plot_phase(self.obj.detach().cpu(), fig=fig, basis=self.probe_basis, units=self.units,cmap='cividis'),
          lambda self: not self.exponentiate_obj),
         ('Amplitude of Stacked Object Function', 
          lambda self, fig: p.plot_amplitude(reduce(cmath.cmult, self.obj.detach().cpu()), fig=fig, basis=self.probe_basis, units=self.units),
          lambda self: not self.exponentiate_obj),
         ('Phase of Stacked Object Function',
-         lambda self, fig: p.plot_phase(reduce(cmath.cmult, self.obj.detach().cpu()), fig=fig, basis=self.probe_basis, units=self.units),
+         lambda self, fig: p.plot_phase(reduce(cmath.cmult, self.obj.detach().cpu()), fig=fig, basis=self.probe_basis, units=self.units,cmap='cividis'),
          lambda self: not self.exponentiate_obj),
         ('Corrected Translations',
          lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig, units=self.units)),

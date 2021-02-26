@@ -39,6 +39,7 @@ import numpy as np
 import threading
 import queue
 import time
+import pytorch_warmup 
 
 __all__ = ['CDIModel']
 
@@ -105,7 +106,7 @@ class CDIModel(t.nn.Module):
 
     def AD_optimize(self, iterations, data_loader,  optimizer,\
                     scheduler=None, regularization_factor=None, thread=True,
-                    calculation_width=10):
+                    calculation_width=10, warmup_scheduler=None):
         """Runs a round of reconstruction using the provided optimizer
         
         This is the basic automatic differentiation reconstruction tool
@@ -135,7 +136,8 @@ class CDIModel(t.nn.Module):
         normalization = 0
         for inputs, patterns in data_loader:
             normalization += t.sum(patterns).cpu().numpy()
-
+            
+            
         def run_iteration(stop_event=None):
             loss = 0
             N = 0
@@ -173,8 +175,20 @@ class CDIModel(t.nn.Module):
                         loss = self.regularizer(regularization_factor)
                         loss.backward()
                     return total_loss
-                
+
+                if warmup_scheduler is not None:
+                    old_lrs = [group['lr'] for group in
+                               optimizer.param_groups]
+                    warmup_scheduler.dampen()
+                    #print([group['lr'] for group in
+                    #       optimizer.param_groups], end='\r')
+                    
                 loss += optimizer.step(closure).detach().cpu().numpy()
+
+                if warmup_scheduler is not None:
+                    for old_lr, group in zip(old_lrs, optimizer.param_groups):
+                        group['lr'] = old_lr
+    
                 
             loss /= normalization
             if scheduler is not None:
@@ -201,6 +215,7 @@ class CDIModel(t.nn.Module):
                             self.figs[0].canvas.start_event_loop(0.01) 
                         else:
                             calc.join()
+                            
                 except KeyboardInterrupt as e:
                     stop_event.set()
                     print('\nAsking execution thread to stop cleanly - please be patient.')
@@ -215,7 +230,7 @@ class CDIModel(t.nn.Module):
     def Adam_optimize(self, iterations, dataset, batch_size=15, lr=0.005,
                       schedule=False, amsgrad=False, subset=None,
                       regularization_factor=None, thread=True,
-                      calculation_width=10):
+                      calculation_width=10, warmup=False):
         """Runs a round of reconstruction using the Adam optimizer
         
         This is generally accepted to be the most robust algorithm for use
@@ -266,8 +281,14 @@ class CDIModel(t.nn.Module):
         else:
             scheduler = None
 
+        if warmup:
+            warmup_scheduler = pytorch_warmup.UntunedLinearWarmup(optimizer)
+        else:
+            warmup_scheduler = None
+            
         return self.AD_optimize(iterations, data_loader, optimizer,
                                 scheduler=scheduler,
+                                warmup_scheduler=warmup_scheduler,
                                 regularization_factor=regularization_factor,
                                 thread=thread,
                                 calculation_width=calculation_width)

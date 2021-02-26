@@ -413,7 +413,7 @@ def plot_colorized(im, fig=None, basis=None, units='$\\mu$m', **kwargs):
     """
     plot_func = lambda x: colorize(x)
     return plot_image(im, plot_func=plot_func, fig=fig, basis=basis,
-                      units=units, cmap=cmap, **kwargs)
+                      units=units, **kwargs)
 
 
 def plot_translations(translations, fig=None, units='$\\mu$m', lines=True, **kwargs):

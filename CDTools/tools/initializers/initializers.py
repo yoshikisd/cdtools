@@ -9,7 +9,8 @@ import numpy as np
 import torch as t
 
 __all__ = ['exit_wave_geometry', 'calc_object_setup', 'gaussian',
-           'gaussian_probe', 'SHARP_style_probe', 'RPI_spectral_init'] 
+           'gaussian_probe', 'SHARP_style_probe', 'RPI_spectral_init',
+           'generate_subdominant_modes'] 
 
 from CDTools.tools import cmath
 from CDTools.tools.propagators import *
@@ -18,6 +19,7 @@ from scipy.fftpack import next_fast_len
 from scipy.sparse import linalg as spla
 from torch.nn.functional import pad
 import numpy as np
+from functools import *
 
 
 def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, opt_for_fft=True, padding=0, oversampling=1):
@@ -438,3 +440,79 @@ def RPI_spectral_init(pattern, probe, obj_shape, n_modes=1, mask=None, backgroun
 
     return cmath.complex_to_torch(z0).to(dtype=t.float32)
 
+
+def generate_subdominant_modes(dominant_mode, n_modes, circular=True):
+    """Generates guesses of subdominant modes based on spatial derivatives
+    
+    The idea here is that vibration is an extremely common cause of
+    spatial incoherence. This typically presents as subdominant modes that
+    look like the derivative of the dominant mode along various axes. 
+    
+    Therefore, it is a good starting guess if the guess of the dominant
+    mode is reasonable. The output probes will all be normalized to have
+    the same intensity as the input dominant probe
+
+    Parameters
+    ----------
+    dominant_mode : array
+        The complex-valued dominant mode to work from
+    n_modes : int
+        The number of additional modes to create
+    circular : bool
+        Default True, whether to use circular modes (x+iy) or linear (x,y)
+    Returns
+    -------
+    torch.Tensor
+        The complex-style tensor storing the probe guesses
+    """
+
+    # This generates a list of tuples, where each tuple (a,b) corresponds
+    # a term (kx^a)*(ky^b), or (kx+iky)^a*(kx-iky)^b for circular modes
+    def make_orders(n_orders):
+        if n_orders >1024:
+            raise KeyError('Are you sure you want this many orders?')
+        i = 1
+        n = 0
+        total = 0
+        while True:
+            if total >= n_orders:
+                break
+            
+            yield (n,i-n)
+            total += 1
+            if n<i:
+                n+=1
+            else:
+                n = 0
+                i += 1
+
+    # Gotta check and convert to pytorch if it's numpy
+
+    # First step is to take the FFT of the probe
+    dominant_fft = far_field(dominant_mode)
+
+    shape = dominant_mode.shape
+    center = ((shape[-3]-1)//2, (shape[-2]-1)//2)
+        
+    i, j = np.mgrid[:shape[-3], :shape[-2]]
+    i = t.Tensor(i - center[0]).to(dtype=dominant_fft.dtype,
+                                    device=dominant_fft.device)
+    j = t.Tensor(j - center[1]).to(dtype=dominant_fft.dtype,
+                                    device=dominant_fft.device)
+
+    if circular:
+        a = t.stack((i,j),dim=-1)
+        b = t.stack((i,-j),dim=-1)
+    else:
+        a = t.stack((i,t.zeros_like(i)),dim=-1)
+        b = t.stack((j,t.zeros_like(j)),dim=-1)
+
+    probe_norm = t.sum(cmath.cabssq(dominant_mode))
+    # Then we need to multiply that FFT by various phase masks and IFFT
+    probes = []
+    for a_order,b_order in make_orders(n_modes):
+        mask = reduce(cmath.cmult,[a]*a_order+[b]*b_order)
+        new_probe = inverse_far_field(cmath.cmult(mask,dominant_fft))
+        probes.append(new_probe * (probe_norm / t.sum(cmath.cabs(new_probe))))
+
+    return t.stack(probes)
