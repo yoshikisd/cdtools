@@ -6,9 +6,11 @@ from CDTools.datasets import Ptycho2DDataset
 from CDTools import tools
 from CDTools.tools import cmath
 from CDTools.tools import plotting as p
+from CDTools.tools import analysis
 from matplotlib import pyplot as plt
 from datetime import datetime
 import numpy as np
+from scipy import linalg as sla
 from copy import copy
 
 __all__ = ['FancyPtycho']
@@ -23,7 +25,8 @@ class FancyPtycho(CDIModel):
                  min_translation = t.Tensor([0,0]),
                  background = None, translation_offsets=None, mask=None,
                  weights = None, translation_scale = 1, saturation=None,
-                 probe_support = None, obj_support=None, oversampling=1):
+                 probe_support = None, obj_support=None, oversampling=1,
+                 loss='amplitude mse',units='um'):
         
         super(FancyPtycho,self).__init__()
         self.wavelength = t.Tensor([wavelength])
@@ -43,6 +46,7 @@ class FancyPtycho(CDIModel):
         self.surface_normal = t.Tensor(surface_normal)
         
         self.saturation = saturation
+        self.units = units
         
         if mask is None:
             self.mask = mask
@@ -73,8 +77,19 @@ class FancyPtycho(CDIModel):
         if weights is None:
             self.weights = None
         else:
-            self.weights = t.nn.Parameter(t.Tensor(weights).to(t.float32))
-        
+            # We now need to distinguish between real-valued per-image
+            # weights and complex-valued per-mode weight matrices
+            if len(weights.shape) == 1:
+                # This is if it's just a list of numbers
+                self.weights = t.nn.Parameter(t.Tensor(weights).to(t.float32))
+            else:
+                # Now this is a matrix of weights, so we 
+                if type(weights) == type(t.zeros(1)):
+                    self.weights = t.nn.Parameter(weights.to(t.float32))        
+                else:
+                    self.weights = t.nn.Parameter(cmath.complex_to_torch(weights).to(t.float32))
+
+                
         if translation_offsets is None:
             self.translation_offsets = None
         else:
@@ -95,9 +110,19 @@ class FancyPtycho(CDIModel):
 
         self.oversampling = oversampling
 
+        # Here we set the appropriate loss function
+        if loss.lower().strip() == 'amplitude mse'\
+           or loss.lower().strip() == 'amplitude_mse':
+            self.loss = tools.losses.amplitude_mse
+        elif loss.lower().strip() == 'poisson nll' \
+             or loss.lower().strip() == 'poisson_nll':
+            self.loss = tools.losses.poisson_nll
+        else:
+            raise KeyError('Specified loss function not supported')
+
         
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True, opt_for_fft=False):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True, opt_for_fft=False, loss='amplitude mse', units='um'):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -178,7 +203,23 @@ class FancyPtycho(CDIModel):
 
         translation_offsets = 0 * (t.rand((len(dataset),2)) - 0.5)
 
-        weights = t.ones(len(dataset))
+        if dm_rank is not None and dm_rank != 0:
+            if dm_rank > n_modes:
+                raise KeyError('Density matrix rank cannot be greater than the number of modes. Use dm_rank = -1 to use a full rank matrix.')
+            elif dm_rank == -1:
+                # dm_rank == -1 is defined to mean full-rank
+                dm_rank = n_modes
+            Ws = t.zeros(len(dataset),dm_rank,n_modes,2)
+            # Start with as close to the identity matrix as possible,
+            # cutting of when we hit the specified maximum rank
+            for i in range(0,dm_rank):
+                Ws[:,i,i,0] = 1
+        else:
+            # dm_rank == None or dm_rank = 0 triggers a special case where
+            # a standard incoherent multi-mode model is used. This is the
+            # default, because it is so common.
+            # In this case, we define a set of weights which only has one index
+            Ws = t.ones(len(dataset))
         
         if hasattr(dataset, 'mask') and dataset.mask is not None:
             mask = dataset.mask.to(t.bool)
@@ -186,12 +227,15 @@ class FancyPtycho(CDIModel):
             mask = None
 
         if probe_support_radius is not None:
-            probe_support = t.zeros_like(probe[0].to(dtype=t.float32))
-            p_cent = np.array(probe.shape[1:3]).astype(int) // 2
-            psr = int(probe_support_radius)
-            probe_support[p_cent[0]-psr:p_cent[0]+psr,
-                          p_cent[1]-psr:p_cent[1]+psr] = 1
+            probe_support = t.zeros_like(probe[0])
+            xs, ys = np.mgrid[:probe.shape[-3],:probe.shape[-2]]
+            xs = xs - np.mean(xs)
+            ys = ys - np.mean(ys)
+            Rs = np.sqrt(xs**2 + ys**2)
+        
+            probe_support[Rs<probe_support_radius] = 1
             probe = probe * probe_support[None,:,:]
+
         else:
             probe_support = None;
 
@@ -210,37 +254,52 @@ class FancyPtycho(CDIModel):
                    surface_normal=surface_normal,
                    min_translation=min_translation,
                    translation_offsets = translation_offsets,
-                   weights=weights, mask=mask, background=background,
+                   weights=Ws, mask=mask, background=background,
                    translation_scale=translation_scale,
                    saturation=saturation,
                    probe_support=probe_support,
                    obj_support=obj_support,
-                   oversampling=oversampling)
+                   oversampling=oversampling,
+                   loss=loss,units=units)
                    
     
     def interaction(self, index, translations):
+
+        # Step 1 is to convert the translations for each position into a
+        # value in pixels
         pix_trans = tools.interactions.translations_to_pixel(self.probe_basis,
                                                              translations,
                                                              surface_normal=self.surface_normal)
         pix_trans -= self.min_translation
 
+        # We then add on any recovered translation offset, if they exist
         if self.translation_offsets is not None:
             pix_trans += self.translation_scale * self.translation_offsets[index]
-            
-        prs = self.probe * self.probe_support[...,:,:]    
+
+             
+        # This restricts the basis probes to stay within the probe support
+        basis_prs = self.probe * self.probe_support[...,:,:]    
+
+
+        # Now we construct the probes for each shot from the basis probes
+        Ws = self.weights[index]
+
+        if len(self.weights[0].shape) == 0:
+            # If a purely stable coherent illumination is defined
+            prs = cmath.cmult(Ws[...,None,None,None,:],basis_prs)
+        else:
+            # If a frame-by-frame weight matrix is defined
+            # This takes the dot product of all the weight matrices with
+            # the probes. The output has dimensions of translation, then
+            # coherent mode index, then x,y, and then complex index
+            prs = t.sum(cmath.cmult(Ws[...,None,None,:], basis_prs),
+                    axis=-4)
+
+        # Now we actually do the interaction, using the sinc subpixel
+        # translation model as per usual
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
             prs, self.obj_support * self.obj,pix_trans,
             shift_probe=True, multiple_modes=True)
-
-        exit_waves = exit_waves * self.probe_support[...,:,:]
-
-
-        if hasattr(self,'weights') and self.weights is not None:
-            if exit_waves.dim() == 5:
-                exit_waves =  self.weights[index][:,None,None,None,None] \
-                    * exit_waves
-            else:
-                exit_waves =  self.weights[index] * exit_waves
         
         return exit_waves
     
@@ -261,11 +320,9 @@ class FancyPtycho(CDIModel):
                             saturation=self.saturation,
                             oversampling=self.oversampling)
 
-    
-    def loss(self, sim_data, real_data, mask=None):
-        return tools.losses.amplitude_mse(real_data, sim_data, mask=mask)
-        #return tools.losses.poisson_nll(real_data, sim_data, mask=mask)
 
+    # Note: No "loss" function is defined here, because it is added
+    # dynamically during object creation in __init__
     
     def to(self, *args, **kwargs):
         super(FancyPtycho, self).to(*args, **kwargs)
@@ -334,19 +391,104 @@ class FancyPtycho(CDIModel):
         t_offset = tools.interactions.pixel_to_translations(self.probe_basis,self.translation_offsets*self.translation_scale,surface_normal=self.surface_normal)
         return translations + t_offset
 
+    def get_rhos(self):
+        # If this is the general unified mode model
+        if self.weights.dim() >= 2:
+            Ws = cmath.torch_to_complex(self.weights.detach().cpu())
+            rhos_out = np.matmul(np.swapaxes(Ws,1,2), Ws.conj())
+            return rhos_out
+        # This is the purely incoherent case
+        else:
+            return np.array([np.eye(self.probe.shape[0])]*self.weights.shape[0],
+                            dtype=np.complex64)
+        
+    def tidy_probes(self, normalization=1, normalize=False):
+        """Tidies up the probes
+        
+        What we want to do here is use all the information on all the probes
+        to calculate a natural basis for the experiment, and update all the
+        density matrices to operate in that updated basis
+        
+        """
+        
+        # First we treat the purely incoherent case
+        
+        # I don't love this pattern of using an if statement with a return
+        # to catch this case, but because it's so much simpler than the
+        # unified mode case I think it's appropriate
+        if self.weights.dim() == 1:
+            probe = cmath.torch_to_complex(self.probe.detach().cpu())
+            ortho_probes = analysis.orthogonalize_probes(probe)
+            self.probe.data = cmath.complex_to_torch(ortho_probes).to(
+            device=self.probe.device,dtype=self.probe.dtype)
+            return
+
+        # This is for the unified mode case
+        
+        # Note to future: We could probably do this more cleanly with an
+        # SVD directly on the Ws matrix, instead of an eigendecomposition
+        # of the rho matrix.
+        
+        rhos = self.get_rhos()
+        overall_rho = np.mean(rhos,axis=0)
+        probe = cmath.torch_to_complex(self.probe.detach().cpu())
+        ortho_probes, A = analysis.orthogonalize_probes(probe,
+                                        density_matrix=overall_rho,
+                                        keep_transform=True,
+                                        normalize=normalize)
+        Aconj = A.conj()
+        Atrans = np.transpose(A)
+        new_rhos = np.matmul(Atrans,np.matmul(rhos,Aconj))
+
+        new_rhos /= normalization
+        ortho_probes *= np.sqrt(normalization)
+
+        dm_rank = self.weights.shape[1]
+        
+        new_Ws = []
+        for rho in new_rhos:
+            # These are returned from smallest to largest - we want to keep
+            # the largest ones
+            w,v = sla.eigh(rho)
+            w = w[::-1][:dm_rank]
+            v = v[:,::-1][:,:dm_rank]
+            # For situations where the rank of the density matrix is not
+            # full in reality, but we keep more modes around than needed,
+            # some ws can go negative due to numerical error! This is
+            # extremely rare, but comon enough to cause crashes occasionally
+            # when there are thousands of individual matrices to transform
+            # every time this is called.
+            w = np.maximum(w,0)
+            
+            new_Ws.append(np.dot(np.diag(np.sqrt(w)),v.transpose()))
+            
+        new_Ws = np.array(new_Ws)
+
+        self.weights.data = cmath.complex_to_torch(new_Ws).to(
+            dtype=self.weights.dtype,device=self.weights.device)
+        
+        self.probe.data = cmath.complex_to_torch(ortho_probes).to(
+            device=self.probe.device,dtype=self.probe.dtype)
+        
 
     # Needs to be updated to allow for plotting to an existing figure
     plot_list = [
         ('Probe Amplitude (scroll to view modes)',
-         lambda self, fig: p.plot_amplitude(self.probe, fig=fig, basis=self.probe_basis)),
+         lambda self, fig: p.plot_amplitude(self.probe, fig=fig, basis=self.probe_basis,units=self.units)),
         ('Probe Phase (scroll to view modes)',
-         lambda self, fig: p.plot_phase(self.probe, fig=fig, basis=self.probe_basis)),
+         lambda self, fig: p.plot_phase(self.probe, fig=fig, basis=self.probe_basis,units=self.units)),
+        ('Average Density Matrix Amplitudes',
+         lambda self, fig: p.plot_amplitude(np.nanmean(np.abs(self.get_rhos()),axis=0), fig=fig),
+         lambda self: len(self.weights.shape) >=2),
+        ('% Power in Top Mode (only accurate after tidy_probes)',
+         lambda self, fig, dataset: p.plot_nanomap(self.corrected_translations(dataset), analysis.calc_top_mode_fraction(self.get_rhos()), fig=fig,units=self.units),
+         lambda self: len(self.weights.shape) >=2),
         ('Object Amplitude', 
-         lambda self, fig: p.plot_amplitude(self.obj, fig=fig, basis=self.probe_basis)),
+         lambda self, fig: p.plot_amplitude(self.obj, fig=fig, basis=self.probe_basis,units=self.units)),
         ('Object Phase',
-         lambda self, fig: p.plot_phase(self.obj, fig=fig, basis=self.probe_basis)),
+         lambda self, fig: p.plot_phase(self.obj, fig=fig, basis=self.probe_basis,units=self.units)),
         ('Corrected Translations',
-         lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig)),
+         lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig,units=self.units)),
         ('Background',
          lambda self, fig: plt.figure(fig.number) and plt.imshow(self.background.detach().cpu().numpy()**2))
     ]
@@ -359,7 +501,10 @@ class FancyPtycho(CDIModel):
         probe = probe * self.probe_norm.detach().cpu().numpy()
         obj = cmath.torch_to_complex(self.obj.detach().cpu())
         background = self.background.detach().cpu().numpy()**2
-        weights = self.weights.detach().cpu().numpy()
+        if len(self.weights.shape) >=2:
+            weights = cmath.torch_to_complex(self.weights.detach().cpu())
+        else:
+            weights = self.weights.detach().cpu().numpy()
         
         return {'basis':basis, 'translation':translations,
                 'probe':probe,'obj':obj,

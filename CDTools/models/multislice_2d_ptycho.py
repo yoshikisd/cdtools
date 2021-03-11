@@ -6,6 +6,7 @@ from CDTools.datasets import Ptycho2DDataset
 from CDTools import tools
 from CDTools.tools import cmath
 from CDTools.tools import plotting as p
+from CDTools.tools import analysis
 from matplotlib import pyplot as plt
 from datetime import datetime
 import numpy as np
@@ -24,8 +25,7 @@ class Multislice2DPtycho(CDIModel):
                  min_translation = t.Tensor([0,0]),
                  background = None, translation_offsets=None, mask=None,
                  weights = None, translation_scale = 1, saturation=None,
-                 #probe_support = None,
-                 probe_fourier_support=None,
+                 probe_support = None,
                  oversampling=1,
                  bandlimit=None,
                  subpixel=True,
@@ -90,7 +90,17 @@ class Multislice2DPtycho(CDIModel):
         if weights is None:
             self.weights = None
         else:
-            self.weights = t.nn.Parameter(t.Tensor(weights).to(t.float32))
+            # We now need to distinguish between real-valued per-image
+            # weights and complex-valued per-mode weight matrices
+            if len(weights.shape) == 1:
+                # This is if it's just a list of numbers
+                self.weights = t.nn.Parameter(t.Tensor(weights).to(t.float32))
+            else:
+                # Now this is a matrix of weights, so we 
+                if type(weights) == type(t.zeros(1)):
+                    self.weights = t.nn.Parameter(weights.to(t.float32))        
+                else:
+                    self.weights = t.nn.Parameter(cmath.complex_to_torch(weights).to(t.float32))
         
         if translation_offsets is None:
             self.translation_offsets = None
@@ -99,7 +109,7 @@ class Multislice2DPtycho(CDIModel):
 
         self.translation_scale = translation_scale
 
-        self.probe_fourier_support = t.Tensor(probe_fourier_support).to(t.float32)
+        self.probe_support = t.Tensor(probe_support).to(t.float32)
 
         if apodization is not None:
             self.apodization = t.Tensor(apodization).to(t.float32)
@@ -117,7 +127,7 @@ class Multislice2DPtycho(CDIModel):
 
         
     @classmethod
-    def from_dataset(cls, dataset, dz, nz, probe_convergence_radius, probe_size=None, padding=0, n_modes=1, translation_scale = 1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=None, replicate_slice=False, subpixel=True, exponentiate_obj=True, units='um', fourier_probe=False, apodize_prop=False, phase_only=False):
+    def from_dataset(cls, dataset, dz, nz, probe_convergence_radius, probe_size=None, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=None, replicate_slice=False, subpixel=True, exponentiate_obj=True, units='um', fourier_probe=False, apodize_prop=False, phase_only=False):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -189,6 +199,8 @@ class Multislice2DPtycho(CDIModel):
             probe_stack = list(0.01*tools.initializers.generate_subdominant_modes(probe,n_modes-1,circular=False))
             #probe_stack = [0.01 * probe_max * t.rand(probe.shape,dtype=probe.dtype) for i in range(n_modes - 1)]
             probe = t.stack([probe,] + probe_stack)
+        else:
+            probe = t.unsqueeze(probe,0)
 
         # For a Fourier space probe
         if fourier_probe:
@@ -219,7 +231,23 @@ class Multislice2DPtycho(CDIModel):
 
         translation_offsets = 0 * (t.rand((len(dataset),2)) - 0.5)
 
-        weights = t.ones(len(dataset))
+        if dm_rank is not None and dm_rank != 0:
+            if dm_rank > n_modes:
+                raise KeyError('Density matrix rank cannot be greater than the number of modes. Use dm_rank = -1 to use a full rank matrix.')
+            elif dm_rank == -1:
+                # dm_rank == -1 is defined to mean full-rank
+                dm_rank = n_modes
+            Ws = t.zeros(len(dataset),dm_rank,n_modes,2)
+            # Start with as close to the identity matrix as possible,
+            # cutting of when we hit the specified maximum rank
+            for i in range(0,dm_rank):
+                Ws[:,i,i,0] = 1
+        else:
+            # dm_rank == None or dm_rank = 0 triggers a special case where
+            # a standard incoherent multi-mode model is used. This is the
+            # default, because it is so common.
+            # In this case, we define a set of weights which only has one index
+            Ws = t.ones(len(dataset))
         
         if hasattr(dataset, 'mask') and dataset.mask is not None:
             mask = dataset.mask.to(t.bool)
@@ -240,11 +268,10 @@ class Multislice2DPtycho(CDIModel):
                    surface_normal=surface_normal,
                    min_translation=min_translation,
                    translation_offsets = translation_offsets,
-                   weights=weights, mask=mask, background=background,
+                   weights=Ws, mask=mask, background=background,
                    translation_scale=translation_scale,
                    saturation=saturation,
-                   #probe_support=probe_support,
-                   probe_fourier_support=probe_support,
+                   probe_support=probe_support,
                    oversampling=oversampling,
                    bandlimit=bandlimit,
                    subpixel=subpixel,
@@ -263,13 +290,28 @@ class Multislice2DPtycho(CDIModel):
         if self.translation_offsets is not None:
             pix_trans += self.translation_scale * self.translation_offsets[index]
 
-        # For a Fourier-space probe
-        if self.fourier_probe:
-            prs  =tools.propagators.inverse_far_field(self.probe*self.probe_fourier_support[None,:,:])
-        else:
-            prs = self.probe*self.probe_fourier_support[None,:,:]
-        # Here is where the mixing would happen, if it happened
+        # This restricts the basis probes to stay within the probe support
+        basis_prs = self.probe * self.probe_support[...,:,:]
+        
+        # Now we construct the probes for each shot from the basis probes
+        # This is fine to happen in real or Fourier space, so we do it
+        # regardless of whether fourier_probe is True
+        Ws = self.weights[index]
 
+        if len(self.weights[0].shape) == 0:
+            # If a purely stable coherent illumination is defined
+            prs = cmath.cmult(Ws[...,None,None,None,:],basis_prs)
+        else:
+            # If a frame-by-frame weight matrix is defined
+            # This takes the dot product of all the weight matrices with
+            # the probes. The output has dimensions of translation, then
+            # coherent mode index, then x,y, and then complex index
+            prs = t.sum(cmath.cmult(Ws[...,None,None,:], basis_prs),
+                    axis=-4)
+
+        # For a Fourier-space probe, we take an IFT
+        if self.fourier_probe:
+            prs = tools.propagators.inverse_far_field(prs)
             
         if self.exponentiate_obj:
             if self.phase_only:
@@ -315,15 +357,6 @@ class Multislice2DPtycho(CDIModel):
                 exit_waves = tools.propagators.near_field(
                     exit_waves,self.as_prop)
                     
-        
-        if exit_waves.dim() == 5:
-            # If the index is a list and not a single index
-            exit_waves =  self.weights[index][...,None,None,None,None] * exit_waves
-        else:
-            # If the index a single index
-            exit_waves =  self.weights[index] * exit_waves
-                
-
         return exit_waves
     
         
@@ -370,9 +403,8 @@ class Multislice2DPtycho(CDIModel):
         self.min_translation = self.min_translation.to(*args,**kwargs)
         self.probe_basis = self.probe_basis.to(*args,**kwargs)
         self.probe_norm = self.probe_norm.to(*args,**kwargs)
-        #self.probe_support = self.probe_support.to(*args,**kwargs)
-        self.probe_fourier_support = self.probe_fourier_support.to(*args,**kwargs)
-        
+        self.probe_support = self.probe_support.to(*args,**kwargs)
+                
         
         self.surface_normal = self.surface_normal.to(*args, **kwargs)
         self.as_prop = self.as_prop.to(*args, **kwargs)
@@ -420,6 +452,87 @@ class Multislice2DPtycho(CDIModel):
         t_offset = tools.interactions.pixel_to_translations(self.probe_basis,self.translation_offsets*self.translation_scale,surface_normal=self.surface_normal)
         return translations + t_offset
 
+    
+    def get_rhos(self):
+        # If this is the general unified mode model
+        if self.weights.dim() >= 2:
+            Ws = cmath.torch_to_complex(self.weights.detach().cpu())
+            rhos_out = np.matmul(np.swapaxes(Ws,1,2), Ws.conj())
+            return rhos_out
+        # This is the purely incoherent case
+        else:
+            return np.array([np.eye(self.probe.shape[0])]*self.weights.shape[0],
+                            dtype=np.complex64)
+
+        
+    def tidy_probes(self, normalization=1, normalize=False):
+        """Tidies up the probes
+        
+        What we want to do here is use all the information on all the probes
+        to calculate a natural basis for the experiment, and update all the
+        density matrices to operate in that updated basis
+        
+        """
+        
+        # First we treat the purely incoherent case
+        
+        # I don't love this pattern of using an if statement with a return
+        # to catch this case, but because it's so much simpler than the
+        # unified mode case I think it's appropriate
+        if self.weights.dim() == 1:
+            probe = cmath.torch_to_complex(self.probe.detach().cpu())
+            ortho_probes = analysis.orthogonalize_probes(probe)
+            self.probe.data = cmath.complex_to_torch(ortho_probes).to(
+            device=self.probe.device,dtype=self.probe.dtype)
+            return
+
+        # This is for the unified mode case
+        
+        # Note to future: We could probably do this more cleanly with an
+        # SVD directly on the Ws matrix, instead of an eigendecomposition
+        # of the rho matrix.
+        
+        rhos = self.get_rhos()
+        overall_rho = np.mean(rhos,axis=0)
+        probe = cmath.torch_to_complex(self.probe.detach().cpu())
+        ortho_probes, A = analysis.orthogonalize_probes(probe,
+                                        density_matrix=overall_rho,
+                                        keep_transform=True,
+                                        normalize=normalize)
+        Aconj = A.conj()
+        Atrans = np.transpose(A)
+        new_rhos = np.matmul(Atrans,np.matmul(rhos,Aconj))
+
+        new_rhos /= normalization
+        ortho_probes *= np.sqrt(normalization)
+
+        dm_rank = self.weights.shape[1]
+        
+        new_Ws = []
+        for rho in new_rhos:
+            # These are returned from smallest to largest - we want to keep
+            # the largest ones
+            w,v = sla.eigh(rho)
+            w = w[::-1][:dm_rank]
+            v = v[:,::-1][:,:dm_rank]
+            # For situations where the rank of the density matrix is not
+            # full in reality, but we keep more modes around than needed,
+            # some ws can go negative due to numerical error! This is
+            # extremely rare, but comon enough to cause crashes occasionally
+            # when there are thousands of individual matrices to transform
+            # every time this is called.
+            w = np.maximum(w,0)
+            
+            new_Ws.append(np.dot(np.diag(np.sqrt(w)),v.transpose()))
+            
+        new_Ws = np.array(new_Ws)
+
+        self.weights.data = cmath.complex_to_torch(new_Ws).to(
+            dtype=self.weights.dtype,device=self.weights.device)
+        
+        self.probe.data = cmath.complex_to_torch(ortho_probes).to(
+            device=self.probe.device,dtype=self.probe.dtype)
+        
 
     # Needs to be updated to allow for plotting to an existing figure
     plot_list = [
@@ -431,6 +544,12 @@ class Multislice2DPtycho(CDIModel):
          lambda self, fig: p.plot_amplitude(self.probe if not self.fourier_probe else tools.propagators.inverse_far_field(self.probe), fig=fig, basis=self.probe_basis, units=self.units)),
         ('Probe Real Space Phase',
          lambda self, fig: p.plot_phase(self.probe if not self.fourier_probe else tools.propagators.inverse_far_field(self.probe), fig=fig, basis=self.probe_basis, units=self.units)),
+        ('Average Density Matrix Amplitudes',
+         lambda self, fig: p.plot_amplitude(np.nanmean(np.abs(self.get_rhos()),axis=0), fig=fig),
+         lambda self: len(self.weights.shape) >=2),
+        ('% Power in Top Mode (only accurate after tidy_probes)',
+         lambda self, fig, dataset: p.plot_nanomap(self.corrected_translations(dataset), analysis.calc_top_mode_fraction(self.get_rhos()), fig=fig,units=self.units),
+         lambda self: len(self.weights.shape) >=2),
         ('Slice by Slice Real Part of T', 
          lambda self, fig: p.plot_real(self.obj.detach().cpu(), fig=fig, basis=self.probe_basis, units=self.units, cmap='cividis'),
          lambda self: self.exponentiate_obj),

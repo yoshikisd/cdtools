@@ -13,6 +13,7 @@ from CDTools.tools import cmath
 from CDTools.tools import image_processing as ip
 from scipy import fftpack
 from scipy import linalg as sla
+from scipy import special
 
 __all__ = ['orthogonalize_probes', 'standardize', 'synthesize_reconstructions',
            'calc_consistency_prtf', 'calc_deconvolved_cross_correlation',
@@ -67,7 +68,6 @@ def orthogonalize_probes(probes, density_matrix=None, keep_transform=False, norm
     except:
         send_to_torch = False
 
-    from matplotlib import pyplot as plt
     # We can do the orthogonalization with an SVD, so first we have to
     # reshape the final two dimensions (the image shape) into a single
     # vectorized dimension. This matrix is probes^dagger, hence the
@@ -82,15 +82,16 @@ def orthogonalize_probes(probes, density_matrix=None, keep_transform=False, norm
     # next we want to extract the eigendecomposition of the density matrix
     # itself
     w,v = sla.eigh(density_matrix)
-    w,v = np.linalg.eigh(density_matrix)
     w = w[::-1]
     v = v[:,::-1]
 
     # We do this just to avoid total failure when the density
     # matrix is not positive definite.
-    w = np.abs(w)
-    # Note: this will fail if any w are less than zero
-    # Probably should figure out a good way to deal with that
+    # In most cases (such as when rho is generated directly from some other
+    # matrix A such that rho=A A^dagger), w should never have any negative
+    # entries.
+    w = np.maximum(w,0)
+
     B_dagger = np.dot(np.diag(np.sqrt(w)), v.conj().transpose())
 
     #u,s,vh = np.linalg.svd(np.dot(B_dagger,probes_mat), full_matrices=False)
@@ -184,7 +185,6 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
         single_probe = True
     else:
         single_probe = False
-
 
     normalization = t.sqrt(t.sum(cmath.cabssq(probe[0])) / (len(probe[0].view(-1))/2))
     probe = probe / normalization
@@ -527,6 +527,12 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
     cor_fft = cmath.cmult(cmath.fftshift(t.fft(im1[im_slice],2)),
                           cmath.fftshift(cmath.cconj(t.fft(im2[im_slice],2))))
 
+    #from matplotlib import pyplot as plt
+    #plt.imshow(cmath.cphase(cor_fft))
+    #plt.figure()
+    #plt.imshow(np.log(cmath.cabs(cor_fft)))
+    #plt.show()
+    
     F1 = cmath.cabs(cmath.fftshift(t.fft(im1[im_slice],2)))**2
     F2 = cmath.cabs(cmath.fftshift(t.fft(im2[im_slice],2)))**2
 
@@ -588,12 +594,12 @@ def calc_vn_entropy(matrix):
         # Normalize them to match standard density matrix form
         eigs = [eig / np.sum(eig) for eig in eigs]
         # And calculate the VN entropy!
-        entropies = [-np.sum(eig*np.log(eig)) for eig in eigs]
+        entropies = [-np.sum(special.xlogy(eig,eig)) for eig in eigs]
         return np.array(entropies)
     else:
         eig = np.linalg.eigh(matrix)[0]
-        entropy = -np.sum(eig*np.log(eig))/np.sum(eig)
-        return -np.trace(np.dot(matrix,sla.logm(matrix))) 
+        entropy = -np.sum(special.xlogy(eig,eig))/np.sum(eig)
+        return entropy
 
 def calc_top_mode_fraction(matrix):
     """Calculates the fraction of total power in the top mode of a density matrix

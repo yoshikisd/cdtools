@@ -264,13 +264,6 @@ class UnifiedModePtycho(CDIModel):
         
         exit_waves = exit_waves * self.probe_support[...,:,:]
 
-        if hasattr(self,'weights') and self.weights is not None:
-            if exit_waves.dim() == 5:
-                exit_waves =  self.weights[index][:,None,None,None,None] \
-                    * exit_waves
-            else:
-                exit_waves =  self.weights[index] * exit_waves
-        
         return exit_waves
     
         
