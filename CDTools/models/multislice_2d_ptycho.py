@@ -300,7 +300,8 @@ class Multislice2DPtycho(CDIModel):
 
         if len(self.weights[0].shape) == 0:
             # If a purely stable coherent illumination is defined
-            prs = cmath.cmult(Ws[...,None,None,None,:],basis_prs)
+            # No cmult because Ws is real in this case
+            prs = Ws[...,None,None,None,None] * basis_prs
         else:
             # If a frame-by-frame weight matrix is defined
             # This takes the dot product of all the weight matrices with
