@@ -4,9 +4,8 @@ import torch as t
 from CDTools.models import CDIModel
 from CDTools.datasets import Ptycho2DDataset
 from CDTools import tools
-from CDTools.tools import cmath
+from CDTools.tools import cmath, analysis, image_processing
 from CDTools.tools import plotting as p
-from CDTools.tools import analysis
 from matplotlib import pyplot as plt
 from datetime import datetime
 import numpy as np
@@ -31,7 +30,7 @@ class Multislice2DPtycho(CDIModel):
                  subpixel=True,
                  exponentiate_obj=True,
                  fourier_probe=False,
-                 apodization=None,
+                 prevent_aliasing=True,
                  phase_only=False,
                  units='um'):
         
@@ -60,6 +59,7 @@ class Multislice2DPtycho(CDIModel):
         self.fourier_probe = fourier_probe
         self.units = units
         self.phase_only=phase_only
+        self.prevent_aliasing=prevent_aliasing
         
         if mask is None:
             self.mask = mask
@@ -111,23 +111,21 @@ class Multislice2DPtycho(CDIModel):
 
         self.probe_support = t.Tensor(probe_support).to(t.float32)
 
-        if apodization is not None:
-            self.apodization = t.Tensor(apodization).to(t.float32)
-        else:
-            self.apodization = None
-            
         self.oversampling = oversampling
 
         spacing = np.linalg.norm(self.probe_basis,axis=0)
         shape = np.array(self.probe.shape[1:-1])
+        if prevent_aliasing:
+            shape *= 2
+            spacing /= 2
         
         self.bandlimit = bandlimit
-        
+
         self.as_prop = tools.propagators.generate_angular_spectrum_propagator(shape, spacing, self.wavelength, self.dz, bandlimit=self.bandlimit)
 
         
     @classmethod
-    def from_dataset(cls, dataset, dz, nz, probe_convergence_radius, probe_size=None, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=None, replicate_slice=False, subpixel=True, exponentiate_obj=True, units='um', fourier_probe=False, apodize_prop=False, phase_only=False):
+    def from_dataset(cls, dataset, dz, nz, probe_convergence_radius, probe_size=None, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=None, replicate_slice=False, subpixel=True, exponentiate_obj=True, units='um', fourier_probe=False, phase_only=False, prevent_aliasing=True):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -216,17 +214,6 @@ class Multislice2DPtycho(CDIModel):
         if not replicate_slice:
             obj = t.stack([obj]*nz)
             
-        if apodize_prop:
-            shape = probe.shape[-3:-1]
-            #window_x = (1+np.cos(np.pi+2*np.pi*np.arange(shape[0])/shape[0]))/2
-            #window_y = (1+np.cos(np.pi+2*np.pi*np.arange(shape[1])/shape[1]))/2
-            window_x = np.cos(-np.pi/2+np.pi*np.arange(shape[0])/shape[0])
-            window_y = np.cos(-np.pi/2+np.pi*np.arange(shape[1])/shape[1])
-            Wx, Wy = np.meshgrid(window_x,window_y, indexing='ij')
-            apodization=t.Tensor(Wx*Wy).to(dtype=probe.dtype)
-        else:
-            apodization=None
-            
         det_geo = dataset.detector_geometry
 
         translation_offsets = 0 * (t.rand((len(dataset),2)) - 0.5)
@@ -277,8 +264,8 @@ class Multislice2DPtycho(CDIModel):
                    subpixel=subpixel,
                    exponentiate_obj=exponentiate_obj,
                    units=units, fourier_probe=fourier_probe,
-                   apodization=apodization,
-                   phase_only=phase_only)
+                   phase_only=phase_only,
+                   prevent_aliasing=prevent_aliasing)
                    
     
     def interaction(self, index, translations):
@@ -289,13 +276,19 @@ class Multislice2DPtycho(CDIModel):
 
         if self.translation_offsets is not None:
             pix_trans += self.translation_scale * self.translation_offsets[index]
-
+        
         # This restricts the basis probes to stay within the probe support
         basis_prs = self.probe * self.probe_support[...,:,:]
-        
+
+        # For a Fourier-space probe, we take an IFT
+        if self.fourier_probe:
+            basis_prs = tools.propagators.inverse_far_field(basis_prs)
+
+        if self.prevent_aliasing:
+            pix_trans = pix_trans * 2
+            basis_prs = image_processing.fourier_upsample(basis_prs)
+
         # Now we construct the probes for each shot from the basis probes
-        # This is fine to happen in real or Fourier space, so we do it
-        # regardless of whether fourier_probe is True
         Ws = self.weights[index]
 
         if len(self.weights[0].shape) == 0:
@@ -310,9 +303,6 @@ class Multislice2DPtycho(CDIModel):
             prs = t.sum(cmath.cmult(Ws[...,None,None,:], basis_prs),
                     axis=-4)
 
-        # For a Fourier-space probe, we take an IFT
-        if self.fourier_probe:
-            prs = tools.propagators.inverse_far_field(prs)
             
         if self.exponentiate_obj:
             if self.phase_only:
@@ -321,7 +311,10 @@ class Multislice2DPtycho(CDIModel):
                 obj = cmath.cexpi(self.obj)
         else:
             obj = self.obj
-        
+
+        if self.prevent_aliasing:
+            obj = image_processing.fourier_upsample(obj)
+
         exit_waves = self.probe_norm * prs
         for i in range(self.nz):
             # If only one object slice
@@ -336,8 +329,6 @@ class Multislice2DPtycho(CDIModel):
                     exit_waves = tools.interactions.ptycho_2D_round(
                         exit_waves, obj, pix_trans,
                         multiple_modes=True)
-                if self.apodization is not None:
-                    exit_waves = exit_waves * self.apodization[None,:,:,None]
                 
 
                     
@@ -351,8 +342,6 @@ class Multislice2DPtycho(CDIModel):
                     exit_waves = tools.interactions.ptycho_2D_round(
                         exit_waves, obj[i], pix_trans,
                         multiple_modes=True)
-                if self.apodization is not None:
-                   exit_waves = exit_waves * self.apodization[None,:,:,None]
 
             if i < self.nz-1: #on all but the last iteration
                 exit_waves = tools.propagators.near_field(
@@ -362,11 +351,12 @@ class Multislice2DPtycho(CDIModel):
     
         
     def forward_propagator(self, wavefields):
-        return tools.propagators.far_field(wavefields)
+        left = [self.probe.shape[-3]//2,self.probe.shape[-2]//2]
+        right = [self.probe.shape[-3]//2+self.probe.shape[-3],
+                 self.probe.shape[-2]//2+self.probe.shape[-2]]
 
-
-    def backward_propagator(self, wavefields):
-        return tools.propagators.inverse_far_field(wavefields)
+        return tools.propagators.far_field(wavefields)[...,left[0]:right[0],
+                                                       left[1]:right[1],:]
 
     
     def measurement(self, wavefields):
@@ -397,9 +387,6 @@ class Multislice2DPtycho(CDIModel):
 
         if self.mask is not None:
             self.mask = self.mask.to(*args, **kwargs)
-        if self.apodization is not None:
-            self.apodization = self.apodization.to(*args,**kwargs)
-
             
         self.min_translation = self.min_translation.to(*args,**kwargs)
         self.probe_basis = self.probe_basis.to(*args,**kwargs)

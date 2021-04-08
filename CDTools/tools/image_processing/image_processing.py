@@ -10,11 +10,11 @@ a way that it is safe to include them in automatic differentiation models.
 from __future__ import division, print_function, absolute_import
 import numpy as np
 import torch as t
-from CDTools.tools import cmath
+from CDTools.tools import cmath, propagators
 
 __all__ = ['centroid', 'centroid_sq', 'sinc_subpixel_shift',
            'find_subpixel_shift', 'find_pixel_shift', 'find_shift',
-           'convolve_1d']
+           'convolve_1d', 'fourier_upsample']
 
 
 def centroid(im, dims=2):
@@ -325,3 +325,17 @@ def convolve_1d(image, kernel, dim=0, fftshift_kernel=True):
         return conv_im[...,0]
     else:
         return conv_im
+
+
+def fourier_upsample(ims):
+    upsampled = t.zeros(ims.shape[:-3]+(2*ims.shape[-3],2*ims.shape[-2])+(2,),
+                           dtype=ims.dtype,
+                           device=ims.device)
+    left = [ims.shape[-3]//2,ims.shape[-2]//2]
+    right = [ims.shape[-3]//2+ims.shape[-3],
+             ims.shape[-2]//2+ims.shape[-2]]
+    
+    upsampled[...,left[0]:right[0],left[1]:right[1],:] = propagators.far_field(ims)
+    return propagators.inverse_far_field(upsampled)
+
+

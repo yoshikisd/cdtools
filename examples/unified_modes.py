@@ -1,14 +1,17 @@
 from __future__ import division, print_function, absolute_import
 
 import CDTools
+from CDTools.tools import plotting as p
 from matplotlib import pyplot as plt
 import pickle
+import torch as t
+from CDTools.tools import cmath
 
 filename = 'example_data/lab_ptycho_data.cxi'
 dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
 
-# dataset.inspect()
-# plt.show()
+#dataset.inspect(units='mm')
+#plt.show()
 
 # dm_rank=-1 tells it to use a full-rank unified mode approximation
 model = CDTools.models.FancyPtycho.from_dataset(dataset, oversampling=1,n_modes=3, dm_rank=-1)
@@ -18,13 +21,13 @@ model.to(device='cuda')
 dataset.get_as(device='cuda')
 
 model.translation_offsets.requires_grad = False
-for i, loss in enumerate(model.Adam_optimize(20, dataset)):
+for i, loss in enumerate(model.Adam_optimize(200, dataset)):
     model.inspect(dataset)
     print(i,loss)
 
 model.tidy_probes()
 
-for i, loss in enumerate(model.Adam_optimize(20, dataset, lr=0.0001)):
+for i, loss in enumerate(model.Adam_optimize(200, dataset, lr=0.0001)):
     model.inspect(dataset)
     print(i,loss)
 

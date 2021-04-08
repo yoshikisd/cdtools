@@ -472,7 +472,7 @@ class CDIModel(t.nn.Module):
             plotter = plots[1]
 
             if figs is None:
-                fig = plt.figure()
+                fig = plt.figure()                
                 self.figs.append(fig)
             else:
                 fig = figs[idx]
@@ -480,6 +480,7 @@ class CDIModel(t.nn.Module):
             try:
                 plotter(self,fig)
                 plt.title(name)
+                
             except TypeError as e:
                 if dataset is not None:
                     try:

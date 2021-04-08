@@ -271,7 +271,6 @@ class FancyPtycho(CDIModel):
                                                              translations,
                                                              surface_normal=self.surface_normal)
         pix_trans -= self.min_translation
-
         # We then add on any recovered translation offset, if they exist
         if self.translation_offsets is not None:
             pix_trans += self.translation_scale * self.translation_offsets[index]
@@ -392,6 +391,7 @@ class FancyPtycho(CDIModel):
         t_offset = tools.interactions.pixel_to_translations(self.probe_basis,self.translation_offsets*self.translation_scale,surface_normal=self.surface_normal)
         return translations + t_offset
 
+    
     def get_rhos(self):
         # If this is the general unified mode model
         if self.weights.dim() >= 2:
@@ -470,13 +470,61 @@ class FancyPtycho(CDIModel):
         
         self.probe.data = cmath.complex_to_torch(ortho_probes).to(
             device=self.probe.device,dtype=self.probe.dtype)
+
+
+    def plot_wavefront_variation(self, dataset,fig=None,mode='amplitude',**kwargs):
+        def get_probes(idx):
+            basis_prs = self.probe * self.probe_support[...,:,:]
+            prs = t.sum(cmath.cmult(self.weights[idx,:,:,None,None,:],
+                                    basis_prs), axis=-4)
+            ortho_probes = analysis.orthogonalize_probes(prs)
+
+            #return np.abs(cmath.torch_to_complex(prs.detach().cpu()))
+            if mode.lower() == 'amplitude':
+                return np.abs(cmath.torch_to_complex(ortho_probes.detach().cpu()))
+            if mode.lower() == 'root_sum_intensity':
+                return np.sum(np.abs(cmath.torch_to_complex(ortho_probes.detach().cpu()))**2,axis=0)
+            if mode.lower() == 'phase':
+                return np.angle(cmath.torch_to_complex(ortho_probes.detach().cpu()))
+            
+        probe_matrix = np.zeros([self.probe.shape[0]]*2,
+                                dtype=np.complex64)
+        np_probes = cmath.torch_to_complex(self.probe.detach().cpu())
+        for i in range(probe_matrix.shape[0]):
+            for j in range(probe_matrix.shape[0]):
+                probe_matrix[i,j] = np.sum(np_probes[i]*np_probes[j].conj())
         
 
-    # Needs to be updated to allow for plotting to an existing figure
+        weights = cmath.torch_to_complex(self.weights.detach().cpu())
+
+        probe_intensities = np.sum(np.tensordot(weights,probe_matrix,axes=1)*
+                                   weights.conj(),axis=2)
+
+        # Imaginary part is already essentially zero up to rounding error
+        probe_intensities = np.real(probe_intensities)
+        
+        values = np.sum(probe_intensities,axis=1)
+        if mode.lower() == 'amplitude' or mode.lower() == 'root_sum_intensity':
+            cmap = 'viridis'
+        else:
+            cmap = 'twilight'
+            
+        p.plot_nanomap_with_images(self.corrected_translations(dataset), get_probes, values=values, fig=fig, units=self.units, basis=self.probe_basis, nanomap_colorbar_title='Total Probe Intensity',cmap=cmap,**kwargs),
+
+        
     plot_list = [
-        ('Probe Amplitude (scroll to view modes)',
+        ('',
+         lambda self, fig, dataset: self.plot_wavefront_variation(dataset,fig=fig,mode='root_sum_intensity',image_title='Root Summed Probe Intensities',image_colorbar_title='Square Root of Intensity'),
+         lambda self: len(self.weights.shape) >= 2),
+        ('',
+         lambda self, fig, dataset: self.plot_wavefront_variation(dataset,fig=fig,mode='amplitude',image_title='Probe Amplitudes (scroll to view modes)',image_colorbar_title='Probe Amplitude'),
+         lambda self: len(self.weights.shape) >= 2),
+        ('',
+         lambda self, fig, dataset: self.plot_wavefront_variation(dataset,fig=fig,mode='phase',image_title='Probe Phases (scroll to view modes)',image_colorbar_title='Probe Phase'),
+         lambda self: len(self.weights.shape) >= 2),
+        ('Basis Probe Amplitudes (scroll to view modes)',
          lambda self, fig: p.plot_amplitude(self.probe, fig=fig, basis=self.probe_basis,units=self.units)),
-        ('Probe Phase (scroll to view modes)',
+        ('Basis Probe Phases (scroll to view modes)',
          lambda self, fig: p.plot_phase(self.probe, fig=fig, basis=self.probe_basis,units=self.units)),
         ('Average Density Matrix Amplitudes',
          lambda self, fig: p.plot_amplitude(np.nanmean(np.abs(self.get_rhos()),axis=0), fig=fig),
