@@ -122,7 +122,7 @@ class FancyPtycho(CDIModel):
 
         
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True, opt_for_fft=False, loss='amplitude mse', units='um'):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um'):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -496,7 +496,7 @@ class FancyPtycho(CDIModel):
         
 
         weights = cmath.torch_to_complex(self.weights.detach().cpu())
-
+        
         probe_intensities = np.sum(np.tensordot(weights,probe_matrix,axes=1)*
                                    weights.conj(),axis=2)
 

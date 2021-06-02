@@ -329,7 +329,10 @@ class Multislice2DPtycho(CDIModel):
                     exit_waves = tools.interactions.ptycho_2D_round(
                         exit_waves, obj, pix_trans,
                         multiple_modes=True)
-                
+            #if self.iteration_count >= 10:
+            #    plt.figure()
+            #    plt.imshow(np.abs(cmath.torch_to_complex(exit_waves[0,0].detach().cpu())))
+            #    plt.show()
 
                     
             elif self.obj.dim() == 4:
@@ -346,17 +349,19 @@ class Multislice2DPtycho(CDIModel):
             if i < self.nz-1: #on all but the last iteration
                 exit_waves = tools.propagators.near_field(
                     exit_waves,self.as_prop)
-                    
         return exit_waves
     
         
     def forward_propagator(self, wavefields):
-        left = [self.probe.shape[-3]//2,self.probe.shape[-2]//2]
-        right = [self.probe.shape[-3]//2+self.probe.shape[-3],
-                 self.probe.shape[-2]//2+self.probe.shape[-2]]
-
-        return tools.propagators.far_field(wavefields)[...,left[0]:right[0],
-                                                       left[1]:right[1],:]
+        if self.prevent_aliasing:
+            left = [self.probe.shape[-3]//2,self.probe.shape[-2]//2]
+            right = [self.probe.shape[-3]//2+self.probe.shape[-3],
+                     self.probe.shape[-2]//2+self.probe.shape[-2]]
+            
+            return tools.propagators.far_field(wavefields)[...,left[0]:right[0],
+                                                           left[1]:right[1],:]
+        else:
+            return tools.propagators.far_field(wavefields)
 
     
     def measurement(self, wavefields):

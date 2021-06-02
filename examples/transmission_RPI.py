@@ -34,7 +34,7 @@ dataset.get_as(device='cuda')
 # The regularization is an L2 regularizer that empirically helps accelerate
 # convergence
 for i, loss in enumerate(model.LBFGS_optimize(30, dataset, lr=0.4, regularization_factor=[0.05,0.05])):#0.1)):
-    #model.inspect(dataset)
+    model.inspect(dataset)
     print(i,loss)
     
 #model.inspect(dataset)

@@ -39,7 +39,7 @@ import numpy as np
 import threading
 import queue
 import time
-import pytorch_warmup 
+#import pytorch_warmup
 
 __all__ = ['CDIModel']
 
@@ -282,7 +282,8 @@ class CDIModel(t.nn.Module):
             scheduler = None
 
         if warmup:
-            warmup_scheduler = pytorch_warmup.UntunedLinearWarmup(optimizer)
+            print('Warmup is not currently implemented, sorry!')
+            #warmup_scheduler = pytorch_warmup.UntunedLinearWarmup(optimizer)
         else:
             warmup_scheduler = None
             

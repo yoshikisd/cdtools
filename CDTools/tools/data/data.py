@@ -354,7 +354,11 @@ def get_data(cxi_file, cut_zeroes = True):
         data[data < 0] = 0
 
     if 'axes' in cxi_file[pull_from].attrs:
-        axes = str(cxi_file[pull_from].attrs['axes'].decode()).split(':')
+        try:
+            axes = str(cxi_file[pull_from].attrs['axes'].decode()).split(':')
+        except AttributeError as e: # Weird string vs bytes thing, ehhh
+            axes = str(cxi_file[pull_from].attrs['axes']).split(':')
+
         axes = [axis.strip().lower() for axis in axes]
     else:
         axes = None

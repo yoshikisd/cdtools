@@ -266,7 +266,7 @@ class RPI(CDIModel):
         try:
             # will fail if index has no length, for example when index
             # is just an int. In this case, we just do nothing instead
-            output = output.unsqueeze(1).repeat(1,len(index),1,1,1)
+            output = output.unsqueeze(0).repeat(1,len(index),1,1,1)
         except TypeError:
             pass
         
