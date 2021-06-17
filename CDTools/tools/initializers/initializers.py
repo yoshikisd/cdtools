@@ -12,7 +12,6 @@ __all__ = ['exit_wave_geometry', 'calc_object_setup', 'gaussian',
            'gaussian_probe', 'SHARP_style_probe', 'RPI_spectral_init',
            'generate_subdominant_modes'] 
 
-from CDTools.tools import cmath
 from CDTools.tools.propagators import *
 from CDTools.tools.analysis import orthogonalize_probes
 from scipy.fftpack import next_fast_len
@@ -61,14 +60,17 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
         The slice corresponding to the physical detector
     """
     
-    det_shape = t.Tensor(tuple(det_shape)).to(t.int32)
-    det_basis = t.Tensor(det_basis)
+    det_shape = t.tensor(tuple(det_shape)).to(t.int32)
+    det_basis = t.tensor(det_basis)
     # First, set the center if it's not already specified
     # This definition matches the center pixel of an fftshifted array
     if center is None:
-        center = det_shape // 2
+        # this is center//2, but in pytorch 1.9.0 it throws a warning
+        # if you just do that
+
+        center = t.div(det_shape,2,rounding_mode='floor')# // 2
     else:
-        center = t.Tensor(center).to(t.int32)
+        center = t.tensor(center).to(t.int32)
         
     # Then, calculate the required detector size from the centering
     # This is a bit opaque but was worth doing accurately
@@ -81,11 +83,13 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
 
     
     if opt_for_fft:
-        full_shape = t.Tensor([next_fast_len(dim) for dim in full_shape]).to(t.int32)
+        full_shape = t.tensor([next_fast_len(dim) for dim in full_shape]).to(t.int32)
     
     # Then, generate a slice that pops the actual detector from the full
     # detector shape
-    full_center = full_shape // 2
+    # this is full_center//2, but in pytorch 1.9.0 it throws a warning
+    # if you just do that
+    full_center = t.div(full_shape,2, rounding_mode='floor')# // 2
     det_slice = np.s_[int(full_center[0]-center[0]):
                       int(full_center[0]-center[0]+det_shape[0]),
                       int(full_center[1]-center[1]):
@@ -97,7 +101,7 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
     # This method should work for a general parallelogram
     # shaped detector
     det_shape = det_basis * full_shape.to(t.float32)
-    pinv_basis = t.Tensor(np.linalg.pinv(det_shape).transpose()).to(t.float32)
+    pinv_basis = t.tensor(np.linalg.pinv(det_shape).transpose()).to(t.float32)
     real_space_basis = pinv_basis * wavelength * distance
 
     # This is definitely correct, but less simple. Included here
@@ -105,7 +109,7 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
     #oop_dir = np.cross(det_basis[:,0],det_basis[:,1])
     #oop_dir /= np.linalg.norm(oop_dir)
     #full_basis = np.array([np.array(det_basis[:,0]),np.array(det_basis[:,1]),oop_dir]).transpose()
-    #inv_basis = t.Tensor(np.linalg.inv(full_basis)[:2,:].transpose()).to(t.float32)
+    #inv_basis = t.tensor(np.linalg.inv(full_basis)[:2,:].transpose()).to(t.float32)
     #real_space_basis = inv_basis*wavelength * distance / \
     #    full_shape.to(t.float32)
 
@@ -201,7 +205,7 @@ def gaussian(shape, sigma, amplitude=1, center = None, curvature=[0,0]):
     jsq = (j - center[1])**2
     result = np.exp((1j*curvature[0] / 2 - 1 / (2 * sigma[0]**2)) * isq + \
         (1j*curvature[1] / 2 - 1 / (2 * sigma[1]**2)) * jsq)
-    return cmath.complex_to_torch(amplitude*result)
+    return t.tensor(amplitude*result).to(t.complex64)
 
 
 
@@ -268,8 +272,8 @@ def gaussian_probe(dataset, basis, shape, sigma, propagation_distance=0):
     # Finally, we should calculate the average pattern intensity from the
     # dataset and normalize the gaussian probe. This should be done by
     avg_intensities = [t.sum(dataset[idx][1]) for idx in range(len(dataset))]
-    avg_intensity = t.mean(t.Tensor(avg_intensities))
-    probe_intensity = t.sum(cmath.cabssq(probe))
+    avg_intensity = t.mean(t.tensor(avg_intensities))
+    probe_intensity = t.sum(t.abs(probe)**2)
     return avg_intensity / probe_intensity * probe
     
 
@@ -324,14 +328,13 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, over
     if hasattr(dataset, 'background') and dataset.background is not None:
         intensities[det_slice] = np.clip(intensities[det_slice] - dataset.background.cpu().numpy(), a_min=0,a_max=None)
     
-    probe_fft = cmath.complex_to_torch(np.sqrt(intensities))
-    
-    probe_guess = cmath.torch_to_complex(inverse_far_field(probe_fft))
-    
+    probe_fft = t.tensor(np.sqrt(intensities)).to(dtype=t.complex64)
+
+    probe_guess = inverse_far_field(probe_fft).numpy()
     # Now we remove the central pixel
     center = np.array(probe_guess.shape) // 2
     
-    # I'm always divided on whether to use this modification:
+    # I'm always unsure whether to use this modification:
     
     probe_guess[center[0], center[1]]=np.mean([
         probe_guess[center[0]-1, center[1]],
@@ -339,15 +342,15 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, over
         probe_guess[center[0], center[1]-1],
         probe_guess[center[0], center[1]+1]])
 
-    probe_guess = cmath.complex_to_torch(probe_guess)
-    
+    probe_guess = t.tensor(probe_guess).to(dtype=t.complex64)
+
     if propagation_distance is not None:
         # First generate the propagation array
 
-        probe_shape = t.Tensor(tuple(probe_guess.shape))[:-1]
-
+        probe_shape = t.tensor(tuple(probe_guess.shape))
+        
         # Start by recalculating the probe basis from the given information
-        det_basis = t.Tensor(dataset.detector_geometry['basis'])
+        det_basis = t.tensor(dataset.detector_geometry['basis'])
         basis_dirs = det_basis / t.norm(det_basis, dim=0)
         distance = dataset.detector_geometry['distance']
         probe_basis = basis_dirs * dataset.wavelength * distance / \
@@ -362,14 +365,13 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, over
         AS_prop = generate_angular_spectrum_propagator(probe_shape, probe_spacing, dataset.wavelength, propagation_distance)
 
         probe_guess = near_field(probe_guess,AS_prop)
-
     
     # Finally, place this probe in a full-sized array if there is oversampling
-    final_probe = t.zeros([dim for dim in shape] + [2])
+    final_probe = t.zeros(shape,dtype=t.complex64)
     left = shape[0]//2 - probe_guess.shape[0] // 2
     top = shape[1]//2 - probe_guess.shape[1] // 2 
     final_probe[left:left+probe_guess.shape[0],
-                top:top+probe_guess.shape[1],:] = probe_guess
+                top:top+probe_guess.shape[1]] = probe_guess
     
     return final_probe
 
@@ -388,20 +390,19 @@ def RPI_spectral_init(pattern, probe, obj_shape, n_modes=1, mask=None, backgroun
     pad1r = probe.shape[-2] - obj_shape[1] - pad1l
     
     def a_dagger(im):
-        im = cmath.complex_to_torch(im.reshape(obj_shape)).to(dtype=t.float32)
-        im = inverse_far_field(pad(far_field(im), (0,0,pad1l,pad1r,pad0l,pad0r)))
-        exit_wave = cmath.cmult(probe,im)
-        farfield = cmath.torch_to_complex(far_field(exit_wave))
-        return farfield.ravel()
+        im = t.tensor(im.reshape(obj_shape)).to(dtype=t.complex64)
+        im = inverse_far_field(pad(far_field(im), (pad1l,pad1r,pad0l,pad0r)))
+        exit_wave = probe * im
+        return far_field(exit_wave).numpy().ravel()
 
     def a(measured):
-        measured = cmath.complex_to_torch(measured.reshape(pattern.shape[0],pattern.shape[1])).to(dtype=t.float32)
+        measured = t.tensor(measured.reshape(pattern.shape[0],pattern.shape[1])).to(dtype=t.complex64)
         im = inverse_far_field(measured)
-        multiplied = cmath.cmult(cmath.cconj(probe), im)
+        multiplied = t.conj(probe) * im
         backplane = far_field(multiplied)
         clipped = backplane[pad0l:pad0l+obj_shape[0],
-                            pad1l:pad1l+obj_shape[1],:]
-        return cmath.torch_to_complex(inverse_far_field(clipped)).ravel()
+                            pad1l:pad1l+obj_shape[1]]
+        return (inverse_far_field(clipped)).numpy().ravel()
 
     patsize = pattern.shape[0]*pattern.shape[1]
     imsize = obj_shape[0]*obj_shape[1]
@@ -495,9 +496,9 @@ def generate_subdominant_modes(dominant_mode, n_modes, circular=True):
     center = ((shape[-3]-1)//2, (shape[-2]-1)//2)
         
     i, j = np.mgrid[:shape[-3], :shape[-2]]
-    i = t.Tensor(i - center[0]).to(dtype=dominant_fft.dtype,
+    i = t.tensor(i - center[0]).to(dtype=dominant_fft.dtype,
                                     device=dominant_fft.device)
-    j = t.Tensor(j - center[1]).to(dtype=dominant_fft.dtype,
+    j = t.tensor(j - center[1]).to(dtype=dominant_fft.dtype,
                                     device=dominant_fft.device)
 
     if circular:

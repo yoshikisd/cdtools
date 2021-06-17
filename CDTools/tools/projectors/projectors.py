@@ -5,7 +5,6 @@ alongside the automatic differentiation ones, for comparison or in a
 situation where they might be needed.
 """
 from __future__ import division, print_function, absolute_import
-from CDTools.tools.cmath import *
 import torch as t
 
 __all__ = ['modulus', 'support']
@@ -41,7 +40,7 @@ def modulus(wavefront, intensities, mask = None):
     # Calculate amplitudes from intensities
     amplitudes = t.sqrt(intensities)
     # Normalize wavefront so the complex elements have modulus one
-    wavefront_mag = cabs(wavefront)
+    wavefront_mag = t.abs(wavefront)
     projected = wavefront * (amplitudes / wavefront_mag)[...,None]
     # Replace amplitude of wavefront with measured amplitude
     if mask is not None:

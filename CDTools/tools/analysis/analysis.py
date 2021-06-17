@@ -9,7 +9,6 @@ from __future__ import division, print_function
 
 import torch as t
 import numpy as np
-from CDTools.tools import cmath
 from CDTools.tools import image_processing as ip
 from scipy import fftpack
 from scipy import linalg as sla
@@ -63,7 +62,7 @@ def orthogonalize_probes(probes, density_matrix=None, keep_transform=False, norm
     """
     
     try:
-        probes = cmath.torch_to_complex(probes.detach().cpu())
+        probes = probes.detach().cpu().numpy()
         send_to_torch = True
     except:
         send_to_torch = False
@@ -116,9 +115,8 @@ def orthogonalize_probes(probes, density_matrix=None, keep_transform=False, norm
         #A_dagger = np.dot(np.transpose(u).conj(),B_dagger)
     
     if send_to_torch:
-        ortho_probes = cmath.complex_to_torch(np.stack(ortho_probes))
-        A = cmath.complex_to_torch(A)
-        #A_dagger = cmath.complex_to_torch(A_dagger)
+        ortho_probes = t.as_tensor(np.stack(ortho_probes))
+        A = t.as_tensor(A)
 
     if keep_transform:
         return ortho_probes, A#_dagger
@@ -172,11 +170,11 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
     # First, we normalize the probe intensity to a fixed value.
     probe_np = False
     if isinstance(probe, np.ndarray):
-        probe = cmath.complex_to_torch(probe).to(t.float32)
+        probe = t.Tensor(probe).to(t.complex64)
         probe_np = True
     obj_np = False
     if isinstance(obj, np.ndarray):
-        obj = cmath.complex_to_torch(obj).to(t.float32)
+        obj = t.Tensor(obj).to(t.complex64)
         obj_np = True
 
     # If this is a single probe and not a stack of probes
@@ -186,7 +184,7 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
     else:
         single_probe = False
 
-    normalization = t.sqrt(t.sum(cmath.cabssq(probe[0])) / (len(probe[0].view(-1))/2))
+    normalization = t.sqrt(t.sum(t.abs(probe[0])**2) / (len(probe[0].view(-1))/2))
     probe = probe / normalization
     obj = obj * normalization
 
@@ -198,37 +196,38 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
 
     if correct_ramp:
         # Need to check if this is actually working and, if not, why not
-        center_freq = ip.centroid(cmath.cabssq(cmath.fftshift(t.fft(probe[0],2))))
+        center_freq = ip.centroid(t.abs(t.fft.fftshift(t.fft.fft2(probe[0]),
+                                                       dim=(-1,-2)))**2)
         center_freq -= (t.tensor(probe[0].shape[:-1]) // 2).to(t.float32)
         center_freq /= t.tensor(probe[0].shape[:-1]).to(t.float32)
 
         Is, Js = np.mgrid[:probe[0].shape[0],:probe[0].shape[1]]
-        probe_phase_ramp = cmath.expi(2 * np.pi *
-                                      (center_freq[0] * t.tensor(Is).to(t.float32) +
-                                       center_freq[1] * t.tensor(Js).to(t.float32)))
-        probe = cmath.cmult(probe, cmath.cconj(probe_phase_ramp))
+        probe_phase_ramp = t.exp(2j * np.pi *
+                                 (center_freq[0] * t.tensor(Is).to(t.float32) +
+                                  center_freq[1] * t.tensor(Js).to(t.float32)))
+        probe = probe *  t.conj(probe_phase_ramp)
         Is, Js = np.mgrid[:obj.shape[0],:obj.shape[1]]
-        obj_phase_ramp = cmath.expi(2*np.pi *
-                                    (center_freq[0] * t.tensor(Is).to(t.float32) +
-                                     center_freq[1] * t.tensor(Js).to(t.float32)))
-        obj = cmath.cmult(obj, obj_phase_ramp)
+        obj_phase_ramp = t.exp(2j*np.pi *
+                               (center_freq[0] * t.tensor(Is).to(t.float32) +
+                                center_freq[1] * t.tensor(Js).to(t.float32)))
+        obj = obj * obj_phase_ramp
 
     # Then, we set them to consistent absolute phases
 
-    obj_angle = cmath.cphase(t.sum(obj[obj_slice],dim=(0,1)))
-    obj = cmath.cmult(obj, cmath.expi(-obj_angle))
+    obj_angle = t.angle(t.sum(obj[obj_slice],dim=(0,1)))
+    obj = obj *  t.exp(-1j*obj_angle)
 
     for i in range(probe.shape[0]):
-        probe_angle = cmath.cphase(t.sum(probe[i],dim=(0,1)))
-        probe[i] = cmath.cmult(probe[i], cmath.expi(-probe_angle))
+        probe_angle = t.angle(t.sum(probe[i],dim=(0,1)))
+        probe[i] = probe[i] * t.exp(-1j*probe_angle)
 
     if single_probe:
         probe = probe[0]
 
     if probe_np:
-        probe = cmath.torch_to_complex(probe.detach().cpu())
+        probe = probe.detach().cpu().numpy()
     if obj_np:
-        obj = cmath.torch_to_complex(obj.detach().cpu())
+        obj = obj.detach().cpu().numpy()
 
     return probe, obj
 
@@ -268,11 +267,11 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None,
 
     probe_np = False
     if isinstance(probes[0], np.ndarray):
-        probes = [cmath.complex_to_torch(probe).to(t.float32) for probe in probes]
+        probes = [t.Tensor(probe).to(t.complex64) for probe in probes]
         probe_np = True
     obj_np = False
     if isinstance(objects[0], np.ndarray):
-        objects = [cmath.complex_to_torch(obj).to(t.float32) for obj in objects]
+        objects = [t.Tensor(obj).to(t.complex64) for obj in objects]
         obj_np = True
 
     obj_shape = np.min(np.array([obj.shape[:-1] for obj in objects]),axis=0)
@@ -317,10 +316,10 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None,
         i = -1
 
     if probe_np:
-        synth_probe = cmath.torch_to_complex(synth_probe)
+        synth_probe = synth_probe.numpy()
     if obj_np:
-        synth_obj = cmath.torch_to_complex(synth_obj)
-        obj_stack = [cmath.torch_to_complex(obj) for obj in obj_stack]
+        synth_obj = synth_obj.numpy()
+        obj_stack = [obj.numpy() for obj in obj_stack]
 
     return synth_probe/(i+2), synth_obj/(i+2), obj_stack
 
@@ -358,10 +357,10 @@ def calc_consistency_prtf(synth_obj, objects, basis, obj_slice=None,nbins=None):
 
     obj_np = False
     if isinstance(objects[0], np.ndarray):
-        objects = [cmath.complex_to_torch(obj).to(t.float32) for obj in objects]
+        objects = [t.Tensor(obj).to(t.complex64) for obj in objects]
         obj_np = True
     if isinstance(synth_obj, np.ndarray):
-        synth_obj = cmath.complex_to_torch(synth_obj).to(t.float32)
+        synth_obj = t.Tensor(synth_obj).to(t.complex64)
 
     if isinstance(basis, t.Tensor):
         basis = basis.detach().cpu().numpy()
@@ -373,7 +372,7 @@ def calc_consistency_prtf(synth_obj, objects, basis, obj_slice=None,nbins=None):
     if nbins is None:
         nbins = np.max(synth_obj[obj_slice].shape) // 4
 
-    synth_fft = cmath.cabssq(cmath.fftshift(t.fft(synth_obj[obj_slice],2))).numpy()
+    synth_fft = (t.abs(t.fft.fftshift(t.fft.fft2(synth_obj[obj_slice]), dim=(-1,-2)))**2).numpy()
 
 
     di = np.linalg.norm(basis[:,0])
@@ -391,7 +390,8 @@ def calc_consistency_prtf(synth_obj, objects, basis, obj_slice=None,nbins=None):
     prtfs = []
     for obj in objects:
         obj = obj[obj_slice]
-        single_fft = cmath.cabssq(cmath.fftshift(t.fft(obj,2))).numpy()
+        single_fft = (t.abs(t.fft.fftshift(t.fft.fft2(obj),
+                                           dim=(-1,-2)))**2).numpy()
         single_ints, bins = np.histogram(Rs,bins=nbins,weights=single_fft)
 
         prtfs.append(synth_ints/single_ints)
@@ -433,10 +433,10 @@ def calc_deconvolved_cross_correlation(im1, im2, im_slice=None):
 
     im_np = False
     if isinstance(im1, np.ndarray):
-        im1 = cmath.complex_to_torch(im1)
+        im1 = t.Tensor(im1)
         im_np = True
     if isinstance(im2, np.ndarray):
-        im2 = cmath.complex_to_torch(im2)
+        im2 = t.Tensor(im2)
         im_np = True
 
     # If last dimension is not 2, then convert to a complex tensor now
@@ -450,15 +450,15 @@ def calc_deconvolved_cross_correlation(im1, im2, im_slice=None):
                           (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
 
 
-    cor_fft = cmath.cmult(t.fft(im1[im_slice],2),
-                          cmath.cconj(t.fft(im2[im_slice],2)))
+    cor_fft = t.fft.fft2(im1[im_slice]) * \
+        t.conj(t.fft.fft2(im2[im_slice]))
 
     # Not sure if this is more or less stable than just the correlation
     # maximum - requires some testing
-    cor = t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2)
+    cor = t.fft.ifft2(cor_fft / t.abs(cor_fft))
 
     if im_np:
-        cor = cmath.torch_to_complex(cor)
+        cor = cor.numpy()
 
     return cor
 
@@ -500,10 +500,10 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
 
     im_np = False
     if isinstance(im1, np.ndarray):
-        im1 = cmath.complex_to_torch(im1)
+        im1 = t.Tensor(im1)
         im_np = True
     if isinstance(im2, np.ndarray):
-        im2 = cmath.complex_to_torch(im2)
+        im2 = t.Tensor(im2)
         im_np = True
 
     if isinstance(basis, np.ndarray):
@@ -524,17 +524,11 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
         nbins = np.max(im1[im_slice].shape) // 4
 
 
-    cor_fft = cmath.cmult(cmath.fftshift(t.fft(im1[im_slice],2)),
-                          cmath.fftshift(cmath.cconj(t.fft(im2[im_slice],2))))
+    cor_fft = t.fft.fftshift(t.fft.fft2(im1[im_slice]),dim=(-1,-2)) * \
+        t.fft.fftshift(t.conj(t.fft.fft2(im2[im_slice])),dim=(-1,-2))
 
-    #from matplotlib import pyplot as plt
-    #plt.imshow(cmath.cphase(cor_fft))
-    #plt.figure()
-    #plt.imshow(np.log(cmath.cabs(cor_fft)))
-    #plt.show()
-    
-    F1 = cmath.cabs(cmath.fftshift(t.fft(im1[im_slice],2)))**2
-    F2 = cmath.cabs(cmath.fftshift(t.fft(im2[im_slice],2)))**2
+    F1 = t.abs(t.fft.fftshift(t.fft.fft2(im1[im_slice]),dim=(-1,-2)))**2
+    F2 = t.abs(t.fft.fftshift(t.fft.fft2(im2[im_slice]),dim=(-1,-2)))**2
 
 
     di = np.linalg.norm(basis[:,0])
@@ -548,7 +542,7 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
 
 
 
-    numerator, bins = np.histogram(Rs,bins=nbins,weights=cmath.torch_to_complex(cor_fft))
+    numerator, bins = np.histogram(Rs,bins=nbins,weights=cor_fft.numpy())
     denominator_F1, bins = np.histogram(Rs,bins=nbins,weights=F1.detach().cpu().numpy())
     denominator_F2, bins = np.histogram(Rs,bins=nbins,weights=F2.detach().cpu().numpy())
     n_pix, bins = np.histogram(Rs,bins=nbins)

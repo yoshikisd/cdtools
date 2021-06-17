@@ -8,7 +8,6 @@ images exist, as well as plotting scan patterns and nanomaps
 
 from __future__ import division, print_function, absolute_import
 
-from CDTools.tools import cmath
 import torch as t
 import numpy as np
 import matplotlib.pyplot as plt
@@ -129,7 +128,7 @@ def plot_image(im, plot_func=lambda x: x, fig=None, basis=None, units='$\\mu$m',
         # If final dimension is 2, assume it is a complex array. If not,
         # assume it represents a real array
         if im.shape[-1] == 2:
-            im = cmath.torch_to_complex(im.detach().cpu())
+            im = im.detach().cpu().numpy()
         else:
             im = im.detach().cpu().numpy()
 

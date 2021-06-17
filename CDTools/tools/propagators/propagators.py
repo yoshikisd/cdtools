@@ -5,7 +5,6 @@ ptychography model. Each function implements a different propagator.
 """
 from __future__ import division, print_function, absolute_import
 
-from CDTools.tools.cmath import *
 import torch as t
 from torch.nn.functional import grid_sample
 from scipy import fftpack
@@ -18,7 +17,6 @@ __all__ = ['far_field', 'near_field',
            'generate_high_NA_k_intensity_map',
            'high_NA_far_field',
            'generate_generalized_angular_spectrum_propagator']
-
 
 def far_field(wavefront):
     """Implements a far-field propagator in torch
@@ -47,8 +45,10 @@ def far_field(wavefront):
     propagated : torch.Tensor
         The JxNxMx2 propagated wavefield
     """
-
-    return fftshift(t.fft(ifftshift(wavefront), 2, normalized=True))
+    
+    shifted = t.fft.ifftshift(wavefront, dim=(-1,-2))
+    propagated = t.fft.fft2(shifted, norm='ortho')
+    return t.fft.fftshift(propagated, dim=(-1,-2))
 
 
 def inverse_far_field(wavefront):
@@ -74,7 +74,9 @@ def inverse_far_field(wavefront):
     propagated : torch.Tensor
         The JxNxMx2 exit wavefield
     """
-    return fftshift(t.ifft(ifftshift(wavefront), 2, normalized=True))
+    shifted = t.fft.ifftshift(wavefront, dim=(-1,-2))
+    propagated = t.fft.ifft2(shifted, norm='ortho')
+    return t.fft.fftshift(propagated, dim=(-1,-2))
 
 
 def generate_high_NA_k_intensity_map(sample_basis, det_basis,det_shape,distance, wavelength, *args, lens=False, **kwargs):
@@ -355,8 +357,8 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
         A phase mask which accounts for the phase change that each plane wave will undergo.
     """
 
-    ki = 2 * np.pi * fftpack.fftfreq(shape[0],spacing[0])
-    kj = 2 * np.pi * fftpack.fftfreq(shape[1],spacing[1])
+    ki = 2 * np.pi * t.fft.fftfreq(shape[0],spacing[0]).numpy()
+    kj = 2 * np.pi * t.fftfreq(shape[1],spacing[1]).numpy()
     Kj, Ki = np.meshgrid(kj,ki)
 
     # Define this as complex so the square root properly gives
@@ -496,8 +498,8 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     inv_basis =  np.linalg.pinv(basis).transpose()
 
     # Then we calculate the frequencies in (i,j) space
-    ki = 2 * np.pi * fftpack.fftfreq(shape[0])
-    kj = 2 * np.pi * fftpack.fftfreq(shape[1])
+    ki = 2 * np.pi * t.fft.fftfreq(shape[0]).numpy()
+    kj = 2 * np.pi * t.fft.fftfreq(shape[1]).numpy()
     K_ij = np.stack(np.meshgrid(ki,kj, indexing='ij'))
 
     # Now we convert these to frequencies in reciprocal space
@@ -610,7 +612,7 @@ def near_field(wavefront, angular_spectrum_propagator):
     propagated : torch.Tensor
         The propagated wavefront 
     """
-    return t.ifft(cmult(angular_spectrum_propagator,t.fft(wavefront,2)), 2)
+    return t.fft.ifft2(angular_spectrum_propagator * t.fft.fft2(wavefront))
 
 
 
@@ -651,7 +653,8 @@ def inverse_near_field(wavefront, angular_spectrum_propagator):
     propagated : torch.Tensor
         The inverse propagated wavefront
     """
-    return t.ifft(cmult(t.fft(wavefront,2), cconj(angular_spectrum_propagator)), 2)
+    return t.fft.ifft2(t.fft.fft2(wavefront)
+                       * t.conj(angular_spectrum_propagator))
 
 
 

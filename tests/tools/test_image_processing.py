@@ -5,7 +5,7 @@ import pytest
 import numpy as np
 import torch as t
 
-from CDTools.tools import image_processing, cmath, initializers, interactions
+from CDTools.tools import image_processing, initializers, interactions
 from scipy import ndimage
 from scipy.signal import fftconvolve
 

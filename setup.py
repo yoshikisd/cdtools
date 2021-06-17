@@ -17,7 +17,7 @@ setuptools.setup(
         "scipy>=1.0",
         "matplotlib>=2.0",
         "python-dateutil",
-        "torch>=1.3.0", #1.3.0 adds the align_corners option for grid_sample which is used for high NA far-field propagation. 1.2.0 introduced boolean tensors in a breaking way, we use the boolean tensors here for masking.
+        "torch>=1.9.0", #1.9.0 implements support for autograd on indexed complex tensors, key to allowing us to use complex tensors in the forward models
         "h5py>=2.1",
         "pathlib2 ; python_version<'3.4'"],
     extras_require={

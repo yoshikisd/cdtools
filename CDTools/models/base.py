@@ -40,6 +40,8 @@ import threading
 import queue
 import time
 #import pytorch_warmup
+from .complex_adam import MyAdam
+from .complex_lbfgs import MyLBFGS
 
 __all__ = ['CDIModel']
 
@@ -137,7 +139,6 @@ class CDIModel(t.nn.Module):
         for inputs, patterns in data_loader:
             normalization += t.sum(patterns).cpu().numpy()
             
-            
         def run_iteration(stop_event=None):
             loss = 0
             N = 0
@@ -169,12 +170,17 @@ class CDIModel(t.nn.Module):
 
                         loss.backward()
                         total_loss += loss.detach()    
-                            
+
+                    #print('probe grad')
+                    #print(t.mean(self.obj.grad))
+
                     if regularization_factor is not None \
                        and hasattr(self, 'regularizer'):
                         loss = self.regularizer(regularization_factor)
                         loss.backward()
                     return total_loss
+
+                                    
 
                 if warmup_scheduler is not None:
                     old_lrs = [group['lr'] for group in
@@ -272,7 +278,8 @@ class CDIModel(t.nn.Module):
                                            shuffle=True)
 
         # Define the optimizer
-        optimizer = t.optim.Adam(self.parameters(), lr = lr, amsgrad=amsgrad)
+        #optimizer = t.optim.Adam(self.parameters(), lr = lr, amsgrad=amsgrad)
+        optimizer = MyAdam(self.parameters(), lr = lr, amsgrad=amsgrad)
 
 
         # Define the scheduler
@@ -339,8 +346,10 @@ class CDIModel(t.nn.Module):
 
 
         # Define the optimizer
-        optimizer = t.optim.LBFGS(self.parameters(),
-                                  lr = lr, history_size=history_size)
+        #optimizer = t.optim.LBFGS(self.parameters(),
+        #                          lr = lr, history_size=history_size)
+        optimizer = MyLBFGS(self.parameters(),
+                            lr = lr, history_size=history_size)
         
         return self.AD_optimize(iterations, data_loader, optimizer,
                                 regularization_factor=regularization_factor,
@@ -515,7 +524,7 @@ class CDIModel(t.nn.Module):
         fig, axes = plt.subplots(1,3,figsize=(12,5.3))
         fig.tight_layout(rect=[0.02, 0.09, 0.98, 0.96])
         axslider = plt.axes([0.15,0.06,0.75,0.03])
-
+        
         
         def update_colorbar(im):
             # If the update brought the colorbar out of whack
@@ -532,7 +541,6 @@ class CDIModel(t.nn.Module):
             im.norecurse=True
             im.set_clim(vmin=np.min(im.get_array()),vmax=np.max(im.get_array()))
 
-        
         def update(idx):
             idx = int(idx) % len(dataset)
             fig.pattern_idx = idx

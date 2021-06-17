@@ -6,7 +6,7 @@ from scipy import fftpack as ffts
 import torch as t
 from itertools import combinations
 
-from CDTools.tools import analysis, cmath, initializers
+from CDTools.tools import analysis, initializers
 
 
 def test_orthogonalize_probes():

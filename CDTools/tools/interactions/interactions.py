@@ -7,7 +7,6 @@ for ptychographic reconstruction.
 
 from __future__ import division, print_function, absolute_import
 
-from CDTools.tools.cmath import *
 import torch as t
 import numpy as np
 from CDTools.tools import propagators 
@@ -245,7 +244,7 @@ def ptycho_2D_round(probe, obj, translations, multiple_modes=False):
     Parameters
     ----------
     probe : torch.Tensor
-        A (P)xMxLx2 probe function to illuminate the object
+        A (P)xMxL probe function to illuminate the object
     object : torch.Tensor
         The object function to be probed
     translations : torch.Tensor
@@ -266,16 +265,16 @@ def ptycho_2D_round(probe, obj, translations, multiple_modes=False):
 
         
     integer_translations = t.round(translations).to(dtype=t.int32)
-    selections = t.stack([obj[tr[0]:tr[0]+probe.shape[-3],
-                              tr[1]:tr[1]+probe.shape[-2]]
+    selections = t.stack([obj[tr[0]:tr[0]+probe.shape[-2],
+                              tr[1]:tr[1]+probe.shape[-1]]
                           for tr in integer_translations])
 
     if multiple_modes:
         # if the probe dimension is 4, then this hasn't yet been broadcast
         # over the translation dimensions
-        output = cmult(probe,selections[:,None,:,:,:])
+        output = probe * selections[:,None,:,:]
     else:
-        output = cmult(probe,selections)
+        output = probe * selections
 
     if single_translation:
         return output[0]
@@ -345,7 +344,7 @@ def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
             obj_slice = obj[tr[0]:tr[0]+probe.shape[0],
                             tr[1]:tr[1]+probe.shape[1]]
             
-            exit_waves.append(cmult(selection,obj_slice))
+            exit_waves.append(selection * obj_slice)
     else:
         for tr, sp in zip(integer_translations,
                           subpixel_translations):
@@ -371,7 +370,7 @@ def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
                 sel10 * sp[0]*(1-sp[1]) + \
                 sel11 * sp[0]*sp[1]
 
-            exit_waves.append(cmult(probe,selection))
+            exit_waves.append(probe * selection)
 
     if single_translation:
         return exit_waves[0]
@@ -402,7 +401,7 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
     Parameters
     ----------
     probe : torch.Tensor
-        An (P)xMxLx2 probe function for the exit waves
+        An (P)xMxL probe function for the exit waves
     object : torch.Tensor
         The object function to be probed
     translations : torch.Tensor
@@ -415,7 +414,7 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
     Returns
     -------
     exit_waves : torch.Tensor
-        An (N)x(P)xMxLx2 tensor of the calculated exit waves
+        An (N)x(P)xMxL tensor of the calculated exit waves
     """
     single_translation = False
     if translations.dim() == 1:
@@ -428,38 +427,40 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
     subpixel_translations = translations - integer_translations
     integer_translations = integer_translations.to(dtype=t.int32)
 
-    selections = t.stack([obj[tr[0]:tr[0]+probe.shape[-3],
-                              tr[1]:tr[1]+probe.shape[-2]]
+    selections = t.stack([obj[tr[0]:tr[0]+probe.shape[-2],
+                              tr[1]:tr[1]+probe.shape[-1]]
                           for tr in integer_translations])
     
     exit_waves = []
     if shift_probe:
-        i = t.arange(probe.shape[-3],device=probe.device,dtype=probe.dtype) \
+        i = t.arange(probe.shape[-2],device=probe.device,dtype=t.float32) \
             - probe.shape[-3]//2
-        j = t.arange(probe.shape[-2],device=probe.device,dtype=probe.dtype) \
+        j = t.arange(probe.shape[-1],device=probe.device,dtype=t.float32) \
             - probe.shape[-2]//2
         I,J = t.meshgrid(i,j)
-        I = 2 * np.pi * I / probe.shape[-3]
-        J = 2 * np.pi * J / probe.shape[-2]
+        I = 2 * np.pi * I / probe.shape[-2]
+        J = 2 * np.pi * J / probe.shape[-1]
 
-        phase_masks = expi(-subpixel_translations[:,0,None,None]*I
-                           -subpixel_translations[:,1,None,None]*J)
-        fft_probe = fftshift(t.fft(probe, 2))
+        phase_masks = t.exp(1j*(-subpixel_translations[:,0,None,None]*I
+                                -subpixel_translations[:,1,None,None]*J))
+        
+        fft_probe = t.fft.fftshift(t.fft.fft2(probe),dim=(-1,-2))
         if multiple_modes:
             # if the probe dimension is 4, then this hasn't yet been broadcast
             # over the translation dimensions
-            shifted_fft_probe = cmult(fft_probe,phase_masks[:,None,:,:,:])
+            shifted_fft_probe = fft_probe * phase_masks[:,None,:,:]
         else:
-            shifted_fft_probe = cmult(fft_probe,phase_masks)
+            shifted_fft_probe = fft_probe * phase_masks
 
-        shifted_probe = t.ifft(ifftshift(shifted_fft_probe),2)
+        shifted_probe = t.fft.ifft2(t.fft.ifftshift(shifted_fft_probe,
+                                                    dim=(-1,-2)))
 
         if multiple_modes:
             # if the probe dimension is 4, then this hasn't yet been broadcast
             # over the translation dimensions
-            output = cmult(shifted_probe,selections[:,None,:,:,:])
+            output = shifted_probe * selections[:,None,:,:]
         else:
-            output = cmult(shifted_probe,selections)
+            output = shifted_probe * selections
         
     else:
         raise NotImplementedError('Object shift not yet implemented')
@@ -524,46 +525,37 @@ def ptycho_2D_sinc_s_matrix(probe, s_matrix, translations, shift_probe=True, pad
     B = s_matrix.shape[0]//2
     
     if shift_probe:
-        i = t.arange(probe.shape[0]) - probe.shape[0]//2
-        j = t.arange(probe.shape[1]) - probe.shape[1]//2
+        i = t.arange(probe.shape[-2]) - probe.shape[-2]//2
+        j = t.arange(probe.shape[-1]) - probe.shape[-1]//2
         I,J = t.meshgrid(i,j)
-        I = 2 * np.pi * I.to(t.float32) / probe.shape[0]
-        J = 2 * np.pi * J.to(t.float32) / probe.shape[1]
+        I = 2 * np.pi * I.to(t.float32) / probe.shape[-2]
+        J = 2 * np.pi * J.to(t.float32) / probe.shape[-1]
         I = I.to(dtype=probe.dtype,device=probe.device)
         J = J.to(dtype=probe.dtype,device=probe.device)
+        print('hi')
         
         for tr, sp in zip(integer_translations,
                           subpixel_translations):
-            fft_probe = fftshift(t.fft(probe, 2))
-            shifted_fft_probe = cmult(fft_probe, expi(-sp[0]*I - sp[1]*J))
-            shifted_probe = t.ifft(ifftshift(shifted_fft_probe),2)
+            fft_probe = t.fft.fftshift(t.fft.fft2(probe), dim=(-1,-2))
+            shifted_fft_probe = fft_probe * t.exp(1j*(-sp[0]*I - sp[1]*J))
+            shifted_probe = t.fft.ifft2(t.fft.ifftshift(shifted_fft_probe,
+                                                         dim=(-1,-2)))
             
-            s_matrix_slice = s_matrix[:,:,tr[0]:tr[0]+probe.shape[0]+2*B,
-                                      tr[1]:tr[1]+probe.shape[1]+2*B]
+            s_matrix_slice = s_matrix[:,:,tr[0]:tr[0]+probe.shape[-2]+2*B,
+                                      tr[1]:tr[1]+probe.shape[-1]+2*B]
 
 
-            output = t.zeros([probe.shape[0]+2*B,probe.shape[1]+2*B,2]).to(
+            output = t.zeros([probe.shape[-2]+2*B,probe.shape[-1]+2*B,2]).to(
                                   device=s_matrix_slice.device,
                                   dtype=s_matrix_slice.dtype)
 
             
             for i in range(s_matrix.shape[0]):
                 for j in range(s_matrix.shape[1]):
-                    output [i:i+probe.shape[0],j:j+probe.shape[1]] += \
-                        cmult(shifted_probe, s_matrix_slice[i,j,i:i+probe.shape[0],j:j+probe.shape[1],:])
-            
-            #output = t.zeros([s_matrix_slice.shape[2]+2*B,
-            #                  s_matrix_slice.shape[3]+2*B,2]).to(
-            #                      device=s_matrix_slice.device,
-            #                      dtype=s_matrix_slice.dtype)
-            
-            #for i in range(s_matrix.shape[0]):
-            #    for j in range(s_matrix.shape[1]):
-            #        output[i:i+probe.shape[0],j:j+probe.shape[1]] += \
-            #            cmult(shifted_probe, s_matrix_slice[i,j,:,:,:])
+                    output [i:i+probe.shape[-2],j:j+probe.shape[-1]] += \
+                        shifted_probe * s_matrix_slice[i,j,i:i+probe.shape[-2],j:j+probe.shape[-1]]
 
             exit_waves.append(output)
-            #exit_waves.append(cmult(shifted_probe, obj_slice))
         
     else:
         raise NotImplementedError('Object shift not yet implemented')
@@ -613,10 +605,10 @@ def RPI_interaction(probe, obj):
     pad1r = probe.shape[-2] - obj.shape[-2] - pad1l
         
     if obj.dim() == 3:
-        fftobj = t.nn.functional.pad(fftobj, (0, 0, pad1l, pad1r, pad0l, pad0r))
+        fftobj = t.nn.functional.pad(fftobj, (pad1l, pad1r, pad0l, pad0r))
     elif obj.dim() == 4:
         fftobj = t.nn.functional.pad(
-            fftobj, (0, 0, pad1l, pad1r, pad0l, pad0r, 0, 0))
+            fftobj, (pad1l, pad1r, pad0l, pad0r, 0,0))
     else:
         raise NotImplementedError('RPI interaction with obj of dimension higher than 4 (including complex dimension) is not supported.')
         
@@ -624,6 +616,6 @@ def RPI_interaction(probe, obj):
     upsampled_obj = propagators.inverse_far_field(fftobj)
 
     if obj.dim() == 4:
-        return cmult(probe[None,...], upsampled_obj)
+        return probe[None,...] *  upsampled_obj
     else:
-        return cmult(probe, upsampled_obj)
+        return probe * upsampled_obj

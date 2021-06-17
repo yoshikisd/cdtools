@@ -10,7 +10,7 @@ a way that it is safe to include them in automatic differentiation models.
 from __future__ import division, print_function, absolute_import
 import numpy as np
 import torch as t
-from CDTools.tools import cmath, propagators
+from CDTools.tools import propagators
 
 __all__ = ['centroid', 'centroid_sq', 'sinc_subpixel_shift',
            'find_subpixel_shift', 'find_pixel_shift', 'find_shift',
@@ -75,7 +75,7 @@ def centroid_sq(im, dims=2, comp=False):
         An (i,j) index or stack of indices
     """
     if comp:
-        im_sq = cmath.cabssq(im)
+        im_sq = t.abs(im)**2
     else:
         im_sq = im**2
 
@@ -109,9 +109,9 @@ def sinc_subpixel_shift(im, shift):
     I = I.to(dtype=im.dtype,device=im.device)
     J = J.to(dtype=im.dtype,device=im.device)
 
-    fft_im = cmath.fftshift(t.fft(im, 2))
-    shifted_fft_im = cmath.cmult(fft_im, cmath.expi(-shift[0]*I - shift[1]*J))
-    return t.ifft(cmath.ifftshift(shifted_fft_im),2)
+    fft_im = t.fft.fftshift(t.fft.fft2(im),dim=(-2,-1))
+    shifted_fft_im = fft_im * t.exp(1j * (-shift[0]*I - shift[1]*J))
+    return t.fft.ifft2(t.fft.ifftshift(shifted_fft_im, dim=(-2,-1)))
 
 
 
@@ -155,11 +155,11 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
         im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
 
 
-    cor_fft = cmath.cmult(t.fft(im1,2),cmath.cconj(t.fft(im2,2)))
+    cor_fft = t.fft.fft2(im1) * t.conj(t.fft.fft2(im2))
 
     # Not sure if this is more or less stable than just the correlation
     # maximum - requires some testing
-    cor = t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2)
+    cor = t.fft.ifft2(cor_fft / t.abs(cor_fft))
 
 
     # Now, I need to shift the array to pull out a contiguous window
@@ -174,13 +174,15 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
     cor_window = t.roll(cor, shift_zero, dims=(0,1))[:2*window_size,:2*window_size]
 
     # Now we upsample this window
-    cor_window_fft = cmath.fftshift(t.fft(cor_window,2))
+    cor_window_fft = t.fft.fftshift(t.fft.fft2(cor_window),dim=(-2,-1))
     upsampled = t.zeros(tuple(t.tensor(cor_window_fft.shape)[:-1] * resolution) + (2,),
                         dtype=cor.dtype,device=cor.device)
 
     upsampled[:2*window_size,:2*window_size] = cor_window_fft
     upsampled = t.roll(upsampled,(-window_size,-window_size),dims=(0,1))
-    upsampled = t.roll(cmath.cabssq(t.ifft(upsampled, 2)),(-window_size*resolution,-window_size*resolution), dims=(0,1))
+    upsampled = t.roll(t.abs(t.fft.ifft2(upsampled))**2,
+                       (-window_size*resolution,-window_size*resolution),
+                       dims=(0,1))
 
 
     # And we extract the shift from the window
@@ -220,11 +222,11 @@ def find_pixel_shift(im1, im2):
         im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
 
 
-    cor_fft = cmath.cmult(t.fft(im1,2),cmath.cconj(t.fft(im2,2)))
+    cor_fft = t.fft.fft2(im1) * t.conj(t.fft.fft2(im2))
 
     # Not sure if this is more or less stable than just the correlation
     # maximum - requires some testing
-    cor = cmath.cabs(t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2))
+    cor = t.abs(t.fft.ifft2(cor_fft / t.abs(cor_fft)))
 
 
     sh = t.tensor(cor.shape).to(device=im1.device)
@@ -302,7 +304,7 @@ def convolve_1d(image, kernel, dim=0, fftshift_kernel=True):
         complex_things -= 1
 
     if fftshift_kernel:
-        kernel = cmath.ifftshift(kernel)
+        kernel = t.fft.ifftshift(kernel,dim=(-2,-1))
 
     # If the image wasn't originally complex, and the dimension
     # was passed with the nexative-indexing convention
@@ -314,9 +316,9 @@ def convolve_1d(image, kernel, dim=0, fftshift_kernel=True):
     trans_im = t.transpose(image, dim, -2)
         
     # Take a correlation
-    fft_im = t.fft(trans_im, 1)
-    fft_kernel = t.fft(kernel, 1)
-    trans_conv = t.ifft(cmath.cmult(fft_im,fft_kernel), 1)
+    fft_im = t.fft.fft(trans_im)
+    fft_kernel = t.fft.fft(kernel)
+    trans_conv = t.fft.ifft(fft_im * fft_kernel)
 
     conv_im = t.transpose(trans_conv, dim, -2)
 

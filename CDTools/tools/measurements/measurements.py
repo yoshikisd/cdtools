@@ -7,7 +7,6 @@ thresholds, backgrounds, and more.
 
 from __future__ import division, print_function, absolute_import
 
-from CDTools.tools import cmath
 import torch as t
 import numpy as np
 from torch.nn.functional import avg_pool2d
@@ -44,18 +43,18 @@ def intensity(wavefield, detector_slice=None, epsilon=1e-7, saturation=None, ove
     sim_patterns : torch.Tensor
         A real MxN array storing the wavefield's intensities
     """
-    output = cmath.cabssq(wavefield)
-
+    output = t.abs(wavefield)**2
+    
     # Now we apply oversampling
     if oversampling != 1:
-        if wavefield.dim() == 3:
+        if wavefield.dim() == 2:
             output = avg_pool2d(output.unsqueeze(0), oversampling)[0]
         else:
             output = avg_pool2d(output, oversampling)
 
     # Then we grab the detector slice
     if detector_slice is not None:
-        if wavefield.dim() == 3:
+        if wavefield.dim() == 2:
             output = output[detector_slice]
         else:
             output = output[(np.s_[:],) + detector_slice]
@@ -126,7 +125,7 @@ def density_matrix(wavefields, density_matrix, detector_slice=None, epsilon=1e-7
                   for j in range(density_matrix.shape[-1])):
         if i == j: # diagonal
             output += density_matrix[...,i,j,None,None] \
-                * cmath.cabssq(wavefields[i])
+                * t.abs(wavefields[i])**2
         if i < j: # upper triangle, real part 
             output += 2 * density_matrix[...,i,j,None,None] \
                 * (wavefields[i,...,0] * wavefields[j,...,0]
@@ -191,7 +190,7 @@ def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=Non
         A real LXMxN array storing the incoherently summed intensities
     """
 
-    output = t.sum(cmath.cabssq(wavefields),dim=-3) 
+    output = t.sum(t.abs(wavefields)**2,dim=-3) 
 
     # Now we apply oversampling
     if oversampling != 1:

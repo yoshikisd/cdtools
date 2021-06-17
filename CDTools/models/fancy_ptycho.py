@@ -4,7 +4,6 @@ import torch as t
 from CDTools.models import CDIModel
 from CDTools.datasets import Ptycho2DDataset
 from CDTools import tools
-from CDTools.tools import cmath
 from CDTools.tools import plotting as p
 from CDTools.tools import analysis
 from matplotlib import pyplot as plt
@@ -55,21 +54,21 @@ class FancyPtycho(CDIModel):
         
         # We rescale the probe here so it learns at the same rate as the
         # object
-        if probe_guess.dim() > 3:
-            self.probe_norm = 1 * t.max(tools.cmath.cabs(probe_guess[0].to(t.float32)))
+        if probe_guess.dim() > 2:
+            self.probe_norm = 1 * t.max(t.abs(probe_guess[0].to(t.complex64)))
         else:
-            self.probe_norm = 1 * t.max(tools.cmath.cabs(probe_guess.to(t.float32)))         
+            self.probe_norm = 1 * t.max(t.abs(probe_guess.to(t.complex64)))         
             
-        self.probe = t.nn.Parameter(probe_guess.to(t.float32)
+        self.probe = t.nn.Parameter(probe_guess.to(t.complex64)
                                     / self.probe_norm)
         
-        self.obj = t.nn.Parameter(obj_guess.to(t.float32))
+        self.obj = t.nn.Parameter(obj_guess.to(t.complex64))
         
         if background is None:
             if detector_slice is not None:
-                background = 1e-6 * t.ones(self.probe[0][self.detector_slice].shape[:-1])
+                background = 1e-6 * t.ones(self.probe[0][self.detector_slice])
             else:
-                background = 1e-6 * t.ones(self.probe[0].shape[:-1])
+                background = 1e-6 * t.ones(self.probe[0])
 
                 
         self.background = t.nn.Parameter(t.Tensor(background).to(t.float32))
@@ -85,9 +84,10 @@ class FancyPtycho(CDIModel):
             else:
                 # Now this is a matrix of weights, so we 
                 if type(weights) == type(t.zeros(1)):
-                    self.weights = t.nn.Parameter(weights.to(t.float32))        
+                    self.weights = t.nn.Parameter(weights.to(t.complex64))        
                 else:
-                    self.weights = t.nn.Parameter(cmath.complex_to_torch(weights).to(t.float32))
+                    # There is a good chance that this doesn't work
+                    self.weights = t.nn.Parameter(t.Tensor(weights).to(t.complex64))
 
                 
         if translation_offsets is None:
@@ -110,6 +110,7 @@ class FancyPtycho(CDIModel):
 
         self.oversampling = oversampling
 
+        
         # Here we set the appropriate loss function
         if loss.lower().strip() == 'amplitude mse'\
            or loss.lower().strip() == 'amplitude_mse':
@@ -192,12 +193,12 @@ class FancyPtycho(CDIModel):
 
 
         # Now we initialize all the subdominant probe modes
-        probe_max = t.max(cmath.cabs(probe))
+        probe_max = t.max(t.abs(probe))
         probe_stack = [0.01 * probe_max * t.rand(probe.shape,dtype=probe.dtype) for i in range(n_modes - 1)]
         probe = t.stack([probe,] + probe_stack)
         #probe = t.stack([tools.propagators.far_field(probe),] + probe_stack)
 
-        obj = tools.cmath.expi(randomize_ang * (t.rand(obj_size)-0.5))
+        obj = t.exp(1j*randomize_ang * (t.rand(obj_size)-0.5))
                               
         det_geo = dataset.detector_geometry
 
@@ -209,11 +210,12 @@ class FancyPtycho(CDIModel):
             elif dm_rank == -1:
                 # dm_rank == -1 is defined to mean full-rank
                 dm_rank = n_modes
-            Ws = t.zeros(len(dataset),dm_rank,n_modes,2)
+                
+            Ws = t.zeros(len(dataset),dm_rank,n_modes,dtype=t.complex64)
             # Start with as close to the identity matrix as possible,
             # cutting of when we hit the specified maximum rank
             for i in range(0,dm_rank):
-                Ws[:,i,i,0] = 1
+                Ws[:,i,i] = 1
         else:
             # dm_rank == None or dm_rank = 0 triggers a special case where
             # a standard incoherent multi-mode model is used. This is the
@@ -228,7 +230,7 @@ class FancyPtycho(CDIModel):
 
         if probe_support_radius is not None:
             probe_support = t.zeros_like(probe[0])
-            xs, ys = np.mgrid[:probe.shape[-3],:probe.shape[-2]]
+            xs, ys = np.mgrid[:probe.shape[-2],:probe.shape[-1]]
             xs = xs - np.mean(xs)
             ys = ys - np.mean(ys)
             Rs = np.sqrt(xs**2 + ys**2)
@@ -282,24 +284,25 @@ class FancyPtycho(CDIModel):
 
         # Now we construct the probes for each shot from the basis probes
         Ws = self.weights[index]
-
         if len(self.weights[0].shape) == 0:
             # If a purely stable coherent illumination is defined
-            # No cmult because Ws is real in this case
-            prs = Ws[...,None,None,None,None] * basis_prs
+            prs = Ws[...,None,None,None] * basis_prs
         else:
             # If a frame-by-frame weight matrix is defined
             # This takes the dot product of all the weight matrices with
             # the probes. The output has dimensions of translation, then
             # coherent mode index, then x,y, and then complex index
-            prs = t.sum(cmath.cmult(Ws[...,None,None,:], basis_prs),
-                    axis=-4)
+            # Maybe this can be done with a matmul now?
+            prs = t.sum(Ws[...,None,None] * basis_prs, axis=-3)
 
         # Now we actually do the interaction, using the sinc subpixel
         # translation model as per usual
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
             prs, self.obj_support * self.obj,pix_trans,
             shift_probe=True, multiple_modes=True)
+        #exit_waves = self.probe_norm * tools.interactions.ptycho_2D_round(
+        #    prs, self.obj_support * self.obj,pix_trans,
+        #    multiple_modes=True)
         
         return exit_waves
     
@@ -387,7 +390,7 @@ class FancyPtycho(CDIModel):
 
     
     def corrected_translations(self,dataset):
-        translations = dataset.translations.to(dtype=self.probe.dtype,device=self.probe.device)
+        translations = dataset.translations.to(dtype=t.float32,device=self.probe.device)
         t_offset = tools.interactions.pixel_to_translations(self.probe_basis,self.translation_offsets*self.translation_scale,surface_normal=self.surface_normal)
         return translations + t_offset
 
@@ -395,7 +398,7 @@ class FancyPtycho(CDIModel):
     def get_rhos(self):
         # If this is the general unified mode model
         if self.weights.dim() >= 2:
-            Ws = cmath.torch_to_complex(self.weights.detach().cpu())
+            Ws = self.weights.detach().cpu().numpy()
             rhos_out = np.matmul(np.swapaxes(Ws,1,2), Ws.conj())
             return rhos_out
         # This is the purely incoherent case
@@ -418,10 +421,10 @@ class FancyPtycho(CDIModel):
         # to catch this case, but because it's so much simpler than the
         # unified mode case I think it's appropriate
         if self.weights.dim() == 1:
-            probe = cmath.torch_to_complex(self.probe.detach().cpu())
+            probe = self.probe.detach().cpu().numpy()
             ortho_probes = analysis.orthogonalize_probes(probe)
-            self.probe.data = cmath.complex_to_torch(ortho_probes).to(
-            device=self.probe.device,dtype=self.probe.dtype)
+            self.probe.data = t.as_tensor(ortho_probes,
+                    device=self.probe.device,dtype=self.probe.dtype)
             return
 
         # This is for the unified mode case
@@ -432,7 +435,7 @@ class FancyPtycho(CDIModel):
         
         rhos = self.get_rhos()
         overall_rho = np.mean(rhos,axis=0)
-        probe = cmath.torch_to_complex(self.probe.detach().cpu())
+        probe = self.probe.detach().cpu().numpy()
         ortho_probes, A = analysis.orthogonalize_probes(probe,
                                         density_matrix=overall_rho,
                                         keep_transform=True,
@@ -465,37 +468,35 @@ class FancyPtycho(CDIModel):
             
         new_Ws = np.array(new_Ws)
 
-        self.weights.data = cmath.complex_to_torch(new_Ws).to(
+        self.weights.data = t.as_tensor(new_Ws,
             dtype=self.weights.dtype,device=self.weights.device)
         
-        self.probe.data = cmath.complex_to_torch(ortho_probes).to(
+        self.probe.data = t.as_tensor(ortho_probes,
             device=self.probe.device,dtype=self.probe.dtype)
 
 
     def plot_wavefront_variation(self, dataset,fig=None,mode='amplitude',**kwargs):
         def get_probes(idx):
             basis_prs = self.probe * self.probe_support[...,:,:]
-            prs = t.sum(cmath.cmult(self.weights[idx,:,:,None,None,:],
-                                    basis_prs), axis=-4)
+            prs = t.sum(self.weights[idx,:,:,None,None] * basis_prs, axis=-4)
             ortho_probes = analysis.orthogonalize_probes(prs)
 
-            #return np.abs(cmath.torch_to_complex(prs.detach().cpu()))
             if mode.lower() == 'amplitude':
-                return np.abs(cmath.torch_to_complex(ortho_probes.detach().cpu()))
+                return np.abs(ortho_probes.detach().cpu().numpy())
             if mode.lower() == 'root_sum_intensity':
-                return np.sum(np.abs(cmath.torch_to_complex(ortho_probes.detach().cpu()))**2,axis=0)
+                return np.sum(np.abs(ortho_probes.detach().cpu().numpy())**2,axis=0)
             if mode.lower() == 'phase':
-                return np.angle(cmath.torch_to_complex(ortho_probes.detach().cpu()))
+                return np.angle(ortho_probes.detach().cpu().numpy())
             
         probe_matrix = np.zeros([self.probe.shape[0]]*2,
                                 dtype=np.complex64)
-        np_probes = cmath.torch_to_complex(self.probe.detach().cpu())
+        np_probes = self.probe.detach().cpu().numpy()
         for i in range(probe_matrix.shape[0]):
             for j in range(probe_matrix.shape[0]):
                 probe_matrix[i,j] = np.sum(np_probes[i]*np_probes[j].conj())
         
 
-        weights = cmath.torch_to_complex(self.weights.detach().cpu())
+        weights = self.weights.detach().cpu().numpy()
         
         probe_intensities = np.sum(np.tensordot(weights,probe_matrix,axes=1)*
                                    weights.conj(),axis=2)
@@ -546,14 +547,11 @@ class FancyPtycho(CDIModel):
     def save_results(self, dataset):
         basis = self.probe_basis.detach().cpu().numpy()
         translations = self.corrected_translations(dataset).detach().cpu().numpy()
-        probe = cmath.torch_to_complex(self.probe.detach().cpu())
+        probe = self.probe.detach().cpu().numpy()
         probe = probe * self.probe_norm.detach().cpu().numpy()
-        obj = cmath.torch_to_complex(self.obj.detach().cpu())
+        obj = self.obj.detach().cpu().numpy()
         background = self.background.detach().cpu().numpy()**2
-        if len(self.weights.shape) >=2:
-            weights = cmath.torch_to_complex(self.weights.detach().cpu())
-        else:
-            weights = self.weights.detach().cpu().numpy()
+        weights = self.weights.detach().cpu().numpy()
         
         return {'basis':basis, 'translation':translations,
                 'probe':probe,'obj':obj,

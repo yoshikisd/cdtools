@@ -1,4 +1,3 @@
-from __future__ import division, print_function, absolute_import
 import numpy as np
 import h5py
 import pytest
@@ -104,7 +103,7 @@ def ptycho_cxi_1():
     # Remember the format for the CXI file differs from the format used
     # internally
     mask = np.zeros((256,256)).astype(np.int32)
-    expected['mask'] = np.ones((256,256)).astype(np.bool)
+    expected['mask'] = np.ones((256,256)).astype(bool)
     d1f.create_dataset('mask',data=mask)
 
     # Create an initial background
@@ -272,7 +271,7 @@ def ptycho_cxi_3():
     # Remember the format for the CXI file differs from the format used
     # internally
     mask = np.ones((256,256)).astype(np.uint32) * 0x00001000
-    expected['mask'] = np.ones((256,256)).astype(np.bool)
+    expected['mask'] = np.ones((256,256)).astype(bool)
     d1f.create_dataset('mask',data=mask)
     expected['dark'] = None
     

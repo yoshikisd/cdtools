@@ -1,5 +1,3 @@
-from __future__ import division, print_function, absolute_import
-
 from CDTools.tools import data
 import numpy as np
 import torch as t
@@ -8,10 +6,7 @@ import pytest
 import os
 import datetime
 import numbers
-try:
-    import pathlib
-except ImportError:
-    import pathlib2 as pathlib
+import pathlib
 
 
 
