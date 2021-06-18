@@ -22,7 +22,6 @@ from CDTools.tools import data
 from CDTools.tools import image_processing
 from CDTools.tools import initializers
 from CDTools.tools import plotting
-from CDTools.tools import projectors
 from CDTools.tools import interactions
 from CDTools.tools import propagators
 from CDTools.tools import measurements

@@ -15,7 +15,7 @@ def test_amplitude_mse():
     # And add some noise to it
     sim = data + 0.1 * np.random.rand(10,100,100)
     # and define a simple mask that needs to be broadcast
-    mask = (np.random.rand(100,100) > 0.1).astype(np.bool)
+    mask = (np.random.rand(100,100) > 0.1).astype(bool)
 
     # First, test without a mask
     np_result = np.sum((np.sqrt(data) - np.sqrt(sim))**2)
@@ -37,7 +37,7 @@ def test_intensity_mse():
     # And add some noise to it
     sim = data + 0.1 * np.random.rand(10,100,100)
     # and define a simple mask that needs to be broadcast
-    mask = (np.random.rand(100,100) > 0.1).astype(np.bool)
+    mask = (np.random.rand(100,100) > 0.1).astype(bool)
 
 
     # First, test without a mask
@@ -60,7 +60,7 @@ def test_poisson_nll():
     # And add some noise to it
     sim = data + 0.1 * np.random.rand(10,100,100)
     # and define a simple mask that needs to be broadcast
-    mask = (np.random.rand(100,100) > 0.1).astype(np.bool)
+    mask = (np.random.rand(100,100) > 0.1).astype(bool)
 
 
     # First, test without a mask

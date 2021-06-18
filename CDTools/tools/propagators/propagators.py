@@ -288,27 +288,28 @@ def high_NA_far_field(wavefront, k_map, intensity_map=None):
     #               np.ones_like(k_map[0,:-1,:-1,0].cpu().numpy()))
     #plt.show()
     def process_wavefield_stack(low_NA_wavefield):
-        real_output = grid_sample(low_NA_wavefield[None,:,:,:,0],k_map,mode='bilinear',padding_mode='zeros', align_corners=False)
-        imag_output = grid_sample(low_NA_wavefield[None,:,:,:,1],k_map,mode='bilinear',padding_mode='zeros', align_corners=False)
+        # grid_sample doesn't work on complex-valued wavefields
+        real_output = grid_sample(low_NA_wavefield[None,:,:,:].real,k_map,mode='bilinear',padding_mode='zeros', align_corners=False)
+        imag_output = grid_sample(low_NA_wavefield[None,:,:,:].imag,k_map,mode='bilinear',padding_mode='zeros', align_corners=False)
 
-        result = t.stack((real_output[0,:,:,:],imag_output[0,:,:,:]),dim=3)
+        result = real_output[0,:,:,:] + 1j * imag_output[0,:,:,:]
     
         if intensity_map is not None:
-            result = result * intensity_map[None,:,:,None]
+            result = result * intensity_map[None,:,:]
 
         return result
 
     original_dim = wavefront.dim()
+    if original_dim == 2:
+        result = process_wavefield_stack(low_NA_wavefield[None,:,:])
+        return result[0,:,:]
     if original_dim == 3:
-        result = process_wavefield_stack(low_NA_wavefield[None,:,:,:])
-        return result[0,:,:,:]
-    if original_dim == 4:
         result = process_wavefield_stack(low_NA_wavefield)
         return result
-    if original_dim == 5:
+    if original_dim == 4:
         result = []
         for i in range(low_NA_wavefield.size()[0]):
-            result.append(process_wavefield_stack(low_NA_wavefield[i,:,:,:,:]))
+            result.append(process_wavefield_stack(low_NA_wavefield[i,:,:,:]))
         return t.stack(result)
     else:
         raise IndexError('Wavefield had incorrect number of dimensions')
@@ -358,7 +359,7 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     """
 
     ki = 2 * np.pi * t.fft.fftfreq(shape[0],spacing[0]).numpy()
-    kj = 2 * np.pi * t.fftfreq(shape[1],spacing[1]).numpy()
+    kj = 2 * np.pi * t.fft.fftfreq(shape[1],spacing[1]).numpy()
     Kj, Ki = np.meshgrid(kj,ki)
 
     # Define this as complex so the square root properly gives
@@ -381,7 +382,7 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     # Take the conjugate explicitly here instead of negating
     # the previous expression to ensure that complex frequencies
     # get mapped to values <1 instead of >1
-    propagator = complex_to_torch(np.conj(propagator)) 
+    propagator = t.as_tensor(np.conj(propagator))
     
     return propagator.to(*args, **kwargs)
 
@@ -585,7 +586,7 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     # Take the conjugate explicitly here instead of negating
     # the previous expression to ensure that complex frequencies
     # get mapped to values <1 instead of >1
-    propagator = complex_to_torch(np.conj(propagator)) 
+    propagator = t.as_tensor(np.conj(propagator)) 
     
     return propagator.to(**kwargs)
 

@@ -170,21 +170,21 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
     # First, we normalize the probe intensity to a fixed value.
     probe_np = False
     if isinstance(probe, np.ndarray):
-        probe = t.Tensor(probe).to(t.complex64)
+        probe = t.as_tensor(probe, dtype=t.complex64)
         probe_np = True
     obj_np = False
     if isinstance(obj, np.ndarray):
-        obj = t.Tensor(obj).to(t.complex64)
+        obj = t.as_tensor(obj,dtype=t.complex64)
         obj_np = True
 
     # If this is a single probe and not a stack of probes
-    if len(probe.shape) == 3:
+    if len(probe.shape) == 2:
         probe = probe[None,...]
         single_probe = True
     else:
         single_probe = False
 
-    normalization = t.sqrt(t.sum(t.abs(probe[0])**2) / (len(probe[0].view(-1))/2))
+    normalization = t.sqrt(t.sum(t.abs(probe[0])**2) / (len(probe[0].view(-1))))
     probe = probe / normalization
     obj = obj * normalization
 
@@ -198,8 +198,8 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
         # Need to check if this is actually working and, if not, why not
         center_freq = ip.centroid(t.abs(t.fft.fftshift(t.fft.fft2(probe[0]),
                                                        dim=(-1,-2)))**2)
-        center_freq -= (t.tensor(probe[0].shape[:-1]) // 2).to(t.float32)
-        center_freq /= t.tensor(probe[0].shape[:-1]).to(t.float32)
+        center_freq -= t.div(t.tensor(probe[0].shape,dtype=t.float32),2,rounding_mode='floor')
+        center_freq /= t.as_tensor(probe[0].shape,dtype=t.float32)
 
         Is, Js = np.mgrid[:probe[0].shape[0],:probe[0].shape[1]]
         probe_phase_ramp = t.exp(2j * np.pi *
@@ -214,11 +214,11 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
 
     # Then, we set them to consistent absolute phases
 
-    obj_angle = t.angle(t.sum(obj[obj_slice],dim=(0,1)))
+    obj_angle = t.angle(t.sum(obj[obj_slice]))
     obj = obj *  t.exp(-1j*obj_angle)
 
     for i in range(probe.shape[0]):
-        probe_angle = t.angle(t.sum(probe[i],dim=(0,1)))
+        probe_angle = t.angle(t.sum(probe[i]))
         probe[i] = probe[i] * t.exp(-1j*probe_angle)
 
     if single_probe:
@@ -265,16 +265,17 @@ def synthesize_reconstructions(probes, objects, use_probe=False, obj_slice=None,
         A list of standardized objects, for further processing
     """
 
+    # This should be cleaned up so it accepts anything array_like
     probe_np = False
     if isinstance(probes[0], np.ndarray):
-        probes = [t.Tensor(probe).to(t.complex64) for probe in probes]
+        probes = [t.as_tensor(probe,dtype=t.complex64) for probe in probes]
         probe_np = True
     obj_np = False
     if isinstance(objects[0], np.ndarray):
-        objects = [t.Tensor(obj).to(t.complex64) for obj in objects]
+        objects = [t.as_tensor(obj,dtype=t.complex64) for obj in objects]
         obj_np = True
 
-    obj_shape = np.min(np.array([obj.shape[:-1] for obj in objects]),axis=0)
+    obj_shape = np.min(np.array([obj.shape for obj in objects]),axis=0)
     objects = [obj[:obj_shape[0],:obj_shape[1]] for obj in objects]
 
     if obj_slice is None:
@@ -357,10 +358,10 @@ def calc_consistency_prtf(synth_obj, objects, basis, obj_slice=None,nbins=None):
 
     obj_np = False
     if isinstance(objects[0], np.ndarray):
-        objects = [t.Tensor(obj).to(t.complex64) for obj in objects]
+        objects = [t.as_tensor(obj, dtype=t.complex64) for obj in objects]
         obj_np = True
     if isinstance(synth_obj, np.ndarray):
-        synth_obj = t.Tensor(synth_obj).to(t.complex64)
+        synth_obj = t.as_tensor(synth_obj, dtype=t.complex64)
 
     if isinstance(basis, t.Tensor):
         basis = basis.detach().cpu().numpy()
@@ -433,17 +434,11 @@ def calc_deconvolved_cross_correlation(im1, im2, im_slice=None):
 
     im_np = False
     if isinstance(im1, np.ndarray):
-        im1 = t.Tensor(im1)
+        im1 = t.as_tensor(im1)
         im_np = True
     if isinstance(im2, np.ndarray):
-        im2 = t.Tensor(im2)
+        im2 = t.as_tensor(im2)
         im_np = True
-
-    # If last dimension is not 2, then convert to a complex tensor now
-    if im1.shape[-1] != 2:
-        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
-    if im2.shape[-1] != 2:
-        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
 
     if im_slice is None:
         im_slice = np.s_[(im1.shape[0]//8)*3:(im1.shape[0]//8)*5,
@@ -500,21 +495,14 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
 
     im_np = False
     if isinstance(im1, np.ndarray):
-        im1 = t.Tensor(im1)
+        im1 = t.as_tensor(im1)
         im_np = True
     if isinstance(im2, np.ndarray):
-        im2 = t.Tensor(im2)
+        im2 = t.as_tensor(im2)
         im_np = True
 
     if isinstance(basis, np.ndarray):
         basis = t.tensor(basis)
-
-        # If last dimension is not 2, then convert to a complex tensor now
-    if im1.shape[-1] != 2:
-        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
-    if im2.shape[-1] != 2:
-        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
-
 
     if im_slice is None:
         im_slice = np.s_[(im1.shape[0]//8)*3:(im1.shape[0]//8)*5,

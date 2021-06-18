@@ -434,9 +434,9 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
     exit_waves = []
     if shift_probe:
         i = t.arange(probe.shape[-2],device=probe.device,dtype=t.float32) \
-            - probe.shape[-3]//2
-        j = t.arange(probe.shape[-1],device=probe.device,dtype=t.float32) \
             - probe.shape[-2]//2
+        j = t.arange(probe.shape[-1],device=probe.device,dtype=t.float32) \
+            - probe.shape[-1]//2
         I,J = t.meshgrid(i,j)
         I = 2 * np.pi * I / probe.shape[-2]
         J = 2 * np.pi * J / probe.shape[-1]
@@ -445,19 +445,18 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
                                 -subpixel_translations[:,1,None,None]*J))
         
         fft_probe = t.fft.fftshift(t.fft.fft2(probe),dim=(-1,-2))
-        if multiple_modes:
-            # if the probe dimension is 4, then this hasn't yet been broadcast
-            # over the translation dimensions
+        if probe.dim == 3: # Multi-mode probe
             shifted_fft_probe = fft_probe * phase_masks[:,None,:,:]
         else:
             shifted_fft_probe = fft_probe * phase_masks
 
         shifted_probe = t.fft.ifft2(t.fft.ifftshift(shifted_fft_probe,
                                                     dim=(-1,-2)))
-
-        if multiple_modes:
-            # if the probe dimension is 4, then this hasn't yet been broadcast
-            # over the translation dimensions
+        print('p',probe.shape)
+        print('fftp',fft_probe.shape)
+        print('sp',shifted_probe.shape)
+        print('sel',selections.shape)
+        if probe.dim == 3: # Multi-mode probe
             output = shifted_probe * selections[:,None,:,:]
         else:
             output = shifted_probe * selections
@@ -465,6 +464,7 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
     else:
         raise NotImplementedError('Object shift not yet implemented')
 
+    print(output.shape)
     if single_translation:
         return output[0]
     else:
@@ -599,14 +599,14 @@ def RPI_interaction(probe, obj):
     # The far-field propagator is just a 2D FFT but with an fftshift
     fftobj = propagators.far_field(obj)
     # We calculate the padding that we need to do the upsampling
-    pad0l = (probe.shape[-3] - obj.shape[-3])//2
-    pad0r = probe.shape[-3] - obj.shape[-3] - pad0l
-    pad1l = (probe.shape[-2] - obj.shape[-2])//2
-    pad1r = probe.shape[-2] - obj.shape[-2] - pad1l
+    pad0l = (probe.shape[-2] - obj.shape[-2])//2
+    pad0r = probe.shape[-2] - obj.shape[-2] - pad0l
+    pad1l = (probe.shape[-1] - obj.shape[-1])//2
+    pad1r = probe.shape[-1] - obj.shape[-1] - pad1l
         
-    if obj.dim() == 3:
+    if obj.dim() == 2:
         fftobj = t.nn.functional.pad(fftobj, (pad1l, pad1r, pad0l, pad0r))
-    elif obj.dim() == 4:
+    elif obj.dim() == 3:
         fftobj = t.nn.functional.pad(
             fftobj, (pad1l, pad1r, pad0l, pad0r, 0,0))
     else:
@@ -615,7 +615,7 @@ def RPI_interaction(probe, obj):
     # Again, just an inverse FFT but with an fftshift
     upsampled_obj = propagators.inverse_far_field(fftobj)
 
-    if obj.dim() == 4:
+    if obj.dim() == 3:
         return probe[None,...] *  upsampled_obj
     else:
         return probe * upsampled_obj

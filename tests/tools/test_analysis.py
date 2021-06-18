@@ -30,7 +30,7 @@ def test_orthogonalize_probes():
     ortho_probes = analysis.orthogonalize_probes(probes)
 
     # test that it also works on torch tensors
-    ortho_probes_t = cmath.torch_to_complex(analysis.orthogonalize_probes(cmath.complex_to_torch(probes)))
+    ortho_probes_t = analysis.orthogonalize_probes(t.as_tensor(probes)).numpy()
 
     # This tests for orthogonality
     for p1,p2 in combinations(ortho_probes,2):
@@ -80,13 +80,12 @@ def test_standardize():
 
     # Start by making a probe and object that should meet the standardization
     # conditions
-    probe = initializers.gaussian((230,240),(20,20),curvature=(0.01,0.01))
-    probe = cmath.torch_to_complex(probe)
+    probe = initializers.gaussian((230,240),(20,20),curvature=(0.01,0.01)).numpy()
     probe = probe * np.sqrt(len(probe.ravel()) / np.sum(np.abs(probe)**2))
     probe = probe * np.exp(-1j * np.angle(np.sum(probe)))
 
     assert np.isclose(1, np.sum(np.abs(probe)**2)/ len(probe.ravel()))
-    assert np.isclose(0,np.angle(np.sum(probe)))
+    assert np.angle(np.sum(probe)) < 1e-7
 
     obj = 30 * np.random.rand(230,240) * np.exp(1j * (np.random.rand(230,240) - 0.5))
     obj_slice = np.s_[(obj.shape[0]//8)*3:(obj.shape[0]//8)*5,
@@ -105,9 +104,9 @@ def test_standardize():
     assert np.allclose(obj, s_obj)
 
     # Test that it works on torch tensors
-    s_probe, s_obj = analysis.standardize(cmath.complex_to_torch(test_probe).to(t.float32), cmath.complex_to_torch(test_obj).to(t.float32))
-    s_probe = cmath.torch_to_complex(s_probe)
-    s_obj = cmath.torch_to_complex(s_obj)
+    s_probe, s_obj = analysis.standardize(t.as_tensor(test_probe,dtype=t.complex64), t.as_tensor(test_obj,dtype=t.complex64))
+    s_probe = s_probe.numpy()
+    s_obj = s_obj.numpy()
     assert np.allclose(probe, s_probe)
     assert np.allclose(obj, s_obj)
 
@@ -146,7 +145,6 @@ def test_standardize():
 
 
 
-from matplotlib import pyplot as plt
 def test_synthesize_reconstructions():
     # I can only really test for a lack of failures, so I think my plan
     # will be to create a dataset that just needs to be added and see that
@@ -154,13 +152,12 @@ def test_synthesize_reconstructions():
 
     # Start by making a probe and object that should meet the standardization
     # conditions
-    probe = initializers.gaussian((230,240),(20,20),curvature=(0.01,0.01))
-    probe = cmath.torch_to_complex(probe)
+    probe = initializers.gaussian((230,240),(20,20),curvature=(0.01,0.01)).numpy()
     probe = probe * np.sqrt(len(probe.ravel()) / np.sum(np.abs(probe)**2))
     probe = probe * np.exp(-1j * np.angle(np.sum(probe)))
 
     assert np.isclose(1, np.sum(np.abs(probe)**2)/ len(probe.ravel()))
-    assert np.isclose(0,np.angle(np.sum(probe)))
+    assert np.abs(np.angle(np.sum(probe))) < 1e-7
 
     obj = 30 * np.random.rand(230,240) * np.exp(1j * (np.random.rand(230,240) - 0.5))
     obj_slice = np.s_[(obj.shape[0]//8)*3:(obj.shape[0]//8)*5,
@@ -203,14 +200,14 @@ def test_calc_consistency_prtf():
     assert np.allclose(prtf, 0.7)
 
     # Check that it also works with torch input
-    t_synth_obj = cmath.complex_to_torch(synth_obj)
-    t_obj_stack = [cmath.complex_to_torch(obj) for obj in obj_stack]
+    t_synth_obj = t.as_tensor(synth_obj)
+    t_obj_stack = [t.as_tensor(obj) for obj in obj_stack]
     freqs, prtf = analysis.calc_consistency_prtf(t_synth_obj, t_obj_stack, basis, nbins=30)
     assert np.allclose(prtf.numpy(), 0.7)
 
     # And also when the basis is in torch
-    t_synth_obj = cmath.complex_to_torch(synth_obj)
-    t_obj_stack = [cmath.complex_to_torch(obj) for obj in obj_stack]
+    t_synth_obj = t.as_tensor(synth_obj)
+    t_obj_stack = [t.as_tensor(obj) for obj in obj_stack]
     freqs, prtf = analysis.calc_consistency_prtf(t_synth_obj, t_obj_stack, t.Tensor(basis), nbins=30)
     assert np.allclose(prtf.numpy(), 0.7)
 
@@ -238,11 +235,11 @@ def test_calc_deconvolved_cross_correlation():
     assert np.allclose(test_cor, np_cor)
     
     # test with pytorch inputs
-    obj1_t = cmath.complex_to_torch(obj1)
-    obj2_t = cmath.complex_to_torch(obj2)
+    obj1_t = t.as_tensor(obj1)
+    obj2_t = t.as_tensor(obj2)
     test_cor_t = analysis.calc_deconvolved_cross_correlation(obj1_t,obj2_t, im_slice=np.s_[:,:])
     
-    assert np.allclose(cmath.torch_to_complex(test_cor_t), np_cor)
+    assert np.allclose(test_cor_t.numpy(), np_cor)
 
     
 
@@ -294,8 +291,8 @@ def test_calc_frc():
     assert np.allclose(threshold, test_threshold)
 
     # try again with complex
-    obj1_torch = cmath.complex_to_torch(obj1)
-    obj2_torch = cmath.complex_to_torch(obj2)
+    obj1_torch = t.as_tensor(obj1)
+    obj2_torch = t.as_tensor(obj2)
     basis_torch = t.tensor(basis)
 
     test_bins_t, test_frc_t, test_threshold_t = analysis.calc_frc(obj1_torch,

@@ -60,8 +60,8 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
         The slice corresponding to the physical detector
     """
     
-    det_shape = t.tensor(tuple(det_shape)).to(t.int32)
-    det_basis = t.tensor(det_basis)
+    det_shape = t.as_tensor(tuple(det_shape), dtype=t.int32)
+    det_basis = t.as_tensor(det_basis)
     # First, set the center if it's not already specified
     # This definition matches the center pixel of an fftshifted array
     if center is None:
@@ -70,7 +70,7 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
 
         center = t.div(det_shape,2,rounding_mode='floor')# // 2
     else:
-        center = t.tensor(center).to(t.int32)
+        center = t.as_tensor(center, dtype=t.int32)
         
     # Then, calculate the required detector size from the centering
     # This is a bit opaque but was worth doing accurately
@@ -83,7 +83,8 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
 
     
     if opt_for_fft:
-        full_shape = t.tensor([next_fast_len(dim) for dim in full_shape]).to(t.int32)
+        full_shape = t.as_tensor([next_fast_len(dim) for dim in full_shape],
+                                 dtype=t.int32)
     
     # Then, generate a slice that pops the actual detector from the full
     # detector shape
@@ -205,7 +206,7 @@ def gaussian(shape, sigma, amplitude=1, center = None, curvature=[0,0]):
     jsq = (j - center[1])**2
     result = np.exp((1j*curvature[0] / 2 - 1 / (2 * sigma[0]**2)) * isq + \
         (1j*curvature[1] / 2 - 1 / (2 * sigma[1]**2)) * jsq)
-    return t.tensor(amplitude*result).to(t.complex64)
+    return t.as_tensor(amplitude*result,dtype=t.complex64)
 
 
 
@@ -314,6 +315,8 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, over
         The complex-style tensor storing the probe guess
     """
 
+    # NOTE: I don't love the way np and torch are mixed here, I think this
+    # function deserves some love.
 
     # to use the mask or not?
     intensities = np.zeros([dim // oversampling for dim in shape])
@@ -342,15 +345,15 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, over
         probe_guess[center[0], center[1]-1],
         probe_guess[center[0], center[1]+1]])
 
-    probe_guess = t.tensor(probe_guess).to(dtype=t.complex64)
+    probe_guess = t.as_tensor(probe_guess, dtype=t.complex64)
 
     if propagation_distance is not None:
         # First generate the propagation array
 
-        probe_shape = t.tensor(tuple(probe_guess.shape))
-        
+        probe_shape = t.as_tensor(tuple(probe_guess.shape))
+
         # Start by recalculating the probe basis from the given information
-        det_basis = t.tensor(dataset.detector_geometry['basis'])
+        det_basis = t.as_tensor(dataset.detector_geometry['basis'])
         basis_dirs = det_basis / t.norm(det_basis, dim=0)
         distance = dataset.detector_geometry['distance']
         probe_basis = basis_dirs * dataset.wavelength * distance / \
@@ -360,7 +363,6 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, over
         probe_spacing = t.norm(probe_basis,dim=0).numpy()
         probe_shape = probe_shape.numpy().astype(np.int32)
 
-        #assert 0
         # And generate the propagator
         AS_prop = generate_angular_spectrum_propagator(probe_shape, probe_spacing, dataset.wavelength, propagation_distance)
 
@@ -384,10 +386,10 @@ def RPI_spectral_init(pattern, probe, obj_shape, n_modes=1, mask=None, backgroun
     if probe.dim() == 4:
         probe = orthogonalize_probes(probe)[0]
     
-    pad0l = (probe.shape[-3] - obj_shape[0])//2
-    pad0r = probe.shape[-3] - obj_shape[0] - pad0l
-    pad1l = (probe.shape[-2] - obj_shape[1])//2
-    pad1r = probe.shape[-2] - obj_shape[1] - pad1l
+    pad0l = (probe.shape[-2] - obj_shape[0])//2
+    pad0r = probe.shape[-2] - obj_shape[0] - pad0l
+    pad1l = (probe.shape[-1] - obj_shape[1])//2
+    pad1r = probe.shape[-1] - obj_shape[1] - pad1l
     
     def a_dagger(im):
         im = t.tensor(im.reshape(obj_shape)).to(dtype=t.complex64)
@@ -433,13 +435,13 @@ def RPI_spectral_init(pattern, probe, obj_shape, n_modes=1, mask=None, backgroun
 
     # Now we set the overall scale and relative weights of the guess
     scale_factor = np.sqrt(np.sum(np_pattern) /
-                           t.sum(cmath.cabssq(probe)).numpy())
+                           t.sum(t.abs(probe)**2).numpy())
     relative_weights = eigval / np.sum(eigval**2)
 
     z0 = z0 * (scale_factor * relative_weights[:,None,None])
     # Now we have to normalize the modes by their eigenvalues
 
-    return cmath.complex_to_torch(z0).to(dtype=t.float32)
+    return t.as_tensor(z0, dtype=t.complex64)
 
 
 def generate_subdominant_modes(dominant_mode, n_modes, circular=True):
