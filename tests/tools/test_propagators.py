@@ -256,9 +256,15 @@ def test_near_field():
     # Again, 10^-3 is about all the accuracy we can expect
     assert np.max(np.abs(Emz-Emz_t)) < 1e-3 * np.max(np.abs(Emz))
 
+    # Finally, we check that the bandlimiting at least does something
+    asp = propagators.generate_angular_spectrum_propagator(
+        E0.shape,(1.5e-9,1e-9),wavelength,z,remove_z_phase=True,
+        dtype=t.complex128, bandlimit=0.3)
 
-
-
+    assert asp[140,0] == 0
+    assert asp[0,180] == 0
+    assert asp[130,0] != 0
+    assert asp[0,175] != 0
     
 def test_generalized_near_field():
 

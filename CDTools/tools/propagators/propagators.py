@@ -356,34 +356,31 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     propagator : torch.Tensor
         A phase mask which accounts for the phase change that each plane wave will undergo.
     """
+    # Internally, the generalized propagation function is used, so we start
+    # by creating an appropriate basis
+    basis = t.zeros([3,2], **kwargs).real
+    basis[1,0] = -spacing[0]
+    basis[0,1] = -spacing[1]
+    # And similarly, the offset is just z along the z direction
+    offset = t.zeros([3],**kwargs).real
+    offset[2] = z
+    
+    # And we call the generalized function! 
+    propagator = generate_generalized_angular_spectrum_propagator(shape, basis,
+                            wavelength, offset,
+                            propagate_along_offset=remove_z_phase, **kwargs)
 
-    ki = 2 * np.pi * t.fft.fftfreq(shape[0],spacing[0]).numpy()
-    kj = 2 * np.pi * t.fft.fftfreq(shape[1],spacing[1]).numpy()
-    Kj, Ki = np.meshgrid(kj,ki)
-
-    # Define this as complex so the square root properly gives
-    # k>k0 components imaginary frequencies    
-    k0 = np.complex128((2*np.pi/wavelength))
-
-    # This properly accounts for evanescent waves, by always choosing
-    # setting the imaginary frequencies to damp as they propagate
-    if z >=0:
-        propagator = np.exp(1j*np.sqrt(k0**2 - Ki**2 - Kj**2) * z)
-    else:
-        propagator = np.exp(1j*np.conj(np.sqrt(k0**2 - Ki**2 - Kj**2)) * z)
-        
-    if remove_z_phase:
-        propagator *= np.exp(-1j * k0 * z)
-
+    # Bandlimiting is not implemented in the generalized function, because it
+    # has a less clear meaning in that setting, so we apply it here instead
     if bandlimit is not None:
-        Rs = np.sqrt((Ki / np.max(ki))**2 + (Kj / np.max(kj))**2)
+        ki = 2 * np.pi * t.fft.fftfreq(shape[0],spacing[0])
+        kj = 2 * np.pi * t.fft.fftfreq(shape[1],spacing[1])
+        Ki, Kj = t.meshgrid(ki,kj)
+        min_radius = min(t.max(ki),t.max(kj))
+        Rs = t.sqrt((Ki/t.max(ki))**2 + (Kj/t.max(kj))**2)
         propagator = propagator * (Rs < bandlimit)
         
-    # Take the conjugate explicitly here instead of negating
-    # the previous expression to ensure that complex frequencies
-    # get mapped to values <1 instead of >1
-    
-    return t.as_tensor(propagator, *args, **kwargs)
+    return propagator
 
 
 
