@@ -328,9 +328,8 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     propagator is used in a reconstruction program, then it will be best
     to calculate this mask once and reuse it.
 
-    Formally, this propagator is the complex conjugate of the fourier
-    transform of the convolution kernel for light propagation in free
-    space
+    Formally, this propagator is the the fourier transform of the convolution
+    kernel for light propagation in free space
     
     If the optional bandlimit parameter is set, the propagator will be set
     to zero beyond an explicit bandlimiting frequency. This is helpful if the
@@ -366,7 +365,8 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     # k>k0 components imaginary frequencies    
     k0 = np.complex128((2*np.pi/wavelength))
 
-    # Properly accuount for evanescent waves
+    # This properly accounts for evanescent waves, by always choosing
+    # setting the imaginary frequencies to damp as they propagate
     if z >=0:
         propagator = np.exp(1j*np.sqrt(k0**2 - Ki**2 - Kj**2) * z)
     else:
@@ -382,9 +382,9 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     # Take the conjugate explicitly here instead of negating
     # the previous expression to ensure that complex frequencies
     # get mapped to values <1 instead of >1
-    propagator = t.as_tensor(np.conj(propagator))
     
-    return propagator.to(*args, **kwargs)
+    return t.as_tensor(propagator, *args, **kwargs)
+
 
 
 def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, offset_vector, *args, propagation_vector=None, propagate_along_offset=False, **kwargs):
@@ -394,16 +394,15 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     propagator that will work on torch Tensors. The function is structured
     this way - to generate the propagator first - because the
     generation of the propagation mask is a bit expensive and if this
-    propagator is used in a reconstruction program, then it will be best
-    to calculate this mask once and close over it.
+    propagator is used in a reconstruction program, it will be best
+    to calculate this mask once and then reuse it it.
 
-    Formally, this propagator is the complex conjugate of the fourier
-    transform of the convolution kernel for light propagation in free
-    space. It will map a ligh field at an input plane, with the size
-    and shape defined by the shape and basis inputs, and map it to a
-    plane of the same size and shape offset by the offset vector. It
-    is designed to work on any wavefield defined on an array of
-    parallelograms.
+    Formally, this propagator is the fourier transform of the convolution
+    kernel for light propagation in free space. It will map a light field
+    at an input plane, with the size and shape defined by the shape and basis
+    inputs, and map it to a plane of the same size and shape offset by the
+    offset vector. It is designed to work on any wavefield defined on an
+    array of parallelograms.
 
 
     In addition, if the propagation_vector is set, there is an assumed
@@ -421,33 +420,27 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     propagation_vector option
 
     Note that, unlike in the case of the simple angular spectrum propagator,
-    the direction of "forward propagation" is defined by the offset vector.
-    Therefore, in the simple case of a perpendicular offset, there will be
-    no difference between using an offset vector or the negative of the 
-    offset vector. This is because, for the light propagation problem to
-    be well posed, the assumption must be made that light only passes through
-    the plane of the known wavefield in one direction. Mathematically, this
-    corresponds to a choice of uniform phase objects either accumulating
-    positive or negative phase. In the simple propagation case, there is
-    no ambiguity introduced by always choosing the light field to propagate
-    along the positive z direction. In the general case, there is no equivalent
-    obvious choice - thus, the light is always assumed to pass through the
-    initial plane travelling in the direction of the final plane.
+    the direction of "forward propagation" is defined by the propagation
+    vector, or (if the propagation vector is not defined), the offset
+    vector. Therefore, in the simple case of a perpendicular offset,
+    there will be no difference between using an offset vector or the
+    negative of the  offset vector. This is because, for the light
+    propagation problem to be well posed, the assumption must be made that
+    light only passes through the plane of the known wavefield in one
+    direction. We always assume that light passes through the initial plane
+    travelling in the direction of the final plane.
 
-    Practically, if one wants to simulate inverse propagation, there are then
+    Practically, if one wants to simulate inverse propagation, there are 
     two possible approaches. First, one can use the inverse_near_field 
     function, which simulates the inverse propagation problem and therefore
     will naturally simulate propagation in the opposite direction. Second,
-    one can explicitly include a propagation_vector argument, which overrides
-    the offset vector in defining the direction in which light passes through
-    the input plane. However, in this case, the resulting light field will have
-    the overall phase accumulation due to propagation along the propagation
-    vector removed, which may not be the intended behavior. However, this is
-    not recommended, as inverse propagation will tend to magnify evanescent
-    waves - it is therefore preferable (unless there is a specific need to
-    account for evanescent waves properly) to use the inverse near field
-    propagator
-    
+    one can explicitly include a propagation_vector argument, in the direction
+    opposite to the offset vector. Note for both cases that this function
+    will only return propagators which suppress evanescent waves. Thus,
+    propagating forward and then backward by either of these two methods
+    will lead to a supression of evanescant waves. If you need a propagator
+    that will cause evanescent waves to undergo exponential growth, good
+    for you, but this function will not provide it for you.    
 
     Parameters
     ----------
@@ -470,126 +463,94 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
         A phase mask which accounts for the phase change that each plane wave will undergo.
     """
 
-    # These check for any pytorch inputs and convert them
-    try:
-        basis = basis.detach().cpu().numpy()
-    except:
-        pass
+    # make sure everything is in pytorch, and set the propagation vector
+    # appropriately if propagate_along_offset is chosen
+    basis = t.as_tensor(basis)
+    offset_vector = t.as_tensor(offset_vector, dtype=basis.dtype)
 
-    shape = np.array(tuple(shape))
-
-    try:
-        offset_vector = offset_vector.detach().cpu().numpy()
-    except:
-        pass
-
-    if propagation_vector is not None:
-        try:
-            propagation_vector = propagation_vector.detach().cpu().numpy()
-        except:
-            pass
-
-    try:
-        wavelength = wavelength.detach().cpu().numpy()[0]
-    except:
-        pass
-
-
-    # First we calculate a dual basis for the real space grid
-    inv_basis =  np.linalg.pinv(basis).transpose()
-
-    # Then we calculate the frequencies in (i,j) space
-    ki = 2 * np.pi * t.fft.fftfreq(shape[0]).numpy()
-    kj = 2 * np.pi * t.fft.fftfreq(shape[1]).numpy()
-    K_ij = np.stack(np.meshgrid(ki,kj, indexing='ij'))
-
-    # Now we convert these to frequencies in reciprocal space
-    # These frequencies span the 2D plane of the input wavefield.
-    K_xyz = np.tensordot(inv_basis, K_ij, axes=1)
-
-    # Now we need to apply two corrections to the standard AS method.
-    # First, we calculate a phase mask which corresponds to the
-    # shift of the final plane away from the perpendicular direction
-    # from the input plane. We don't need to extract the perpendicular
-    # component of the shift because the K_xyz vectors are naturally in the
-    # input plane.
-
-    # This may have a sign error - must be checked
-    phase_mask = np.exp(-1j * np.tensordot(offset_vector,K_xyz,axes=1))
-    
-    # Next, we apply a shift to the k-space vectors which sets up
-    # propagation such that a uniform phase object will propagate along the
-    # propagation axis. This is not modeling a physical effect, but simply is
-    # the clearest way to do a rigorous simulation while preventing
-    # aliasing-related challenges. If used (as is by default), be aware
-    # and prepare the input wavefields appropriately.
     if propagate_along_offset:
         propagation_vector = offset_vector
         
-    perpendicular_dir = np.cross(basis[:,1],basis[:,0])
-    perpendicular_dir /= np.linalg.norm(perpendicular_dir)
-    offset_perpendicular = np.dot(perpendicular_dir, offset_vector)
-
-
-    k0 = 2*np.pi/wavelength
-
-    sign_correction = 1
-
-    # Only implement the shift if the flag is set to True
     if propagation_vector is not None:
-            
-        prop_perpendicular = np.dot(perpendicular_dir, propagation_vector)
-        prop_parallel = propagation_vector - perpendicular_dir \
-            * prop_perpendicular
-        
-        
-        if np.linalg.norm(propagation_vector) == 0:
-            # for numerical stability if this is exactly zero we need
-            # a special case
-            k_offset = np.array([0,0,0]) 
-        else:  
-            k_offset = prop_parallel * k0 / np.linalg.norm(propagation_vector)
+        propagation_vector = t.as_tensor(propagation_vector, dtype=basis.dtype)
 
-        K_xyz = K_xyz - k_offset[:,None,None] 
-
-        # There apparently is a sign correction that I need to apply
-        #sign_correction = np.sign(np.dot(perpendicular_dir,propagation_vector))
-        sign_correction = np.sign(np.dot(offset_vector,propagation_vector))
-
-        # we also need to remove the z-dependence on the phase
-        # This time, though, the z-dependence actually has to do with
-        # the out of plane component of k at the central offset. Normally
-        # this is 0, so the z-component is just k0, but not in this case
-        # We only need one case here, unlike with the propagator, because
-        # k_offset will always be less than k0
-        phase_mask *= np.exp(-1j * np.sqrt(k0**2 - np.linalg.norm(k_offset)**2)
-                             * sign_correction
-                             * np.abs(offset_perpendicular))
-            
+    #
+    # In this section, we calculate the wavevectors associated with each
+    # pixel in Fourier space. This is the meat of the function
+    #
     
-    # Redefine this as complex so the square root properly gives
-    # k>k0 components imaginary frequencies    
-    k0 = np.complex128(k0)
+    # First we calculate a dual basis for the real space grid
+    inv_basis =  t.linalg.pinv(basis).transpose(0,1)
+    # Then we calculate the frequencies in (i,j) space
+    ki = 2 * np.pi * t.fft.fftfreq(shape[0], dtype=inv_basis.dtype)
+    kj = 2 * np.pi * t.fft.fftfreq(shape[1], dtype=inv_basis.dtype)
+    K_ij = t.stack(t.meshgrid(ki,kj))
     
-    # Finally, generate the propagator!
-    # Must have cases to ensure that evanescent waves decay instead of grow
-    if sign_correction > 0:
-        propagator = np.exp(1j*np.sqrt(k0**2 - np.linalg.norm(K_xyz,axis=0)**2)
-                            * sign_correction * np.abs(offset_perpendicular))
+    # Now we convert these to frequencies in reciprocal space
+    # These frequencies span the 2D plane of the input wavefield,
+    # hence K_ip for "in-plane"
+    K_ip = t.tensordot(inv_basis, K_ij, dims=1)
+    
+    # Now, we need to generate the out-of-plane direction, so we can
+    # expand these Ks to the full Ks in 3D reciprocal space.
+    perpendicular_dir = t.cross(basis[:,1],basis[:,0])
+    perpendicular_dir /= t.linalg.norm(perpendicular_dir)
+
+    # We set the sign of the propagation direction appropriately
+    if propagation_vector is not None:
+        perpendicular_dir *= t.sign(t.dot(perpendicular_dir,propagation_vector))
     else:
-        propagator = np.exp(-1j * np.conj(np.sqrt(k0**2 -
-                                        np.linalg.norm(K_xyz,axis=0)**2))
-                            * np.abs(offset_perpendicular))
-    propagator *= phase_mask
+        perpendicular_dir *= t.sign(t.dot(perpendicular_dir,offset_vector))
     
-    
-    # Take the conjugate explicitly here instead of negating
-    # the previous expression to ensure that complex frequencies
-    # get mapped to values <1 instead of >1
-    propagator = t.as_tensor(np.conj(propagator)) 
-    
-    return propagator.to(**kwargs)
+    # Then, if we have a propagation vector, we shift the in-plane
+    # components of all the pixels to be centered around the in-plane
+    # component of the propagation vector.
+    if propagation_vector is not None:
+        prop_dir = (propagation_vector /
+                    t.linalg.norm(propagation_vector))
+        K_0 = 2*np.pi / wavelength * prop_dir
+        K_0_ip = K_0 - t.dot(perpendicular_dir,K_0) * perpendicular_dir
+        K_ip += K_0_ip[:,None,None]
+    else:
+        K_0 = t.zeros_like(offset_vector)
 
+    # Now, we have accurate in-plane values for K, so we can calculate the
+    # out-of-plane part. We start by calculating it's squared magnitude
+    K_oop_squared = (2*np.pi/wavelength)**2 - t.linalg.norm(K_ip,dim=0)**2
+
+    # Then, we take the square root and assign it the appropriate direction,
+    # adding to get the full 3D wavevectors. Note that we convert to complex
+    # before the square root to appropriately map negative numbers to
+    # complex frequencies
+    K = K_ip + perpendicular_dir[:,None,None] \
+        * t.sqrt(t.complex(K_oop_squared,t.zeros_like(K_oop_squared)))
+
+    #
+    # In this section, we take the inner product of the calcualted
+    # wavevectors with the offset vector, to get the phase shift
+    # experienced by each plane wave.
+    #
+    
+    # We need to convert to complex because K is complex
+    offset_vector = t.complex(offset_vector,t.zeros_like(offset_vector))
+
+    # We then subtract off K_0, essentially setting the phase offset
+    # experienced by K_0 to 0. K_0 will already have been set to 0 if
+    # there was no propagation vector set.
+    K_m_K_0 = K - K_0[:,None,None]
+
+    # We actually calculate the phase mask
+    phase_mask = t.tensordot(offset_vector,K_m_K_0, dims=1)
+
+    # And we take the conjugate if needed, which makes sure that the
+    # imaginary part is always positive (supressing evanescent waves)
+    if propagation_vector is not None \
+       and t.sign(t.dot(propagation_vector,offset_vector.real)) == -1:
+        phase_mask = t.conj(phase_mask)
+
+    # We return the final mask, in the form asked for!
+    return t.exp(1j*phase_mask).to(*args,**kwargs)
+    
 
 def near_field(wavefront, angular_spectrum_propagator):
     """ Propagates a wavefront via the angular spectrum method
@@ -598,13 +559,14 @@ def near_field(wavefront, angular_spectrum_propagator):
     represents the real and imaginary components of the wavefield, and
     returns the near-field propagated version of it. It does this
     using the supplied angular spectrum propagator, which is a premade
-    phase mask.
+    phase mask representing the Fourier transform of the kernel for
+    light propagation in the desired geometry.
 
 
     Parameters
     ----------
     wavefront : torch.Tensor
-        The (Leading Dims)xNxMx2 stack of complex wavefronts to be propagated
+        The (Leading Dims)xNxM stack of complex wavefronts to be propagated
     angular_spectrum_propagator : torch.Tensor
         The NxM phase mask to be applied during propagation
 
