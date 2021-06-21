@@ -20,18 +20,14 @@ defining a new ptychography model before attempting to do so.
 
 """
 
-from __future__ import division, print_function, absolute_import
-
 # I don't believe that __all__ really needed, but it's nice to define it
 # to be explicit that import * is safe
-__all__ = ['CDIModel', 'SimplePtycho', 'FancyPtycho', 'Bragg2DPtycho', 'SMatrixPtycho', 'RPI', 'UnifiedModePtycho']
+#__all__ = ['CDIModel', 'SimplePtycho', 'FancyPtycho', 'Bragg2DPtycho', 'SMatrixPtycho', 'RPI']
 
 from CDTools.models.base import CDIModel
 from CDTools.models.simple_ptycho import SimplePtycho
 from CDTools.models.fancy_ptycho import FancyPtycho
-#from CDTools.models.pinhole_plane_ptycho import PinholePlanePtycho
-#from CDTools.models.bragg_2d_ptycho import Bragg2DPtycho
+from CDTools.models.bragg_2d_ptycho import Bragg2DPtycho
+from CDTools.models.multislice_2d_ptycho import Multislice2DPtycho
 #from CDTools.models.s_matrix_ptycho import SMatrixPtycho
-#from CDTools.models.multislice_2d_ptycho import Multislice2DPtycho
 #from CDTools.models.rpi import RPI
-#from CDTools.models.unified_mode_ptycho import UnifiedModePtycho

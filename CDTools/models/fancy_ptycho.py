@@ -179,7 +179,7 @@ class FancyPtycho(CDIModel):
 
         obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=200)
 
-
+        
         if hasattr(dataset, 'background') and dataset.background is not None:
             background = t.sqrt(dataset.background)
         else:

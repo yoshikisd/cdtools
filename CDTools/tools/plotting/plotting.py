@@ -6,8 +6,6 @@ and for after-the-fact analysis. Utilities for plotting complex valued
 images exist, as well as plotting scan patterns and nanomaps
 """
 
-from __future__ import division, print_function, absolute_import
-
 import torch as t
 import numpy as np
 import matplotlib.pyplot as plt

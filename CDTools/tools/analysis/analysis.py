@@ -5,7 +5,6 @@ or numpy arrays, so they can be used either directly after reconstructions
 on the attributes of the models themselves, or after-the-fact once the
 data has been stored in numpy arrays.
 """
-from __future__ import division, print_function
 
 import torch as t
 import numpy as np

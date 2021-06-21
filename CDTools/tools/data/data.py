@@ -5,7 +5,6 @@ specific desired information from a .cxi file. These functions should
 handle all the needed conversions between standard formats (for example,
 transposes of the basis arrays, shifting from object to probe motion, etc).
 """
-from __future__ import division, print_function, absolute_import
 
 import h5py
 import numpy as np

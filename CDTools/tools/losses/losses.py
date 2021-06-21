@@ -5,9 +5,8 @@ that returns the mean squared intensity error, and one that returns the
 maximum likelihood metric for a system with Poisson statistics.
 
 """
-from __future__ import division, print_function, absolute_import
-import torch as t
 
+import torch as t
 
 __all__ = ['amplitude_mse', 'intensity_mse', 'poisson_nll']
 

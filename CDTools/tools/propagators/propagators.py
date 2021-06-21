@@ -3,7 +3,6 @@
 All the functions here are designed for use in an automatic differentiation
 ptychography model. Each function implements a different propagator.
 """
-from __future__ import division, print_function, absolute_import
 
 import torch as t
 from torch.nn.functional import grid_sample
@@ -316,11 +315,9 @@ def high_NA_far_field(wavefront, k_map, intensity_map=None):
 
 
 
-
-
 def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, remove_z_phase=False, bandlimit=None, **kwargs):
     """Generates an angular-spectrum based near-field propagator from experimental quantities
-
+    
     This function generates an angular-spectrum based near field
     propagator that will work on torch Tensors. The function is structured
     this way - to generate the propagator first - because the
@@ -335,7 +332,7 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     to zero beyond an explicit bandlimiting frequency. This is helpful if the
     propagator will be used in a repeated multiply/propagate framework such
     as a multislice algorithm, where it helps to prevent aliasing.
-
+    
     Parameters
     ----------
     shape : array
@@ -358,13 +355,20 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     """
     # Internally, the generalized propagation function is used, so we start
     # by creating an appropriate basis
-    basis = t.zeros([3,2], **kwargs).real
+    # This creates a real-valued tensor which matches the kind of complex
+    # number dtype requested in **kwargs
+    if 'dtype' in kwargs:
+        basis = t.real(t.zeros([3,2], **kwargs))
+    else:
+        basis = t.zeros([3,2], dtype=t.float32)
+    spacing = t.as_tensor(spacing, dtype=basis.dtype)
+
     basis[1,0] = -spacing[0]
     basis[0,1] = -spacing[1]
     # And similarly, the offset is just z along the z direction
-    offset = t.zeros([3],**kwargs).real
+    offset = t.zeros([3], dtype=basis.dtype)
     offset[2] = z
-    
+
     # And we call the generalized function! 
     propagator = generate_generalized_angular_spectrum_propagator(shape, basis,
                             wavelength, offset,
@@ -478,6 +482,7 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     
     # First we calculate a dual basis for the real space grid
     inv_basis =  t.linalg.pinv(basis).transpose(0,1)
+
     # Then we calculate the frequencies in (i,j) space
     ki = 2 * np.pi * t.fft.fftfreq(shape[0], dtype=inv_basis.dtype)
     kj = 2 * np.pi * t.fft.fftfreq(shape[1], dtype=inv_basis.dtype)
@@ -487,10 +492,16 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     # These frequencies span the 2D plane of the input wavefield,
     # hence K_ip for "in-plane"
     K_ip = t.tensordot(inv_basis, K_ij, dims=1)
-    
+
+
     # Now, we need to generate the out-of-plane direction, so we can
     # expand these Ks to the full Ks in 3D reciprocal space.
-    perpendicular_dir = t.cross(basis[:,1],basis[:,0])
+
+    # THis is broken down into steps to avoid floating point underflow
+    # which was a real problem that showed up for electron ptycho
+    b1_dir = basis[:,0] / t.linalg.norm(basis[:,0])
+    b2_dir = basis[:,1] / t.linalg.norm(basis[:,1])
+    perpendicular_dir = t.cross(b1_dir,b2_dir)
     perpendicular_dir /= t.linalg.norm(perpendicular_dir)
 
     # We set the sign of the propagation direction appropriately
@@ -514,7 +525,7 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     # Now, we have accurate in-plane values for K, so we can calculate the
     # out-of-plane part. We start by calculating it's squared magnitude
     K_oop_squared = (2*np.pi/wavelength)**2 - t.linalg.norm(K_ip,dim=0)**2
-
+    
     # Then, we take the square root and assign it the appropriate direction,
     # adding to get the full 3D wavevectors. Note that we convert to complex
     # before the square root to appropriately map negative numbers to
@@ -522,7 +533,7 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     K = K_ip + perpendicular_dir[:,None,None] \
         * t.sqrt(t.complex(K_oop_squared,t.zeros_like(K_oop_squared)))
 
-    #
+    # 
     # In this section, we take the inner product of the calcualted
     # wavevectors with the offset vector, to get the phase shift
     # experienced by each plane wave.
@@ -535,7 +546,6 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     # experienced by K_0 to 0. K_0 will already have been set to 0 if
     # there was no propagation vector set.
     K_m_K_0 = K - K_0[:,None,None]
-
     # We actually calculate the phase mask
     phase_mask = t.tensordot(offset_vector,K_m_K_0, dims=1)
 

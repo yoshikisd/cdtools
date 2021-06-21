@@ -7,7 +7,6 @@ kind of tools perform common image manipulations on torch tensors, in such
 a way that it is safe to include them in automatic differentiation models.
 """
 
-from __future__ import division, print_function, absolute_import
 import numpy as np
 import torch as t
 from CDTools.tools import propagators
@@ -139,6 +138,7 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
     shift : torch.Tensor
         The relative shift (i,j) needed to best map im1 onto im2
     """
+
     #
     # Here's my approach, perhaps it's a little unconventional. I will first
     # calculate the phase correlation function as found in ____ (cite a paper
@@ -159,7 +159,7 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
     try:
         search_around = search_around.cpu()
     except:
-        search_around = t.tensor(search_around)
+        search_around = t.as_tensor(search_around)
 
     window_size = 15
     shift_zero = tuple(-search_around + t.tensor([window_size,window_size]))
@@ -178,6 +178,7 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
 
 
     # And we extract the shift from the window
+    print(upsampled.shape)
     sh = t.as_tensor(upsampled.shape, device=upsampled.device)
     cormax = t.as_tensor([t.div(t.argmax(upsampled), sh[1],
                                 rounding_mode='floor'),
@@ -185,6 +186,9 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
                          device=upsampled.device)
 
     sh_over_2 = t.div(sh,2,rounding_mode='floor')
+    print(cormax.shape)
+    print(sh.shape)
+    print(sh_over_2.shape)
     subpixel_shift = ((cormax + sh_over_2) % sh - sh_over_2).to(dtype=upsampled.dtype)
 
     return search_around.to(device=upsampled.device, dtype=upsampled.dtype) + \
@@ -301,7 +305,9 @@ def convolve_1d(image, kernel, dim=0, fftshift_kernel=True):
     return conv_im
 
 
-def fourier_upsample(ims):
+def fourier_upsample(ims, preserve_mean=False):
+    # If preserve_mean is true, it preserves the mean pixel intensity
+    # otherwise, it preserves the total summed intensity
     upsampled = t.zeros(ims.shape[:-2]+(2*ims.shape[-2],2*ims.shape[-1]),
                            dtype=ims.dtype,
                            device=ims.device)
@@ -310,6 +316,8 @@ def fourier_upsample(ims):
              ims.shape[-1]//2+ims.shape[-1]]
     
     upsampled[...,left[0]:right[0],left[1]:right[1]] = propagators.far_field(ims)
+    if preserve_mean:
+        upsampled *= 2
     return propagators.inverse_far_field(upsampled)
 
 

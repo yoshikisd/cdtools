@@ -17,7 +17,7 @@ model = CDTools.models.FancyPtycho.from_dataset(dataset, n_modes=2,dm_rank=0, pr
 model.to(device='cuda')
 dataset.get_as(device='cuda')
 
-for loss in model.Adam_optimize(400, dataset, batch_size=50, schedule=True):
+for loss in model.Adam_optimize(100, dataset, batch_size=50, schedule=True):
     # And we liveplot the updates to the model as they happen
     print(model.report())
     model.inspect(dataset)

@@ -88,8 +88,7 @@ def test_find_subpixel_shift():
 
     shift = t.tensor((0.8,0.75))
     
-    im = interactions.ptycho_2D_sinc(test_probe, test_obj, shift)
-    print(im.shape)
+    im = interactions.ptycho_2D_sinc(test_probe, test_obj, shift, multiple_modes=False)
     
     retrieved_shift = image_processing.find_subpixel_shift(im, test_probe, search_around=(0,0), resolution=50)
     # tolerance of 0.03 on this measurement
@@ -104,7 +103,8 @@ def test_find_shift():
 
     shift = t.tensor((0.8,0.75))
     
-    im = interactions.ptycho_2D_sinc(test_probe, test_obj, shift)[:-40,:-6]
+    im = interactions.ptycho_2D_sinc(test_probe, test_obj, shift,
+                                     multiple_modes=False)[:-40,:-6]
 
     retrieved_shift = image_processing.find_shift(im, test_probe[40:,6:], resolution=50)
     # tolerance of 0.03 on this measurement

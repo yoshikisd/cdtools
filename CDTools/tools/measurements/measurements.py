@@ -5,8 +5,6 @@ model. There exist tools to simulate detectors with finite saturation
 thresholds, backgrounds, and more.
 """
 
-from __future__ import division, print_function, absolute_import
-
 import torch as t
 import numpy as np
 from torch.nn.functional import avg_pool2d

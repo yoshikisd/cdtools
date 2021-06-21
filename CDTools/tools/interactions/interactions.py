@@ -5,11 +5,9 @@ function simulates some aspect of an interaction model that can be used
 for ptychographic reconstruction.
 """
 
-from __future__ import division, print_function, absolute_import
-
 import torch as t
 import numpy as np
-from CDTools.tools import propagators 
+from CDTools.tools import propagators, image_processing
 
 __all__ = ['translations_to_pixel', 'pixel_to_translations',
            'project_translations_to_sample',
@@ -225,7 +223,7 @@ def project_translations_to_sample(sample_basis, translations):
 
     
 
-def ptycho_2D_round(probe, obj, translations, multiple_modes=False):
+def ptycho_2D_round(probe, obj, translations, multiple_modes=False, upsample_obj=False):
     """Returns a stack of exit waves without accounting for subpixel shifts
 
     This function returns a collection of exit waves, with the first
@@ -265,9 +263,19 @@ def ptycho_2D_round(probe, obj, translations, multiple_modes=False):
 
         
     integer_translations = t.round(translations).to(dtype=t.int32)
-    selections = t.stack([obj[tr[0]:tr[0]+probe.shape[-2],
+    
+    if upsample_obj:
+        selections = t.stack([obj[tr[0]:tr[0]+probe.shape[-2]//2,
+                                  tr[1]:tr[1]+probe.shape[-1]//2]
+                              for tr in integer_translations])
+        selections = image_processing.fourier_upsample(selections,
+                                                       preserve_mean=True)
+
+    else:
+        selections = t.stack([obj[tr[0]:tr[0]+probe.shape[-2],
                               tr[1]:tr[1]+probe.shape[-1]]
                           for tr in integer_translations])
+
 
     if multiple_modes:
         # if the probe dimension is 4, then this hasn't yet been broadcast
@@ -445,26 +453,22 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
                                 -subpixel_translations[:,1,None,None]*J))
         
         fft_probe = t.fft.fftshift(t.fft.fft2(probe),dim=(-1,-2))
-        if probe.dim == 3: # Multi-mode probe
-            shifted_fft_probe = fft_probe * phase_masks[:,None,:,:]
+
+        if multiple_modes: # Multi-mode probe
+            shifted_fft_probe = fft_probe * phase_masks[...,None,:,:]
         else:
             shifted_fft_probe = fft_probe * phase_masks
 
         shifted_probe = t.fft.ifft2(t.fft.ifftshift(shifted_fft_probe,
                                                     dim=(-1,-2)))
-        print('p',probe.shape)
-        print('fftp',fft_probe.shape)
-        print('sp',shifted_probe.shape)
-        print('sel',selections.shape)
-        if probe.dim == 3: # Multi-mode probe
-            output = shifted_probe * selections[:,None,:,:]
+        if multiple_modes: # Multi-mode probe
+            output = shifted_probe * selections[...,None,:,:]
         else:
             output = shifted_probe * selections
         
     else:
         raise NotImplementedError('Object shift not yet implemented')
 
-    print(output.shape)
     if single_translation:
         return output[0]
     else:
@@ -532,7 +536,6 @@ def ptycho_2D_sinc_s_matrix(probe, s_matrix, translations, shift_probe=True, pad
         J = 2 * np.pi * J.to(t.float32) / probe.shape[-1]
         I = I.to(dtype=probe.dtype,device=probe.device)
         J = J.to(dtype=probe.dtype,device=probe.device)
-        print('hi')
         
         for tr, sp in zip(integer_translations,
                           subpixel_translations):
