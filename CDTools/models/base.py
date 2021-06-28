@@ -163,12 +163,19 @@ class CDIModel(t.nn.Module):
                             exit()
 
                         sim_patterns = self.forward(*inp)
+                        
+                        #sim_patterns.retain_grad()
                         if hasattr(self, 'mask'):
                             loss = self.loss(pats,sim_patterns, mask=self.mask)
                         else:
                             loss = self.loss(pats,sim_patterns)
 
-                        loss.backward()
+                        loss.backward()#retain_variables=True)
+                        #plt.figure()
+                        #plt.imshow(sim_patterns.grad.cpu()[0])
+                        #plt.colorbar()
+                        #plt.show()
+                    
                         total_loss += loss.detach()    
 
                     #print('probe grad')
@@ -346,10 +353,10 @@ class CDIModel(t.nn.Module):
 
 
         # Define the optimizer
-        #optimizer = t.optim.LBFGS(self.parameters(),
-        #                          lr = lr, history_size=history_size)
-        optimizer = MyLBFGS(self.parameters(),
-                            lr = lr, history_size=history_size)
+        optimizer = t.optim.LBFGS(self.parameters(),
+                                  lr = lr, history_size=history_size)
+        #optimizer = MyLBFGS(self.parameters(),
+        #                    lr = lr, history_size=history_size)
         
         return self.AD_optimize(iterations, data_loader, optimizer,
                                 regularization_factor=regularization_factor,

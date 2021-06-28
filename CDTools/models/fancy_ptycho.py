@@ -66,9 +66,9 @@ class FancyPtycho(CDIModel):
         
         if background is None:
             if detector_slice is not None:
-                background = 1e-6 * t.ones(self.probe[0][self.detector_slice])
+                background = 1e-6 * t.ones(self.probe[0][self.detector_slice].shape)
             else:
-                background = 1e-6 * t.ones(self.probe[0])
+                background = 1e-6 * t.ones(self.probe[0].shape)
 
                 
         self.background = t.nn.Parameter(t.Tensor(background).to(t.float32))
@@ -229,7 +229,7 @@ class FancyPtycho(CDIModel):
             mask = None
 
         if probe_support_radius is not None:
-            probe_support = t.zeros_like(probe[0])
+            probe_support = t.zeros(probe[0].shape,dtype=t.bool)
             xs, ys = np.mgrid[:probe.shape[-2],:probe.shape[-1]]
             xs = xs - np.mean(xs)
             ys = ys - np.mean(ys)
@@ -239,7 +239,7 @@ class FancyPtycho(CDIModel):
             probe = probe * probe_support[None,:,:]
 
         else:
-            probe_support = None;
+            probe_support = None
 
         if restrict_obj != -1:
             ro = restrict_obj

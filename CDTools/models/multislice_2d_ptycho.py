@@ -14,6 +14,14 @@ __all__ = ['Multislice2DPtycho']
 
 class Multislice2DPtycho(CDIModel):
 
+    @property
+    def probe(self):
+        return t.complex(self.probe_real,self.probe_imag)
+
+    @property
+    def obj(self):
+        return t.complex(self.obj_real,self.obj_imag)
+    
     def __init__(self, wavelength, detector_geometry,
                  probe_basis,
                  probe_guess, obj_guess, dz, nz,
@@ -27,6 +35,7 @@ class Multislice2DPtycho(CDIModel):
                  bandlimit=None,
                  subpixel=True,
                  exponentiate_obj=True,
+                 low_res_obj=False,
                  fourier_probe=False,
                  prevent_aliasing=True,
                  phase_only=False,
@@ -58,6 +67,7 @@ class Multislice2DPtycho(CDIModel):
         self.units = units
         self.phase_only=phase_only
         self.prevent_aliasing=prevent_aliasing
+        self.low_res_obj = low_res_obj
         
         if mask is None:
             self.mask = mask
@@ -70,11 +80,21 @@ class Multislice2DPtycho(CDIModel):
             self.probe_norm = 1 * t.max(t.abs(probe_guess[0]).to(t.float32))
         else:
             self.probe_norm = 1 * t.max(t.abs(probe_guess).to(t.float32))
-            
-        self.probe = t.nn.Parameter(probe_guess.to(t.complex64)
-                                    / self.probe_norm)
+
+        pg = probe_guess.to(t.complex64)/self.probe_norm
+        self.probe_real = t.nn.Parameter(pg.real)
+        self.probe_imag = t.nn.Parameter(pg.imag)
+        #self.probe = t.complex(self.probe_real,self.probe_imag)
+
+        og = obj_guess.to(t.complex64)
+        self.obj_real = t.nn.Parameter(og.real)
+        self.obj_imag = t.nn.Parameter(og.imag)
+        #self.obj = t.complex(self.obj_real,self.obj_imag)
         
-        self.obj = t.nn.Parameter(obj_guess.to(t.complex64))
+        #self.probe = t.nn.Parameter(probe_guess.to(t.complex64)
+        #                            / self.probe_norm)
+        
+        #self.obj = t.nn.Parameter(obj_guess.to(t.complex64))
 
         if background is None:
             if detector_slice is not None:
@@ -126,7 +146,7 @@ class Multislice2DPtycho(CDIModel):
 
         
     @classmethod
-    def from_dataset(cls, dataset, dz, nz, probe_convergence_semiangle, probe_size=None, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=None, replicate_slice=False, subpixel=True, exponentiate_obj=True, units='um', fourier_probe=False, phase_only=False, prevent_aliasing=True):
+    def from_dataset(cls, dataset, dz, nz, probe_convergence_semiangle, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=None, replicate_slice=False, subpixel=True, exponentiate_obj=True, units='um', fourier_probe=False, phase_only=False, prevent_aliasing=True, probe_support_radius=None, low_res_obj=False):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -178,8 +198,14 @@ class Multislice2DPtycho(CDIModel):
         # Next generate the object geometry from the probe geometry and
         # the translations
         pix_translations = tools.interactions.translations_to_pixel(probe_basis, translations, surface_normal=surface_normal)
+        if low_res_obj: # obj in half normal resolution
+            pix_translations /= 2
 
-        obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=200)
+        
+        obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=100)
+
+        if low_res_obj:
+            obj_size, min_translation = tools.initializers.calc_object_setup(t.as_tensor(probe_shape)//2, pix_translations, padding=100)
 
         if hasattr(dataset, 'background') and dataset.background is not None:
             background = t.sqrt(dataset.background)
@@ -187,7 +213,8 @@ class Multislice2DPtycho(CDIModel):
             background = None
 
         # Finally, initialize the probe and  object using this information
-        probe = tools.initializers.STEM_style_probe(dataset, probe_shape, det_slice, probe_convergence_semiangle, propagation_distance=propagation_distance, oversampling=oversampling)
+        #probe = tools.initializers.STEM_style_probe(dataset, probe_shape, det_slice, probe_convergence_semiangle, propagation_distance=propagation_distance, oversampling=oversampling)
+        probe = tools.initializers.SHARP_style_probe(dataset, probe_shape, det_slice, propagation_distance=propagation_distance, oversampling=oversampling)
 
         # Now we initialize all the subdominant probe modes
         probe_max = t.max(t.abs(probe))
@@ -239,17 +266,25 @@ class Multislice2DPtycho(CDIModel):
         else:
             mask = None
 
-        # probe_support = t.zeros(probe[0].shape,dtype=t.bool)
-        # xs, ys = np.mgrid[:probe.shape[-2],:probe.shape[-1]]
-        # xs = xs - np.mean(xs)
-        # ys = ys - np.mean(ys)
-        # Rs = np.sqrt(xs**2 + ys**2)
+        if probe_support_radius is not None:
+            probe_support = t.zeros(probe[0].shape, dtype=t.bool)
+            xs, ys = np.mgrid[:probe.shape[-2],:probe.shape[-1]]
+            xs = xs - np.mean(xs)
+            ys = ys - np.mean(ys)
+            Rs = np.sqrt(xs**2 + ys**2)
+        
+            probe_support[Rs<probe_support_radius] = 1
+            probe = probe * probe_support[None,:,:]
+
+        else:
+            probe_support = None
  
         probe = probe
         
         return cls(wavelength, det_geo, probe_basis, probe, obj, dz, nz,
                    detector_slice=det_slice,
                    surface_normal=surface_normal,
+                   probe_support=probe_support,
                    min_translation=min_translation,
                    translation_offsets = translation_offsets,
                    weights=Ws, mask=mask, background=background,
@@ -261,13 +296,16 @@ class Multislice2DPtycho(CDIModel):
                    exponentiate_obj=exponentiate_obj,
                    units=units, fourier_probe=fourier_probe,
                    phase_only=phase_only,
-                   prevent_aliasing=prevent_aliasing)
+                   prevent_aliasing=prevent_aliasing,
+                   low_res_obj=low_res_obj)
                    
     
     def interaction(self, index, translations):
         pix_trans = tools.interactions.translations_to_pixel(self.probe_basis,
                                                              translations,
                                                              surface_normal=self.surface_normal)
+        if self.low_res_obj:
+            pix_trans /=2
         pix_trans -= self.min_translation
 
         if self.translation_offsets is not None:
@@ -324,9 +362,13 @@ class Multislice2DPtycho(CDIModel):
                         exit_waves, obj, pix_trans,
                         shift_probe=True, multiple_modes=True)
                 else:
+                    #exit_waves = tools.interactions.ptycho_2D_round(
+                    #    exit_waves, obj, pix_trans,
+                    #    multiple_modes=True,upsample_obj=self.prevent_aliasing)
                     exit_waves = tools.interactions.ptycho_2D_round(
                         exit_waves, obj, pix_trans,
-                        multiple_modes=True,upsample_obj=self.prevent_aliasing)
+                        multiple_modes=True,upsample_obj=self.low_res_obj)
+                    
                     
             elif self.obj.dim() == 3:
                 # If separate slices
@@ -339,6 +381,11 @@ class Multislice2DPtycho(CDIModel):
                         exit_waves, obj[i], pix_trans,
                         multiple_modes=True)
 
+            #if self.iteration_count >= 1:
+            #    plt.imshow(t.abs(tools.propagators.far_field(
+            #        exit_waves[0,0].detach()).cpu()))
+            #    plt.colorbar()
+            #    plt.show()
             if i < self.nz-1: #on all but the last iteration
                 exit_waves = tools.propagators.near_field(
                     exit_waves,self.as_prop)

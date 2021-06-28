@@ -335,15 +335,15 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, over
 
     probe_guess = inverse_far_field(probe_fft).numpy()
     # Now we remove the central pixel
-    center = np.array(probe_guess.shape) // 2
+    #center = np.array(probe_guess.shape) // 2
     
     # I'm always unsure whether to use this modification:
     
-    probe_guess[center[0], center[1]]=np.mean([
-        probe_guess[center[0]-1, center[1]],
-        probe_guess[center[0]+1, center[1]],
-        probe_guess[center[0], center[1]-1],
-        probe_guess[center[0], center[1]+1]])
+    #probe_guess[center[0], center[1]]=np.mean([
+    #    probe_guess[center[0]-1, center[1]],
+    #    probe_guess[center[0]+1, center[1]],
+    #    probe_guess[center[0], center[1]-1],
+    #    probe_guess[center[0], center[1]+1]])
 
     probe_guess = t.as_tensor(probe_guess, dtype=t.complex64)
 
@@ -420,8 +420,10 @@ def STEM_style_probe(dataset, shape, det_slice, convergence_semiangle, propagati
     # Fourier space (simulated on a larger stage in real space). That factor
     # is defined by oversampling.
 
-    probe_basis = dataset.detector_geometry['basis'] / oversampling
-
+    probe_basis = (t.as_tensor(dataset.detector_geometry['basis'],
+                               dtype=t.float32)
+                   / oversampling)
+    
     mean_im = t.mean(dataset.patterns,dim=0)
     center = image_processing.centroid(mean_im)
 

@@ -369,10 +369,14 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     offset = t.zeros([3], dtype=basis.dtype)
     offset[2] = z
 
+    
     # And we call the generalized function! 
     propagator = generate_generalized_angular_spectrum_propagator(shape, basis,
-                            wavelength, offset,
+                            wavelength, offset, 
                             propagate_along_offset=remove_z_phase, **kwargs)
+    if z < 0:
+        propagator = t.conj(propagator)
+
 
     # Bandlimiting is not implemented in the generalized function, because it
     # has a less clear meaning in that setting, so we apply it here instead
@@ -508,6 +512,7 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     if propagation_vector is not None:
         perpendicular_dir *= t.sign(t.dot(perpendicular_dir,propagation_vector))
     else:
+        pass
         perpendicular_dir *= t.sign(t.dot(perpendicular_dir,offset_vector))
     
     # Then, if we have a propagation vector, we shift the in-plane
