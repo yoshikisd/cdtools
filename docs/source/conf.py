@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.abspath('../..'))
 # -- Project information -----------------------------------------------------
 
 project = 'CDTools'
-copyright = '2019, Abraham Levitan'
+copyright = '2019-2021, Abraham Levitan'
 author = 'Abraham Levitan'
 
 # The short X.Y version
@@ -166,8 +166,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'ADCD', 'ADCD Documentation',
-     author, 'ADCD', 'One line description of project.',
+    (master_doc, 'CDTools', 'CDTools Documentation',
+     author, 'CDTools', 'One line description of project.',
      'Miscellaneous'),
 ]
 

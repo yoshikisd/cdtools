@@ -8,7 +8,7 @@ The source code for CDTools is hosted on it's `MIT github page`_. Access to the 
 
 .. _`MIT github page`: https://github.mit.edu/Scattering/CDTools
 
-It is recommended that you clone the repository, rather than just downloading the contents, as it remains under heavy development. Cloning the repository will allow you to get access to new updates.
+It is recommended that you clone the repository, rather than just downloading the contents, as it remains under rapid development. Cloning the repository will allow you to get access to new updates.
 
 Step 2: Install Dependencies
 ----------------------------
@@ -19,7 +19,7 @@ The dependencies for CDTools can be installed, if you are managing your environm
 	  
    $ conda install --file conda_requirements.txt
 
-There are two optional dependencies which are not installed via this procedure - the dependency sphinx-argparse for building the docs, and the pathlib2 module that provides python 2 compatibility. These can either be installed manually via conda-forge, or otherwise they will be installed automatically by pip during the final installation step if needed.
+One optional dependencies is not installed via this procedure - the dependency sphinx-argparse for building the docs. Sphinx-argparse can either be installed manually via conda-forge, otherwise it will be installed automatically by pip during the final installation step if needed.
 
 If you manage your environment with pip, all required packges should be installed automatically. The only thing to be aware of is that pytorch must be compiled with MKL support, and CUDA support if you would like to use the GPU. For this reason, using anaconda python is strongly recommended.
 
@@ -40,9 +40,9 @@ And has optional dependencies on
    * `sphinx <https://www.sphinx-doc.org/>`_
    * `sphinx-argparse <https://sphinx-argparse.readthedocs.io>`_
    * `sphinx_rtd_theme <https://sphinx-rtd-theme.readthedocs.io/en/stable/>`_
-   * `pathlib2 <https://pypi.org/project/pathlib2/>`_
+
      
-All of these can be installed via pip or conda. Finally, CDTools is written to be python 2.7+ compatible, but is only actively tested on python 3.
+All of these can be installed via pip or conda. Finally, CDTools is NOT python 2 compatible.
 
 **It is required that pytorch is built with MKL**, as that enables FFTs. Additionally, installing pytorch **with CUDA support** is recommended, if you intend to run any serious reconstructions with the package.
 
