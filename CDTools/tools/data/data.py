@@ -5,7 +5,6 @@ specific desired information from a .cxi file. These functions should
 handle all the needed conversions between standard formats (for example,
 transposes of the basis arrays, shifting from object to probe motion, etc).
 """
-from __future__ import division, print_function, absolute_import
 
 import h5py
 import numpy as np
@@ -277,7 +276,7 @@ def get_mask(cxi_file):
         mask = np.array(i1['detector_1/mask']).astype(np.uint32)
         mask_on = np.equal(mask,np.uint32(0))
         mask_has_signal = np.equal(mask,np.uint32(0x00001000))
-        return np.logical_or(mask_on,mask_has_signal).astype(np.bool)
+        return np.logical_or(mask_on,mask_has_signal).astype(bool)
     else:
         return None
 
@@ -354,7 +353,11 @@ def get_data(cxi_file, cut_zeroes = True):
         data[data < 0] = 0
 
     if 'axes' in cxi_file[pull_from].attrs:
-        axes = str(cxi_file[pull_from].attrs['axes'].decode()).split(':')
+        try:
+            axes = str(cxi_file[pull_from].attrs['axes'].decode()).split(':')
+        except AttributeError as e: # Weird string vs bytes thing, ehhh
+            axes = str(cxi_file[pull_from].attrs['axes']).split(':')
+
         axes = [axis.strip().lower() for axis in axes]
     else:
         axes = None

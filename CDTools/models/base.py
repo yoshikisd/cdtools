@@ -39,6 +39,9 @@ import numpy as np
 import threading
 import queue
 import time
+#import pytorch_warmup
+from .complex_adam import MyAdam
+from .complex_lbfgs import MyLBFGS
 
 __all__ = ['CDIModel']
 
@@ -53,6 +56,10 @@ class CDIModel(t.nn.Module):
     functions.
     """
 
+    def __init__(self):
+        super(CDIModel,self).__init__()
+        self.iteration_count = 0
+        
     def from_dataset(self, dataset):
         raise NotImplementedError()
 
@@ -100,7 +107,8 @@ class CDIModel(t.nn.Module):
         raise NotImplementedError()
 
     def AD_optimize(self, iterations, data_loader,  optimizer,\
-                    scheduler=None, regularization_factor=None, thread=True):
+                    scheduler=None, regularization_factor=None, thread=True,
+                    calculation_width=10, warmup_scheduler=None):
         """Runs a round of reconstruction using the provided optimizer
         
         This is the basic automatic differentiation reconstruction tool
@@ -123,41 +131,85 @@ class CDIModel(t.nn.Module):
             Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
         thread : bool
             Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
+        calculation_width : int
+            Default 10, how many translations to pass through at once for each round of gradient accumulation
         """
         # First, calculate the normalization
         normalization = 0
         for inputs, patterns in data_loader:
             normalization += t.sum(patterns).cpu().numpy()
-
+            
         def run_iteration(stop_event=None):
             loss = 0
             N = 0
+            t0 = time.time()
             for inputs, patterns in data_loader:
                 N += 1
                 def closure():
-                    # This is just used to allow graceful exit when threading
-                    if stop_event is not None and stop_event.is_set():
-                        exit()
                     optimizer.zero_grad()
-                    sim_patterns = self.forward(*inputs)
-                    if hasattr(self, 'mask'):
-                        loss = self.loss(patterns,sim_patterns, mask=self.mask)
-                    else:
-                        loss = self.loss(patterns,sim_patterns)
+                    
+                    input_chunks = [[inp[i:i + calculation_width]
+                                     for inp in inputs]
+                                    for i in range(0, len(inputs[0]),
+                                                   calculation_width)]
+                    pattern_chunks = [patterns[i:i + calculation_width]
+                                      for i in range(0, len(inputs[0]),
+                                                     calculation_width)]
+                    
+                    total_loss = 0
+                    for inp, pats in zip(input_chunks, pattern_chunks):
+                        # This is just used to allow graceful exit when threading
+                        if stop_event is not None and stop_event.is_set():
+                            exit()
+
+                        sim_patterns = self.forward(*inp)
                         
+                        #sim_patterns.retain_grad()
+                        if hasattr(self, 'mask'):
+                            loss = self.loss(pats,sim_patterns, mask=self.mask)
+                        else:
+                            loss = self.loss(pats,sim_patterns)
+
+                        loss.backward()#retain_variables=True)
+                        #plt.figure()
+                        #plt.imshow(sim_patterns.grad.cpu()[0])
+                        #plt.colorbar()
+                        #plt.show()
+                    
+                        total_loss += loss.detach()    
+
+                    #print('probe grad')
+                    #print(t.mean(self.obj.grad))
+
                     if regularization_factor is not None \
                        and hasattr(self, 'regularizer'):
-                        loss += self.regularizer(regularization_factor)
-                    #print(loss)
-                    loss.backward()
-                    return loss
-                
+                        loss = self.regularizer(regularization_factor)
+                        loss.backward()
+                    return total_loss
+
+                                    
+
+                if warmup_scheduler is not None:
+                    old_lrs = [group['lr'] for group in
+                               optimizer.param_groups]
+                    warmup_scheduler.dampen()
+                    #print([group['lr'] for group in
+                    #       optimizer.param_groups], end='\r')
+                    
                 loss += optimizer.step(closure).detach().cpu().numpy()
+
+                if warmup_scheduler is not None:
+                    for old_lr, group in zip(old_lrs, optimizer.param_groups):
+                        group['lr'] = old_lr
+    
                 
             loss /= normalization
             if scheduler is not None:
                 scheduler.step(loss)
 
+            self.latest_loss = loss
+            self.latest_iteration_time = time.time() - t0
+            self.iteration_count += 1
             return loss
 
         if thread:
@@ -176,6 +228,7 @@ class CDIModel(t.nn.Module):
                             self.figs[0].canvas.start_event_loop(0.01) 
                         else:
                             calc.join()
+                            
                 except KeyboardInterrupt as e:
                     stop_event.set()
                     print('\nAsking execution thread to stop cleanly - please be patient.')
@@ -189,7 +242,8 @@ class CDIModel(t.nn.Module):
 
     def Adam_optimize(self, iterations, dataset, batch_size=15, lr=0.005,
                       schedule=False, amsgrad=False, subset=None,
-                      regularization_factor=None, thread=True):
+                      regularization_factor=None, thread=True,
+                      calculation_width=10, warmup=False):
         """Runs a round of reconstruction using the Adam optimizer
         
         This is generally accepted to be the most robust algorithm for use
@@ -215,6 +269,9 @@ class CDIModel(t.nn.Module):
             Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
         thread : bool
             Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
+        calculation_width : int
+            Default 1, how many translations to pass through at once for each round of gradient accumulation
+
         """
 
         if subset is not None:
@@ -228,7 +285,8 @@ class CDIModel(t.nn.Module):
                                            shuffle=True)
 
         # Define the optimizer
-        optimizer = t.optim.Adam(self.parameters(), lr = lr, amsgrad=amsgrad)
+        #optimizer = t.optim.Adam(self.parameters(), lr = lr, amsgrad=amsgrad)
+        optimizer = MyAdam(self.parameters(), lr = lr, amsgrad=amsgrad)
 
 
         # Define the scheduler
@@ -237,21 +295,33 @@ class CDIModel(t.nn.Module):
         else:
             scheduler = None
 
+        if warmup:
+            print('Warmup is not currently implemented, sorry!')
+            #warmup_scheduler = pytorch_warmup.UntunedLinearWarmup(optimizer)
+        else:
+            warmup_scheduler = None
+            
         return self.AD_optimize(iterations, data_loader, optimizer,
                                 scheduler=scheduler,
+                                warmup_scheduler=warmup_scheduler,
                                 regularization_factor=regularization_factor,
-                                thread=thread)
+                                thread=thread,
+                                calculation_width=calculation_width)
 
 
-    def LBFGS_optimize(self, iterations, dataset, batch_size=None,
+    def LBFGS_optimize(self, iterations, dataset, 
                        lr=0.1,history_size=2, subset=None,
-                       regularization_factor=None, thread=True):
+                       regularization_factor=None, thread=True,
+                       calculation_width=10):
         """Runs a round of reconstruction using the L-BFGS optimizer
         
         This algorithm is often less stable that Adam, however in certain
         situations or geometries it can be shockingly efficient. Like all
         the other optimization routines, it is defined as a generator
         function which yields the average loss each epoch.
+        
+        Note: There is no batch size, because it is a usually a bad idea to use
+        LBFGS on anything but all the data at onece
 
         Parameters
         ----------
@@ -259,8 +329,6 @@ class CDIModel(t.nn.Module):
             How many epochs of the algorithm to run
         dataset : CDataset
             The dataset to reconstruct against
-        batch_size : int
-            Optional, the size of the minibatches to use
         lr : float
             Optional, the learning rate to use
         history_size : int
@@ -271,6 +339,7 @@ class CDIModel(t.nn.Module):
             Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
         thread : bool
             Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
+        
         """
         if subset is not None:
             # if just one pattern, turn into a list for convenience
@@ -278,27 +347,27 @@ class CDIModel(t.nn.Module):
                 subset = [subset]
             dataset = torchdata.Subset(dataset, subset)
         
-        # Make a dataloader
-        if batch_size is not None:
-            data_loader = torchdata.DataLoader(dataset, batch_size=batch_size,
-                                               shuffle=True)
-        else:
-            data_loader = torchdata.DataLoader(dataset)
+        # Make a dataloader. This basically does nothing but load all the
+        # data at once
+        data_loader = torchdata.DataLoader(dataset, batch_size=len(dataset))
 
 
         # Define the optimizer
         optimizer = t.optim.LBFGS(self.parameters(),
                                   lr = lr, history_size=history_size)
-
+        #optimizer = MyLBFGS(self.parameters(),
+        #                    lr = lr, history_size=history_size)
+        
         return self.AD_optimize(iterations, data_loader, optimizer,
                                 regularization_factor=regularization_factor,
-                                thread=thread)
+                                thread=thread,
+                                calculation_width=calculation_width)
 
 
     def SGD_optimize(self, iterations, dataset, batch_size=None,
                      lr=0.01, momentum=0, dampening=0, weight_decay=0,
                      nesterov=False, subset=None, regularization_factor=None,
-                     thread=True):
+                     thread=True, calculation_width=10):
         """Runs a round of reconstruction using the SGDoptimizer
         
         This algorithm is often less stable that Adam, but it is simpler
@@ -322,6 +391,9 @@ class CDIModel(t.nn.Module):
             Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
         thread : bool
             Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
+        calculation_width : int
+            Default 1, how many translations to pass through at once for each round of gradient accumulation
+
         """
 
         if subset is not None:
@@ -347,9 +419,19 @@ class CDIModel(t.nn.Module):
 
         return self.AD_optimize(iterations, data_loader, optimizer,
                                 regularization_factor=regularization_factor,
-                                thread=thread)
+                                thread=thread,
+                                calculation_width=calculation_width)
 
 
+    def report(self):
+        """Returns a string informing on the latest reconstruction iteration"""
+        if hasattr(self, 'latest_loss'):
+            return 'Iteration ' + str(self.iteration_count) + \
+                  ' completed in %0.2f s with loss ' %\
+                  self.latest_iteration_time + str(self.latest_loss)
+        else:
+            return 'No reconstruction iterations performed yet!'
+        
     # By default, the plot_list is empty
     plot_list = []
     
@@ -407,7 +489,7 @@ class CDIModel(t.nn.Module):
             plotter = plots[1]
 
             if figs is None:
-                fig = plt.figure()
+                fig = plt.figure()                
                 self.figs.append(fig)
             else:
                 fig = figs[idx]
@@ -415,6 +497,7 @@ class CDIModel(t.nn.Module):
             try:
                 plotter(self,fig)
                 plt.title(name)
+                
             except TypeError as e:
                 if dataset is not None:
                     try:
@@ -448,7 +531,7 @@ class CDIModel(t.nn.Module):
         fig, axes = plt.subplots(1,3,figsize=(12,5.3))
         fig.tight_layout(rect=[0.02, 0.09, 0.98, 0.96])
         axslider = plt.axes([0.15,0.06,0.75,0.03])
-
+        
         
         def update_colorbar(im):
             # If the update brought the colorbar out of whack
@@ -463,12 +546,8 @@ class CDIModel(t.nn.Module):
                 return
             
             im.norecurse=True
-            im.colorbar.set_clim(vmin=np.min(im.get_array()),vmax=np.max(im.get_array()))
-            im.colorbar.ax.set_ylim(0,1)
-            im.colorbar.set_ticks(ticker.LinearLocator(numticks=5))
-            im.colorbar.draw_all()
+            im.set_clim(vmin=np.min(im.get_array()),vmax=np.max(im.get_array()))
 
-        
         def update(idx):
             idx = int(idx) % len(dataset)
             fig.pattern_idx = idx
@@ -503,6 +582,7 @@ class CDIModel(t.nn.Module):
                 cb3.ax.callbacks.connect('xlim_changed', lambda ax: update_colorbar(diff))
                 
             else:
+
                 sim = axes[0].images[-1]
                 sim.set_data(sim_data)
                 update_colorbar(sim)

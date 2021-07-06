@@ -7,14 +7,13 @@ kind of tools perform common image manipulations on torch tensors, in such
 a way that it is safe to include them in automatic differentiation models.
 """
 
-from __future__ import division, print_function, absolute_import
 import numpy as np
 import torch as t
-from CDTools.tools import cmath
+from CDTools.tools import propagators
 
 __all__ = ['centroid', 'centroid_sq', 'sinc_subpixel_shift',
            'find_subpixel_shift', 'find_pixel_shift', 'find_shift',
-           'convolve_1d']
+           'convolve_1d', 'fourier_upsample']
 
 
 def centroid(im, dims=2):
@@ -75,7 +74,7 @@ def centroid_sq(im, dims=2, comp=False):
         An (i,j) index or stack of indices
     """
     if comp:
-        im_sq = cmath.cabssq(im)
+        im_sq = t.abs(im)**2
     else:
         im_sq = im**2
 
@@ -109,9 +108,9 @@ def sinc_subpixel_shift(im, shift):
     I = I.to(dtype=im.dtype,device=im.device)
     J = J.to(dtype=im.dtype,device=im.device)
 
-    fft_im = cmath.fftshift(t.fft(im, 2))
-    shifted_fft_im = cmath.cmult(fft_im, cmath.expi(-shift[0]*I - shift[1]*J))
-    return t.ifft(cmath.ifftshift(shifted_fft_im),2)
+    fft_im = t.fft.fftshift(t.fft.fft2(im),dim=(-2,-1))
+    shifted_fft_im = fft_im * t.exp(1j * (-shift[0]*I - shift[1]*J))
+    return t.fft.ifft2(t.fft.ifftshift(shifted_fft_im, dim=(-2,-1)))
 
 
 
@@ -139,6 +138,7 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
     shift : torch.Tensor
         The relative shift (i,j) needed to best map im1 onto im2
     """
+
     #
     # Here's my approach, perhaps it's a little unconventional. I will first
     # calculate the phase correlation function as found in ____ (cite a paper
@@ -147,19 +147,11 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
     # using an FFT with upsampling by a factor of resolution in reciprocal
     # space
     #
-    
-    # If last dimension is not 2, then convert to a complex tensor now
-    if im1.shape[-1] != 2:
-        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
-    if im2.shape[-1] != 2:
-        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
-
-
-    cor_fft = cmath.cmult(t.fft(im1,2),cmath.cconj(t.fft(im2,2)))
+    cor_fft = t.fft.fft2(im1) * t.conj(t.fft.fft2(im2))
 
     # Not sure if this is more or less stable than just the correlation
     # maximum - requires some testing
-    cor = t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2)
+    cor = t.fft.ifft2(cor_fft / t.abs(cor_fft))
 
 
     # Now, I need to shift the array to pull out a contiguous window
@@ -167,27 +159,33 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
     try:
         search_around = search_around.cpu()
     except:
-        search_around = t.tensor(search_around)
+        search_around = t.as_tensor(search_around)
 
     window_size = 15
     shift_zero = tuple(-search_around + t.tensor([window_size,window_size]))
-    cor_window = t.roll(cor, shift_zero, dims=(0,1))[:2*window_size,:2*window_size]
+    cor_window = t.roll(cor, shift_zero, dims=(-2,-1))[...,:2*window_size,:2*window_size]
 
     # Now we upsample this window
-    cor_window_fft = cmath.fftshift(t.fft(cor_window,2))
-    upsampled = t.zeros(tuple(t.tensor(cor_window_fft.shape)[:-1] * resolution) + (2,),
+    cor_window_fft = t.fft.fftshift(t.fft.fft2(cor_window),dim=(-2,-1))
+    upsampled = t.zeros(tuple(t.tensor(cor_window_fft.shape) * resolution),
                         dtype=cor.dtype,device=cor.device)
 
-    upsampled[:2*window_size,:2*window_size] = cor_window_fft
+    upsampled[...,:2*window_size,:2*window_size] = cor_window_fft
     upsampled = t.roll(upsampled,(-window_size,-window_size),dims=(0,1))
-    upsampled = t.roll(cmath.cabssq(t.ifft(upsampled, 2)),(-window_size*resolution,-window_size*resolution), dims=(0,1))
+    upsampled = t.roll(t.abs(t.fft.ifft2(upsampled))**2,
+                       (-window_size*resolution,-window_size*resolution),
+                       dims=(0,1))
 
 
     # And we extract the shift from the window
-    sh = t.tensor(upsampled.shape).to(device=upsampled.device)
-    cormax = t.tensor([t.argmax(upsampled) // sh[1],
-                       t.argmax(upsampled) % sh[1]]).to(device=upsampled.device)
-    subpixel_shift = ((cormax + sh // 2) % sh - sh//2).to(dtype=upsampled.dtype)
+    sh = t.as_tensor(upsampled.shape, device=upsampled.device)
+    cormax = t.as_tensor([t.div(t.argmax(upsampled), sh[1],
+                                rounding_mode='floor'),
+                          t.argmax(upsampled) % sh[1]],
+                         device=upsampled.device)
+
+    sh_over_2 = t.div(sh,2,rounding_mode='floor')
+    subpixel_shift = ((cormax + sh_over_2) % sh - sh_over_2).to(dtype=upsampled.dtype)
 
     return search_around.to(device=upsampled.device, dtype=upsampled.dtype) + \
         subpixel_shift / resolution
@@ -213,24 +211,19 @@ def find_pixel_shift(im1, im2):
     shift : torch.Tensor
         The integer-valued shift (i,j) that best maps im1 onto im2 
     """
-    # If last dimension is not 2, then convert to a complex tensor now
-    if im1.shape[-1] != 2:
-        im1 = t.stack((im1,t.zeros_like(im1)),dim=-1)
-    if im2.shape[-1] != 2:
-        im2 = t.stack((im2,t.zeros_like(im2)),dim=-1)
-
-
-    cor_fft = cmath.cmult(t.fft(im1,2),cmath.cconj(t.fft(im2,2)))
+    cor_fft = t.fft.fft2(im1) * t.conj(t.fft.fft2(im2))
 
     # Not sure if this is more or less stable than just the correlation
     # maximum - requires some testing
-    cor = cmath.cabs(t.ifft(cor_fft / cmath.cabs(cor_fft)[:,:,None],2))
+    cor = t.abs(t.fft.ifft2(cor_fft / t.abs(cor_fft)))
 
 
-    sh = t.tensor(cor.shape).to(device=im1.device)
-    cormax = t.tensor([t.argmax(cor) // sh[1],
+    sh = t.as_tensor(cor.shape,device=im1.device)
+    cormax = t.tensor([t.div(t.argmax(cor),sh[1],rounding_mode='floor'),
                        t.argmax(cor) % sh[1]]).to(device=im1.device)
-    return (cormax + sh // 2) % sh - sh//2
+
+    sh_over_2 = t.div(sh,2,rounding_mode='floor')
+    return (cormax + sh_over_2) % sh - sh_over_2
 
 
 
@@ -290,38 +283,37 @@ def convolve_1d(image, kernel, dim=0, fftshift_kernel=True):
         The convolved image
     """
 
-    complex_things = 2
-    im_complex = True
-    if image.shape[-1] != 2:
-        image = t.stack((image,t.zeros_like(image)),dim=-1)
-        complex_things -= 1
-        im_complex = False
-        
-    if kernel.shape[-1] != 2:
-        kernel = t.stack((kernel,t.zeros_like(kernel)),dim=-1)
-        complex_things -= 1
-
+    
     if fftshift_kernel:
-        kernel = cmath.ifftshift(kernel)
+        kernel = t.fft.ifftshift(kernel,dim=(-1,))
 
-    # If the image wasn't originally complex, and the dimension
-    # was passed with the nexative-indexing convention
-    if not im_complex and dim < 0:
-        dim = dim-1
-
-    # We have to transpose the relevant dimension to -2 before using the fft,
-    # which expects to operate on the final non-complex dimension
-    trans_im = t.transpose(image, dim, -2)
+    # We have to transpose the relevant dimension to -1 before using the fft,
+    # which expects to operate on the final dimension
+    trans_im = t.transpose(image, dim, -1)
         
     # Take a correlation
-    fft_im = t.fft(trans_im, 1)
-    fft_kernel = t.fft(kernel, 1)
-    trans_conv = t.ifft(cmath.cmult(fft_im,fft_kernel), 1)
+    fft_im = t.fft.fft(trans_im)
+    fft_kernel = t.fft.fft(kernel)
+    trans_conv = t.fft.ifft(fft_im * fft_kernel)
 
-    conv_im = t.transpose(trans_conv, dim, -2)
+    conv_im = t.transpose(trans_conv, dim, -1)
 
-    # If nothing was input as complex, the result should be returned as real
-    if complex_things == 0:
-        return conv_im[...,0]
-    else:
-        return conv_im
+    return conv_im
+
+
+def fourier_upsample(ims, preserve_mean=False):
+    # If preserve_mean is true, it preserves the mean pixel intensity
+    # otherwise, it preserves the total summed intensity
+    upsampled = t.zeros(ims.shape[:-2]+(2*ims.shape[-2],2*ims.shape[-1]),
+                           dtype=ims.dtype,
+                           device=ims.device)
+    left = [ims.shape[-2]//2,ims.shape[-1]//2]
+    right = [ims.shape[-2]//2+ims.shape[-2],
+             ims.shape[-1]//2+ims.shape[-1]]
+    
+    upsampled[...,left[0]:right[0],left[1]:right[1]] = propagators.far_field(ims)
+    if preserve_mean:
+        upsampled *= 2
+    return propagators.inverse_far_field(upsampled)
+
+

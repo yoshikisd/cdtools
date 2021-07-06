@@ -7,7 +7,7 @@ Appendix C. doi: 10.1007/978-1-4419-6533-2_11
 They are actually taken from https://github.com/LeBeauGroup/pyMultislicer
 written by Jim LeBeau, but above is the original reference.
 """
-from __future__ import division, print_function, absolute_import
+
 import numpy as np
 import torch as t
 from scipy import fftpack

@@ -1,6 +1,5 @@
 from __future__ import division, print_function, absolute_import
 
-from CDTools.tools import cmath
 from CDTools.tools import interactions
 import numpy as np
 import torch as t
@@ -137,16 +136,16 @@ def test_ptycho_2D_round(random_probe, random_obj):
                      random_obj[tr[0]:tr[0]+random_probe.shape[0],
                                 tr[1]:tr[1]+random_probe.shape[1]] for
                      tr in np.round(translations).astype(int)]
-    exit_waves_t = interactions.ptycho_2D_round(cmath.complex_to_torch(random_probe),
-                                                cmath.complex_to_torch(random_obj),
-                                                t.tensor(translations))
-    assert np.allclose(cmath.torch_to_complex(exit_waves_t), exit_waves_np)
+    exit_waves_t = interactions.ptycho_2D_round(t.as_tensor(random_probe),
+                                                t.as_tensor(random_obj),
+                                                t.as_tensor(translations))
+    assert np.allclose(exit_waves_t.numpy(), exit_waves_np)
 
     # Test the single wave case
-    exit_wave_t = interactions.ptycho_2D_round(cmath.complex_to_torch(random_probe),
-                                                cmath.complex_to_torch(random_obj),
-                                                t.tensor(translations[0]))
-    assert np.allclose(cmath.torch_to_complex(exit_wave_t), exit_waves_np[0])
+    exit_wave_t = interactions.ptycho_2D_round(t.as_tensor(random_probe),
+                                               t.as_tensor(random_obj),
+                                               t.as_tensor(translations[0]))
+    assert np.allclose(exit_wave_t.numpy(), exit_waves_np[0])
 
 
 
@@ -158,14 +157,14 @@ def test_ptycho_2D_linear(single_pixel_probe, random_obj):
     translation = np.array([46.7,53.2])
      
     exit_waves_probe = interactions.ptycho_2D_linear(
-        cmath.complex_to_torch(single_pixel_probe),
-        cmath.complex_to_torch(random_obj),
-        t.tensor(translations),
+        t.as_tensor(single_pixel_probe),
+        t.as_tensor(random_obj),
+        t.as_tensor(translations),
         shift_probe=True)
 
     exit_wave_probe = interactions.ptycho_2D_linear(
-        cmath.complex_to_torch(single_pixel_probe),
-        cmath.complex_to_torch(random_obj),
+        t.as_tensor(single_pixel_probe),
+        t.as_tensor(random_obj),
         t.tensor(translation),
         shift_probe=True)
 
@@ -174,14 +173,14 @@ def test_ptycho_2D_linear(single_pixel_probe, random_obj):
 
     
     exit_waves_obj = interactions.ptycho_2D_linear(
-        cmath.complex_to_torch(single_pixel_probe),
-        cmath.complex_to_torch(random_obj),
+        t.as_tensor(single_pixel_probe),
+        t.as_tensor(random_obj),
         t.tensor(translations),
         shift_probe=False)
 
     exit_wave_obj = interactions.ptycho_2D_linear(
-        cmath.complex_to_torch(single_pixel_probe),
-        cmath.complex_to_torch(random_obj),
+        t.as_tensor(single_pixel_probe),
+        t.as_tensor(random_obj),
         t.tensor(translation),
         shift_probe=False)
 
@@ -189,7 +188,7 @@ def test_ptycho_2D_linear(single_pixel_probe, random_obj):
     assert t.allclose(exit_waves_obj[0],exit_wave_obj)
 
     # For the shifted probe, we should find 4 pixels with intensity
-    exit_waves_probe = cmath.torch_to_complex(exit_waves_probe)[0]
+    exit_waves_probe = t.as_tensor(exit_waves_probe)[0]
 
     probe_shift = np.array([[0.3*0.8,0.3*0.2],
                             [0.7*0.8,0.7*0.2]])
@@ -199,7 +198,7 @@ def test_ptycho_2D_linear(single_pixel_probe, random_obj):
     assert np.allclose(probe_shift * obj_section, exit_section)
     
     # For the shifted obj, we should find one pixel with intensity
-    exit_waves_obj = cmath.torch_to_complex(exit_waves_obj)[0]
+    exit_waves_obj = t.as_tensor(exit_waves_obj)[0]
     obj_shift = np.array([[0.3*0.8,0.3*0.2],
                             [0.7*0.8,0.7*0.2]])
     obj_section = random_obj[128+46:128+48,
@@ -219,15 +218,15 @@ def test_ptycho_2D_sinc(single_pixel_probe, random_obj):
     translation = np.array([46.7,53.2])
      
     exit_waves_probe = interactions.ptycho_2D_sinc(
-        cmath.complex_to_torch(single_pixel_probe),
-        cmath.complex_to_torch(random_obj),
-        t.tensor(translations),
+        t.as_tensor(single_pixel_probe),
+        t.as_tensor(random_obj),
+        t.as_tensor(translations),
         shift_probe=True)
 
     exit_wave_probe = interactions.ptycho_2D_sinc(
-        cmath.complex_to_torch(single_pixel_probe),
-        cmath.complex_to_torch(random_obj),
-        t.tensor(translation),
+        t.as_tensor(single_pixel_probe),
+        t.as_tensor(random_obj),
+        t.as_tensor(translation),
         shift_probe=True)
 
     # Check that the outputs match
@@ -247,7 +246,7 @@ def test_ptycho_2D_sinc(single_pixel_probe, random_obj):
                              53:53+256]
     exit_wave_np = sinc_shifted_probe * obj_section
     
-    exit_wave_torch = cmath.torch_to_complex(exit_wave_probe)
+    exit_wave_torch = exit_wave_probe.numpy()
 
     # The fidelity isn't great due to the FFT-based approach, so we need
     # a pretty relaxed condition
@@ -259,8 +258,8 @@ def test_RPI_interaction(random_probe, random_obj):
 
     random_obj1 = random_obj[:79,:68]
     random_probe1 = random_probe
-    t_random_obj1 = cmath.complex_to_torch(random_obj1)
-    t_random_probe1 = cmath.complex_to_torch(random_probe1)
+    t_random_obj1 = t.as_tensor(random_obj1)
+    t_random_probe1 = t.as_tensor(random_probe1)
     t_output1 = interactions.RPI_interaction(t_random_probe1, t_random_obj1)
 
     obj1_fourier = fftshift(fft.fft2(ifftshift(random_obj1), norm='ortho'))
@@ -272,13 +271,13 @@ def test_RPI_interaction(random_probe, random_obj):
     output1 = random_probe1 * fftshift(fft.ifft2(ifftshift(obj1_ups),
                                                 norm='ortho'))
     
-    assert np.allclose(cmath.torch_to_complex(t_output1), output1)
+    assert np.allclose(t.as_tensor(t_output1), output1)
 
     
     random_obj2 = np.stack([random_obj[:64,:89]]*3)
     random_probe2 = random_probe[3:,5:]
-    t_random_obj2 = cmath.complex_to_torch(random_obj2)
-    t_random_probe2 = cmath.complex_to_torch(random_probe2)
+    t_random_obj2 = t.as_tensor(random_obj2)
+    t_random_probe2 = t.as_tensor(random_probe2)
     t_output2 = interactions.RPI_interaction(t_random_probe2, t_random_obj2)
 
     obj2_fourier = fftshift(fft.fft2(ifftshift(random_obj2), norm='ortho'))

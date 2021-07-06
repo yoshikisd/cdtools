@@ -121,7 +121,7 @@ class CDataset(torchdata.Dataset):
             self.mask = self.mask.to(*args,**mask_kwargs)          
         if self.background is not None:
             self.background = self.background.to(*args,**kwargs)          
-
+        
 
     def get_as(self, *args, **kwargs):
         """Sets the dataset to return data on the given device and dtype

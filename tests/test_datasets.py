@@ -28,7 +28,7 @@ def test_CDataset_init():
     dataset = CDataset(entry_info, sample_info,
                        wavelength, detector_geometry, mask)
 
-    assert t.all(t.eq(dataset.mask,t.tensor(mask.astype(np.bool))))
+    assert t.all(t.eq(dataset.mask,t.tensor(mask.astype(bool))))
     assert dataset.entry_info == entry_info
     assert dataset.sample_info == sample_info
     assert dataset.wavelength == wavelength

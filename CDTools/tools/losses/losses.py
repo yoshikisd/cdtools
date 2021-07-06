@@ -5,9 +5,8 @@ that returns the mean squared intensity error, and one that returns the
 maximum likelihood metric for a system with Poisson statistics.
 
 """
-from __future__ import division, print_function, absolute_import
-import torch as t
 
+import torch as t
 
 __all__ = ['amplitude_mse', 'intensity_mse', 'poisson_nll']
 
@@ -100,7 +99,7 @@ def intensity_mse(intensities, sim_intensities, mask=None):
 
 
     
-def poisson_nll(intensities, sim_intensities, mask=None, eps=1e-6):
+def poisson_nll(intensities, sim_intensities, mask=None, eps=1e-6, subtract_min=False):
     """ Returns the Poisson negative log likelihood for a simulated dataset's intensities
 
     Calculates the overall Poisson maximum likelihood metric using
@@ -137,13 +136,39 @@ def poisson_nll(intensities, sim_intensities, mask=None, eps=1e-6):
         A single value for the poisson negative log likelihood
 
     """
+    #When x.logy gets into the regular build, add it by uncommenting!
     if mask is None:
-        return t.sum(sim_intensities+eps -
-                     intensities * t.log(sim_intensities+eps)) \
-                     / intensities.view(-1).shape[0]
-    
+
+        nll = t.sum(sim_intensities+eps -
+                    intensities * t.log(sim_intensities+eps)) \
+                    / intensities.view(-1).shape[0]
+        #nll = t.sum(sim_intensities+epsa -
+        #            t.xlogy(intensities,sim_intensities+eps)) \
+        #            / intensities.view(-1).shape[0]
+        if subtract_min:
+            nll -= t.nansum(intensities - intensities*t.log(intensities))\
+                / intensities.view(-1).shape[0]
+            #nll -= t.sum(intensities - t.xlogy(intensities,intensities))
+            # We don't need to include the log factorial part here, because
+            # it will get subtracted off in the min anyway.
+            
+        return nll
     else:
         masked_intensities = intensities.masked_select(mask)
         masked_sims = sim_intensities.masked_select(mask)
-        return t.sum(masked_sims - masked_intensities *
-                     t.log(masked_sims+eps)) / masked_intensities.shape[0]
+
+        nll = t.sum(masked_sims + eps - \
+                    masked_intensities * t.log(masked_sims+eps)) \
+                    / masked_intensities.shape[0]
+
+        #nll = t.sum(masked_sims + eps - \
+        #            t.xlogy(masked_intensities, masked_sims+eps)) \
+        #            / masked_intensities.shape[0]
+        
+        
+        if subtract_min:
+            nll -= t.nansum(masked_intensities -
+                            masked_intensities*t.log(masked_intensities)) \
+                            / masked_intensities.shape[0]
+
+        return nll

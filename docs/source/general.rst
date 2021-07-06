@@ -11,7 +11,7 @@ By necessity, CDTools operates using a mixture of numpy arrays and pytorch tenso
 
 Functions that can accept either pytorch tensors or numpy arrays will have the type for the relevant inputs documented as "array", rather than "np.ndarray" or "torch.Tensor". In general, these functions will either accept all "array" type inputs as numpy arrays, or all as torch tensors. They will then return a result in a format matching that of the inputs. While many of these functions will work with mixed numpy/pytorch input, the output behavior of these functions is not, in general, defined for such a case, so it is heavily discouraged.
 
-Finally, it is important to remember always that, since pytorch does not have complex number support, complex-valued tensors in pytorch are always represented by a tensor with a trailing dimension of length 2. All complex arithmetic operations are defined in :code:`tools.cmath`, but do not forget to use them!
+Please note that adherance to the conventions above is a work in progress, and you may find improperly documented or implemented functions. Please file a bug report if you do!
 
 
 Unit Conventions

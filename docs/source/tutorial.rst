@@ -13,11 +13,9 @@ Our first step will be creating the file and filling out the boilerplate: All th
 
 .. code-block:: python
 
-   from __future__ import division, print_function, absolute_import
-
    import CDTools
    from matplotlib import pyplot as plt
-   import pickle
+   from scipy import io
 
 
 You can always import more libraries, like numpy, or pytorch, or pandas, or what have you, as needed. Next, we load the dataset and give it a look-over
@@ -46,9 +44,9 @@ We then try a basic Adam reconstruction with this model, with no changes to the 
 
 .. code-block:: python
 
-   for i, loss in enumerate(model.Adam_optimize(50, dataset)):
+   for loss in model.Adam_optimize(50, dataset):
        model.inspect(dataset)
-       print(i,loss)
+       print(model.report())
 
    model.compare(dataset)
    plt.show()
@@ -58,7 +56,7 @@ It is worth noting here exactly how this code is working. The reconstruction met
 
 In CDTools, every reconstruction method will return a generator. Whenever the generator is asked for the next item, it runs a single epoch of the reconstructionalgorithm, and then returns the average loss over that epoch as that next item. This allows the execution of the reconstruction algorithm to pause once every epoch, allowing some time for the user to run a small snippet of code to inspect how the reconstruction is coming along.
 
-From the end user perspective, all this means is: follow the format above, or more generally put the :code:`model.Adam_optimize(n, dataset)` call anywhere that you would feel comfortable putting a call to :code:`range(n)` - list comprehensions, for loops, etc.
+From the end user perspective, all this means is: follow the format above, or more generally put the :code:`model.Adam_optimize(n, dataset)` call anywhere that you would feel comfortable putting a call to :code:`range(n)` - list comprehensions, for loops, etc. In this case, we have called a function to plot out the current state of the reconstruction, and a function to print out the current loss and iteration time.
 
 Once we run this, we can take a look at the result. What we see is pretty good, but we can see that there are some issues with the reconstruction near the edge, and the probe itself seems to be larger than the "stage" on which we're reconstructing it. So, we can make two tweaks to this code in response. First, we increase the oversampling ratio, which doubles the size of the stage (this often can cause other issues as well, but generally works well in situations like this where the probe is honestly too large.
 
@@ -94,8 +92,8 @@ Now we expect to get a nice reconstruction, so we can save the data. You can sav
 
 .. code-block:: python
 
-   with open('example_reconstructions/lab_ptycho.pickle', 'wb') as f:
-       pickle.dump(model.save_results(dataset),f)
+   io.savemat('example_reconstructions/lab_ptycho.pickle',
+              model.save_results(dataset))
 
 This is usually placed before the call to :code:`plt.show()`, to make sure that if the user manually exits the program once all the plot windows are opened, the data will still have been saved.
 
@@ -127,7 +125,7 @@ We can start with the basic skeleton for this file. In addition to our standard 
 
 .. code-block:: python
 
-    from __future__ import division, print_function, absolute_import
+  
     import numpy as np
     import torch as t
     from matplotlib import pyplot as plt
@@ -288,7 +286,6 @@ Once again, we start with the basic skeleton
 
 .. code-block:: python
 
-    from __future__ import division, print_function, absolute_import
     import numpy as np
     import torch as t
     from CDTools.models import CDIModel
@@ -323,10 +320,10 @@ It's important to note that there's not requirement for what the arguments to th
         self.probe_basis = t.Tensor(probe_basis)
 
         # We rescale the probe so it learns at the same rate as the object
-        self.probe_norm = t.max(tools.cmath.cabs(probe_guess.to(t.float32)))
-        self.probe = t.nn.Parameter(probe_guess.to(t.float32)
+        self.probe_norm = t.max(t.abs(probe_guess).to(t.float32))
+        self.probe = t.nn.Parameter(probe_guess.to(t.complex64)
                                     / self.probe_norm)
-        self.obj = t.nn.Parameter(obj_guess.to(t.float32))
+        self.obj = t.nn.Parameter(obj_guess.to(t.complex64))
 		
 
 Here, we chose to define the model based on a basis matrix describing the probe array, an initial guess at the probe, and an initial object. In addition, an optional offset for the translations is included. 
@@ -375,7 +372,7 @@ To initialize the object from a dataset, we need to start by extracting the rele
                                                      probe_shape,
                                                      det_slice)
 
-        obj = t.ones(obj_size+(2,))
+        obj = t.ones(obj_size, dtype=t.complex64)
 
         return cls(probe_basis, probe, obj, min_translation=min_translation)
     
@@ -472,9 +469,9 @@ At the moment, there is no consistent way to save out the results across the boa
 .. code-block:: python
 
     def save_results(self):
-        probe = tools.cmath.torch_to_complex(self.probe.detach().cpu())
+        probe = self.probe.detach().cpu().numpy()
         probe = probe * self.probe_norm.detach().cpu().numpy()
-        obj = tools.cmath.torch_to_complex(self.obj.detach().cpu())
+        obj = self.obj.detach().cpu().numpy()
         return {'probe':probe,'obj':obj}
 
 
@@ -499,9 +496,9 @@ We can test this model with a simple script, shown below. By filling in the back
     model.to(device='cuda')
     dataset.get_as(device='cuda')
 
-    for i, loss in enumerate(model.Adam_optimize(100, dataset)):
+    for loss in model.Adam_optimize(100, dataset):
         model.inspect(dataset)
-        print(i,loss)
+        print(model.report())
     
     model.compare(dataset)
     plt.show()

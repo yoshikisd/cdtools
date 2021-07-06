@@ -1,30 +1,31 @@
-from __future__ import division, print_function, absolute_import
-
 import CDTools
 from matplotlib import pyplot as plt
-import pickle
-import time
+from scipy import io
 
 # First, we load an example dataset from a .cxi file
 filename = 'example_data/AuBalls_700ms_30nmStep_3_6SS_filter.cxi'
 dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
 
 # Next, we create a ptychography model from the dataset
-# Note that we explicitly as for two incoherent probe modes
+# Note that we explicitly ask for two incoherent probe modes
 model = CDTools.models.FancyPtycho.from_dataset(dataset, n_modes=2)
 
 # Let's do this reconstruction on the GPU, shall we? 
 model.to(device='cuda')
 dataset.get_as(device='cuda')
 
-for i, loss in enumerate(model.Adam_optimize(30, dataset, batch_size=100)):
+# Now, we run a short reconstruction from the dataset
+for loss in model.Adam_optimize(100, dataset, batch_size=50, schedule=True):
     # And we liveplot the updates to the model as they happen
-    print(i,loss)
+    print(model.report())
     model.inspect(dataset)
 
-# And we save the reconstruction out to a file
-with open('example_reconstructions/gold_balls.pickle', 'wb') as f:
-    pickle.dump(model.save_results(dataset),f)
+# This orthogonalizes the incoherent probe modes
+model.tidy_probes()
+
+# And we save out the results as a .mat file
+io.savemat('example_reconstructions/gold_balls.mat',
+           model.save_results(dataset))
 
 # Finally, we plot the results
 model.inspect(dataset)

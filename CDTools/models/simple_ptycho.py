@@ -10,6 +10,7 @@ from torch.utils import data as torchdata
 from matplotlib import pyplot as plt
 from datetime import datetime
 import numpy as np
+from .complex_adam import MyAdam
 
 __all__ = ['SimplePtycho']
 
@@ -25,22 +26,22 @@ class SimplePtycho(CDIModel):
                  surface_normal=np.array([0.,0.,1.]), mask=None):
 
         super(SimplePtycho,self).__init__()
-        self.wavelength = t.Tensor([wavelength])
+        self.wavelength = t.tensor([wavelength])
         self.detector_geometry = copy(detector_geometry)
         det_geo = self.detector_geometry
         if hasattr(det_geo, 'distance'):
-            det_geo['distance'] = t.Tensor(det_geo['distance'])
+            det_geo['distance'] = t.tensor(det_geo['distance'])
         if hasattr(det_geo, 'basis'):
-            det_geo['basis'] = t.Tensor(det_geo['basis'])
+            det_geo['basis'] = t.tensor(det_geo['basis'])
         if hasattr(det_geo, 'corner'):
-            det_geo['corner'] = t.Tensor(det_geo['corner'])
+            det_geo['corner'] = t.tensor(det_geo['corner'])
 
-        self.min_translation = t.Tensor(min_translation)
+        self.min_translation = t.tensor(min_translation)
 
-        self.probe_basis = t.Tensor(probe_basis)
+        self.probe_basis = t.tensor(probe_basis)
         self.detector_slice = detector_slice
 
-        self.surface_normal = t.Tensor(surface_normal)
+        self.surface_normal = t.tensor(surface_normal)
 
         if mask is None:
             self.mask = None
@@ -49,11 +50,11 @@ class SimplePtycho(CDIModel):
 
         # We rescale the probe here so it learns at the same rate as the
         # object
-        self.probe_norm = t.max(tools.cmath.cabs(probe_guess.to(t.float32)))
+        self.probe_norm = t.max(t.abs(probe_guess.to(t.complex64)))
 
-        self.probe = t.nn.Parameter(probe_guess.to(t.float32)
+        self.probe = t.nn.Parameter(probe_guess.to(t.complex64)
                                     / self.probe_norm)
-        self.obj = t.nn.Parameter(obj_guess.to(t.float32))
+        self.obj = t.nn.Parameter(obj_guess.to(t.complex64))
 
 
 
@@ -94,8 +95,8 @@ class SimplePtycho(CDIModel):
 
         # Finally, initialize the probe and  object using this information
         probe = tools.initializers.SHARP_style_probe(dataset, probe_shape, det_slice)
-
-        obj = t.ones(obj_size+(2,))
+        
+        obj = t.ones(obj_size).to(dtype=t.complex64)
         det_geo = dataset.detector_geometry
 
 
@@ -112,6 +113,7 @@ class SimplePtycho(CDIModel):
                                                              translations,
                                             surface_normal=self.surface_normal)
         pix_trans -= self.min_translation
+
         return tools.interactions.ptycho_2D_round(self.probe_norm * self.probe,
                                                   self.obj,
                                                   pix_trans)
@@ -130,7 +132,7 @@ class SimplePtycho(CDIModel):
                                             detector_slice=self.detector_slice)
 
 
-    def loss(self, sim_data, real_data, mask=None):
+    def loss(self, real_data, sim_data, mask=None):
         return tools.losses.amplitude_mse(real_data, sim_data, mask=mask)
 
 
@@ -206,9 +208,9 @@ class SimplePtycho(CDIModel):
 
 
     def save_results(self):
-        probe = tools.cmath.torch_to_complex(self.probe.detach().cpu())
+        probe = self.probe.detach().cpu().numpy()
         probe = probe * self.probe_norm.detach().cpu().numpy()
-        obj = tools.cmath.torch_to_complex(self.obj.detach().cpu())
+        obj = self.obj.detach().cpu().numpy()
         return {'probe':probe,'obj':obj}
 
 
@@ -272,4 +274,4 @@ class SimplePtycho(CDIModel):
                     # Calculate loss
                     loss.append(self.loss(self.measurement(self.interaction(i, translations)), patterns))
 
-                yield t.mean(t.Tensor(loss)).cpu().numpy()
+                yield t.mean(t.tensor(loss)).cpu().numpy()

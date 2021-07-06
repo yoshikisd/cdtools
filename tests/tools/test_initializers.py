@@ -1,7 +1,6 @@
 from __future__ import division, print_function, absolute_import
 
 from CDTools.tools import initializers
-from CDTools.tools import cmath
 from CDTools.datasets import Ptycho2DDataset
 import numpy as np
 import torch as t
@@ -78,11 +77,12 @@ def test_gaussian():
     # Generate gaussian as a numpy array (square array)
     shape = [10, 10]
     sigma = [2.5, 2.5]
+    
     center = ((shape[0]-1)/2, (shape[1]-1)/2)
     y, x = np.mgrid[:shape[0], :shape[1]]
     np_result = 10*np.exp(-0.5*((x-center[1])/sigma[1])**2
                           -0.5*((y-center[0])/sigma[0])**2)
-    init_result = cmath.torch_to_complex(initializers.gaussian([10, 10], [2.5, 2.5], amplitude=10))
+    init_result = initializers.gaussian(shape, sigma, amplitude=10).numpy()
     assert np.allclose(init_result, np_result)
 
     # Generate gaussian as a numpy array (rectangular array)
@@ -92,7 +92,7 @@ def test_gaussian():
     y, x = np.mgrid[:shape[0], :shape[1]]
     np_result = np.exp(-0.5*((x-center[1])/sigma[1])**2
                           -0.5*((y-center[0])/sigma[0])**2)
-    init_result = cmath.torch_to_complex(initializers.gaussian(shape, sigma))
+    init_result = initializers.gaussian(shape, sigma).numpy()
     assert np.allclose(init_result, np_result)
                                     
     # Generate gaussian with curvature
@@ -105,8 +105,8 @@ def test_gaussian():
                                -0.5*((y-center[0])/sigma[0])**2)
     np_result *= np.exp(0.5j*curvature[1]*(x-center[1])**2
                         +0.5j*curvature[0]*(y-center[0])**2)
-    init_result = cmath.torch_to_complex(initializers.gaussian(shape, sigma,
-                        center=center, curvature=curvature, amplitude=10))
+    init_result = initializers.gaussian(shape, sigma, center=center,
+                            curvature=curvature, amplitude=10).numpy()
     assert np.allclose(init_result, np_result)
     
 
@@ -147,8 +147,7 @@ def test_gaussian_probe(ptycho_cxi_1):
 
     normalization_1 = normalization /  np.sum(np.abs(np_probe)**2)
     
-    probe = initializers.gaussian_probe(dataset, basis, shape, sigma)
-    probe = cmath.torch_to_complex(probe)
+    probe = initializers.gaussian_probe(dataset, basis, shape, sigma).numpy()
     assert np.allclose(probe, normalization_1*np_probe)
 
     # And then a propagated probe
@@ -163,8 +162,7 @@ def test_gaussian_probe(ptycho_cxi_1):
     normalization_2 = normalization /  np.sum(np.abs(np_probe)**2)
     
     probe = initializers.gaussian_probe(dataset, basis, shape, sigma,
-                                        propagation_distance=z)
-    probe = cmath.torch_to_complex(probe)
+                                        propagation_distance=z).numpy()
     
     assert np.allclose(probe, normalization_2*np_probe)
 
@@ -185,10 +183,10 @@ def test_SHARP_style_probe(ptycho_cxi_1):
                                                               distance)
 
     probe = initializers.SHARP_style_probe(dataset, shape, det_slice)
-    assert probe.shape == t.Size([256,256,2])
+    assert probe.shape == t.Size([256,256])
 
     probe = initializers.SHARP_style_probe(dataset, shape, det_slice, propagation_distance=20e-6)
-    assert probe.shape == t.Size([256,256,2])
+    assert probe.shape == t.Size([256,256])
 
 
 def test_RPI_spectral_init():
@@ -200,24 +198,24 @@ def test_RPI_spectral_init():
     probe = np.random.rand(230,253).astype(np.complex64)
     obj_shape = [37,53]
     mask = t.Tensor(np.random.rand(*pattern.shape) > 0.04)
-    background = t.Tensor(np.random.rand(*pattern.shape) .astype(np.float32)* 0.05)
+    background = t.as_tensor(np.random.rand(*pattern.shape),dtype=t.float32) * 0.05
 
-    probe = cmath.complex_to_torch(probe)
-    pattern = t.Tensor(pattern)
+    probe = t.as_tensor(probe)
+    pattern = t.as_tensor(pattern)
     
     obj = initializers.RPI_spectral_init(pattern, probe, obj_shape)
-    assert list(obj.shape) == [1]+obj_shape+[2]
+    assert list(obj.shape) == [1]+obj_shape
 
     obj = initializers.RPI_spectral_init(pattern, probe, obj_shape,
                                          n_modes=2, mask=mask)
-    assert list(obj.shape) == [2]+obj_shape+[2]
+    assert list(obj.shape) == [2]+obj_shape
 
     obj = initializers.RPI_spectral_init(pattern, probe, obj_shape,
                                          n_modes=2, background=background)
-    assert list(obj.shape) == [2]+obj_shape+[2]
+    assert list(obj.shape) == [2]+obj_shape
 
     obj = initializers.RPI_spectral_init(pattern, probe, obj_shape,
                                          n_modes=2, mask=mask,
                                          background=background)
-    assert list(obj.shape) == [2]+obj_shape+[2]
+    assert list(obj.shape) == [2]+obj_shape
 

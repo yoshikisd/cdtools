@@ -6,21 +6,21 @@ CDTools is a python library for ptychography and CDI reconstructions, using an A
 # imports
 from matplotlib import pyplot as plt
 from CDTools.datasets import Ptycho_2D_Dataset
-from CDTools.models import SimplePtycho
+from CDTools.models import FancyPtycho
 
 # Load the file
 dataset = Ptycho_2D_Dataset.from_cxi('ptycho_data.cxi')
 
 # Generate a model from the data
-model = SimplePtycho.from_dataset(dataset)
+model = FancyPtycho.from_dataset(dataset)
 
 # Run a reconstruction
-for i, loss in enumerate(model.Adam_optimize(10, dataset)):
-    print(i, loss)
+for loss in model.Adam_optimize(10, dataset):
+    print(model.report())
 
 # And look at the results!
-model.inspect(dataset)
-model.compare(dataset)
+model.inspect(dataset) # See the reconstructed object, probe, etc.
+model.compare(dataset) # See how the simulated and measured patterns compare
 plt.show()
 ```
 

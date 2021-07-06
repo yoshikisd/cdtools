@@ -1,8 +1,8 @@
 from __future__ import division, print_function, absolute_import
 
-from CDTools.tools import cmath
 from CDTools.tools import initializers
 from CDTools.tools import propagators
+from CDTools.tools import image_processing
 
 import numpy as np
 import torch as t
@@ -19,26 +19,26 @@ def exit_waves_1():
     obj = scipy.misc.ascent()[0:64,0:64].astype(np.complex128)
     arr = np.random.random_sample((64,64))
     obj *= (arr+(1-arr**2)**.5*1j)
-    obj = cmath.complex_to_torch(obj)
+    obj = t.as_tensor(obj)
 
     # Construct wavefront from image
     probe = initializers.gaussian([64, 64], [5, 5], amplitude=1e3)
-    return cmath.cmult(probe,obj)
+    return probe * obj
 
     
 
 def test_far_field(exit_waves_1):
     # Far field diffraction patterns calculated by numpy with zero frequency in center
-    np_result = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(cmath.torch_to_complex(exit_waves_1)),norm='ortho'))
+    np_result = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(exit_waves_1.numpy()),norm='ortho'))
 
-    assert(np.allclose(np_result, cmath.torch_to_complex(propagators.far_field(exit_waves_1))))
+    assert(np.allclose(np_result, propagators.far_field(exit_waves_1).numpy()))
 
 
 
 def test_inverse_far_field(exit_waves_1):
     # We want the inverse far field to map back to the exit waves with no intensity corrections
     # Far field result for exit waves calculated with numpy
-    far_field_np_result = cmath.complex_to_torch(np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(cmath.torch_to_complex(exit_waves_1)),norm='ortho')))
+    far_field_np_result = t.as_tensor(np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(exit_waves_1.numpy()),norm='ortho')))
 
     assert(np.allclose(exit_waves_1, propagators.inverse_far_field(far_field_np_result)))
 
@@ -67,14 +67,14 @@ def test_generate_high_NA_k_intensity_map():
     j = (np.arange(573) - 270)
     Is,Js = np.meshgrid(i,j,indexing='ij')
     wavefield = ((np.abs(Is) < 20) * (np.abs(Js) < 25)).astype(np.complex128)
-    t_wavefield = cmath.complex_to_torch(wavefield).to(dtype=t.float32)
+    t_wavefield = t.as_tensor(wavefield, dtype=t.complex64)
 
     high_NA_propagated = propagators.high_NA_far_field(
         t_wavefield, k_map, intensity_map=intensity_map)
     low_NA_propagated = propagators.far_field(t_wavefield)
 
-    low_NA = cmath.torch_to_complex(low_NA_propagated)
-    high_NA = cmath.torch_to_complex(high_NA_propagated)
+    low_NA = low_NA_propagated.numpy()
+    high_NA = high_NA_propagated.numpy()
 
     # Checking first that for a low-NA propagation they give the same result
     # 1e-4 tolerance seems to be reasonable in this comparison given my
@@ -100,8 +100,8 @@ def test_generate_high_NA_k_intensity_map():
         t_wavefield, k_map, intensity_map=intensity_map)
     low_NA_propagated = propagators.far_field(t_wavefield)
 
-    low_NA = cmath.torch_to_complex(low_NA_propagated)
-    high_NA = cmath.torch_to_complex(high_NA_propagated)
+    low_NA = low_NA_propagated.numpy()
+    high_NA = high_NA_propagated.numpy()
     
     #plt.close('all')
     #plt.imshow(np.abs(low_NA)) 
@@ -121,11 +121,54 @@ def test_generate_high_NA_k_intensity_map():
     # I believe this works, but I still would like to get a second method for
     # simulating at least one diffraction pattern as an independent check
     
-    assert 0
-    
-    
+    #assert 0
 
+def test_near_field_direction():
+    #
+    # The idea is to make sure that near field propagation is consistent
+    # with far-field propagation. Because we consider the Fourier
+    # transform to be the far-field propagator, we should find that
+    # near-field propagation becomes far-field propagation in the limit
+    # that z goes to positive infinity. This consistency requirement
+    # forces a specific choice of sign for near-field propagation - choosing
+    # it incorrectly will make the correct limit obtain at negative
+    # infinity.
+    #
+    # We can check consistency by setting up a gaussian wavefield with an
+    # offset in the far field. Then, we can do some near-field propagation,
+    # and we will ensure that the centroid of the beam moves in the correct
+    # direction. If the sign is incorrect, it will move in the wrong direction.
+
+    x = (np.arange(901) - 400)
+    y = (np.arange(1200) - 500)
+    Ys,Xs = np.meshgrid(y,x)
+    Rs = np.sqrt(Xs**2+Ys**2)
     
+    E0_fourier = t.as_tensor(np.exp(-Rs**2 / (2 * 40**2)),dtype=t.complex64)
+    E0_real = propagators.inverse_far_field(E0_fourier)
+    # This is in the top-left corner in Fourier space
+
+    wavelength = 3e-9 #nm
+    z = 1000e-9
+    asp = propagators.generate_angular_spectrum_propagator(
+        E0_real.shape,(1.5e-9,1e-9),wavelength,z,dtype=t.complex64)
+
+    Ez_real = propagators.near_field(E0_real,asp)
+
+    centroid = image_processing.centroid(t.abs(Ez_real))
+
+    # Assert it's in top half
+    assert centroid[0] < Ez_real.shape[0] // 2
+    # Assert it's in left half
+    assert centroid[1] < Ez_real.shape[1] // 2
+    
+    #plt.imshow(t.abs(E0_fourier))
+    #plt.figure()
+    #plt.imshow(t.abs(E0_real))    
+    #plt.figure()
+    #plt.imshow(t.abs(Ez_real))
+    #plt.show()
+
     
 def test_near_field():
 
@@ -151,17 +194,37 @@ def test_near_field():
 
     # The analytical expression for propagation of a gaussian beam in the
     # paraxial approx
-    Ez = w0 / wz * np.exp(-Rs**2 / wz**2) * np.exp(-1j * k * ( z + Rs**2 / (2 * Rz)) + 1j * np.arctan(z / zr))
-    Ez_nozphase = Ez * np.exp(1j * k * z)
+    # The sign convention I'm using here is opposite from what is on
+    # wikipedia (as of June 2021), but it is I believe the most sensible
+    # choice. By choosing e^(ikx) to be the plane wave that's propagating
+    # in the x direction, we preserve two nice properties:
+    # 1) The time-dependence is e^(-iwt+ikx), which meshes with the choice
+    #    we like to make as physicists of e^(-iwt) for time-dependence
+    # 2) This makes it so that the Fourier transform does far-field
+    #    propagation in direction of light propagation. The logic is as
+    #    follows:
+    #    a) We must assume that light only propagates one direction through
+    #       the plane, in order to have well-defined propagation
+    #    b) Fixing that direction to be the positive direciton of propagation,
+    #       we can consider the in-plane image of a plane wave propagating
+    #       through the plane of interest.
+    #    c) We can ask whether the 2D Fourier transform of that in-plane image
+    #       produces a spot on the same side of zero as the in-plane component
+    #       of k.
+    #    If we choose e^(-ikx) to represent light propagating along K, the
+    #    answer is no, and we find we have to use the inverse FT instead.
+    #    Thus, e^(ikx) is the right choice here.
+    
+    Ez = w0 / wz * np.exp(-Rs**2 / wz**2) * np.exp(1j * k * ( z + Rs**2 / (2 * Rz)) - 1j * np.arctan(z / zr))
+    Ez_nozphase = Ez * np.exp(-1j * k * z)
     
 
     # First we check it normally
     asp = propagators.generate_angular_spectrum_propagator(
-        E0.shape,(1.5e-9,1e-9),wavelength,z,dtype=t.float64)
+        E0.shape,(1.5e-9,1e-9),wavelength,z,dtype=t.complex128)
 
     
-    Ez_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
-    Ez_t = cmath.torch_to_complex(Ez_t)
+    Ez_t = propagators.near_field(t.as_tensor(E0),asp).numpy()
     
     # Check for at least 10^-3 relative accuracy in this scenario
     assert np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez))
@@ -169,8 +232,7 @@ def test_near_field():
 
     Emz = np.conj(Ez)
 
-    Emz_t = propagators.inverse_near_field(cmath.complex_to_torch(E0),asp)
-    Emz_t = cmath.torch_to_complex(Emz_t)    
+    Emz_t = propagators.inverse_near_field(t.as_tensor(E0),asp).numpy()
 
     # Again, 10^-3 is about all the accuracy we can expect
     assert np.max(np.abs(Emz-Emz_t)) < 1e-3 * np.max(np.abs(Emz))
@@ -178,11 +240,10 @@ def test_near_field():
     # Then, we check it with the phase correction
     asp = propagators.generate_angular_spectrum_propagator(
         E0.shape,(1.5e-9,1e-9),wavelength,z,remove_z_phase=True,
-        dtype=t.float64)
+        dtype=t.complex128)
     
     
-    Ez_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
-    Ez_t = cmath.torch_to_complex(Ez_t)
+    Ez_t = propagators.near_field(t.as_tensor(E0),asp).numpy()
     
     # Check for at least 10^-3 relative accuracy in this scenario
     assert np.max(np.abs(Ez_nozphase-Ez_t)) < 1e-3 * np.max(np.abs(Ez_nozphase))
@@ -190,12 +251,20 @@ def test_near_field():
 
     Emz = np.conj(Ez_nozphase)
 
-    Emz_t = propagators.inverse_near_field(cmath.complex_to_torch(E0),asp)
-    Emz_t = cmath.torch_to_complex(Emz_t)    
+    Emz_t = propagators.inverse_near_field(t.as_tensor(E0),asp).numpy()
 
     # Again, 10^-3 is about all the accuracy we can expect
     assert np.max(np.abs(Emz-Emz_t)) < 1e-3 * np.max(np.abs(Emz))
 
+    # Finally, we check that the bandlimiting at least does something
+    asp = propagators.generate_angular_spectrum_propagator(
+        E0.shape,(1.5e-9,1e-9),wavelength,z,remove_z_phase=True,
+        dtype=t.complex128, bandlimit=0.3)
+
+    assert asp[140,0] == 0
+    assert asp[0,180] == 0
+    assert asp[130,0] != 0
+    assert asp[0,175] != 0
     
 def test_generalized_near_field():
 
@@ -236,14 +305,18 @@ def test_generalized_near_field():
         return Zs / (Zs**2 + zr**2)
     
     def get_E(Xs, Ys, Zs, correct=False):
-        # if correct is True, remove the e^(-ikz) dependence
+        # Again, this follows the convention opposite from Wikipedia. See
+        # the note in test_angular_spectrum_propagator.
+        
+        # if correct is True, remove the e^(ikz) dependence
+        
         Rs_sq = Xs**2 + Ys**2
         Wzs = get_w(Zs)
         E = w0 / Wzs * np.exp(-Rs_sq / Wzs**2) *\
-            np.exp(-1j * k * ( Zs + Rs_sq * get_inv_R(Zs) / 2) + \
-                   1j * np.arctan(Zs / zr))
+            np.exp(1j * k * ( Zs + Rs_sq * get_inv_R(Zs) / 2) + \
+                   - 1j * np.arctan(Zs / zr))
         if correct:
-            E = E * np.exp(1j * k * Zs)
+            E = E * np.exp(-1j * k * Zs)
         return E
     
 
@@ -338,22 +411,22 @@ def test_generalized_near_field():
             E0 = get_E(Xs,Ys,Zs_0, correct=False)
             Ez = get_E(Xs_prop,Ys_prop,Zs_prop, correct=False)
             asp = propagators.generate_generalized_angular_spectrum_propagator(
-                E0.shape,new_basis,wavelength,offset_vec,dtype=t.float64)
+                E0.shape,new_basis,wavelength,offset_vec,dtype=t.complex128)
         elif str(propagation_vec) == 'offset':
             E0 = get_E(Xs,Ys,Zs_0, correct=True)
             Ez = get_E(Xs_prop,Ys_prop,Zs_prop, correct=True)
             asp = propagators.generate_generalized_angular_spectrum_propagator(
                 E0.shape,new_basis,wavelength,offset_vec,
-                dtype=t.float64, propagate_along_offset=True)
+                dtype=t.complex128, propagate_along_offset=True)
         else:
             E0 = get_E(Xs,Ys,Zs_0, correct=True)
             Ez = get_E(Xs_prop,Ys_prop,Zs_prop, correct=True)
             asp = propagators.generate_generalized_angular_spectrum_propagator(
                     E0.shape,new_basis,wavelength,offset_vec,
-                    dtype=t.float64, propagation_vector=propagation_vec)
+                    dtype=t.complex128, propagation_vector=propagation_vec)
 
-        Ez_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
-        Ez_t = cmath.torch_to_complex(Ez_t)
+        Ez_t = propagators.near_field(t.as_tensor(E0),asp).numpy()
+        
         # Check for at least 10^-3 relative accuracy in this scenario
         if not np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez)):
         #if True:
@@ -362,14 +435,17 @@ def test_generalized_near_field():
             plt.figure()
             plt.imshow(np.angle(Ez))
             plt.figure()
+            plt.imshow(np.abs(Ez_t))
+            plt.figure()
+            plt.imshow(np.angle(Ez_t))
+            plt.figure()
             plt.imshow(np.abs(Ez-Ez_t)/np.max(np.abs(Ez)))
             plt.show()
             
         assert np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez))
         
             
-        Em0_t = propagators.inverse_near_field(cmath.complex_to_torch(Ez),asp)
-        Em0_t = cmath.torch_to_complex(Em0_t)    
+        Em0_t = propagators.inverse_near_field(t.as_tensor(Ez),asp).numpy()
         
         # Again, 10^-3 is about all the accuracy we can expect
         assert np.max(np.abs(E0-Em0_t)) < 1e-3 * np.max(np.abs(E0))
@@ -388,9 +464,8 @@ def test_generalized_near_field():
     E0 = get_E(Xs,Ys,Zs_0, correct=True)
     asp = propagators.generate_generalized_angular_spectrum_propagator(
                     E0.shape, new_basis, wavelength,offset_vec,
-                    dtype=t.float64, propagation_vector=propagation_vec)
-    Ez_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
-    Ez_t = cmath.torch_to_complex(Ez_t)
+                    dtype=t.complex128, propagation_vector=propagation_vec)
+    Ez_t = propagators.near_field(t.as_tensor(E0),asp).numpy()
         
 
     for Rrand in Rrands:
@@ -400,9 +475,9 @@ def test_generalized_near_field():
         rot_prop = np.dot(Rrand, propagation_vec)
         asp = propagators.generate_generalized_angular_spectrum_propagator(
                     E0.shape, rot_basis, wavelength, rot_offset,
-                    dtype=t.float64, propagation_vector=rot_prop)
-        Ez_rot_t = propagators.near_field(cmath.complex_to_torch(E0),asp)
-        Ez_rot_t = cmath.torch_to_complex(Ez_rot_t)       
+                    dtype=t.complex128, propagation_vector=rot_prop)
+        Ez_rot_t = propagators.near_field(t.as_tensor(E0),asp).numpy()
+
         assert np.max(np.abs(Ez_t-Ez_rot_t)) < 1e-3 * np.max(np.abs(Ez_t))
         
 
@@ -421,9 +496,10 @@ def test_inverse_near_field():
     E0 = np.exp(-Rs**2 / w0**2)
 
     asp = propagators.generate_angular_spectrum_propagator(
-        E0.shape,(1.5e-9,1e-9),wavelength,z,dtype=t.float64)
+        E0.shape,(1.5e-9,1e-9),wavelength,z,dtype=t.complex128)
 
-    E0 = cmath.complex_to_torch(E0)
+
+    E0 = t.as_tensor(E0,dtype=t.complex128)
     E_prop = propagators.near_field(E0,asp)
     
     E_backprop = propagators.inverse_near_field(E_prop, asp)

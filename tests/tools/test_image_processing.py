@@ -5,7 +5,7 @@ import pytest
 import numpy as np
 import torch as t
 
-from CDTools.tools import image_processing, cmath, initializers, interactions
+from CDTools.tools import image_processing, initializers, interactions
 from scipy import ndimage
 from scipy.signal import fftconvolve
 
@@ -32,8 +32,8 @@ def test_centroid_sq():
     assert t.allclose(centroid, t.Tensor(sp_centroid))
 
     # Test complex with multiple ims
-    ims = t.rand((5,30,40,2))
-    np_ims = cmath.torch_to_complex(ims)
+    ims = t.rand((5,30,40)) + 1j * t.rand((5,30,40))
+    np_ims = ims.numpy()
     sp_centroids = [ndimage.measurements.center_of_mass(np.abs(im)**2)
                     for im in np_ims]
     centroids = image_processing.centroid_sq(ims, comp=True)
@@ -51,12 +51,12 @@ def test_sinc_subpixel_shift():
     Ys,Xs = np.meshgrid(xs,xs)
     sinc_im = np.sinc(Xs-0.3) * np.sinc(Ys-0.6)
 
-    torch_im = cmath.complex_to_torch(im)
+    torch_im = t.as_tensor(im)
     test_im = image_processing.sinc_subpixel_shift(torch_im,(0.3,0.6))
 
     # The fidelity isn't great due to the FFT-based approach, so we need
     # a pretty relaxed condition
-    assert np.max(np.abs(sinc_im - cmath.torch_to_complex(test_im))) < 0.005
+    assert np.max(np.abs(sinc_im - test_im.numpy())) < 0.005
 
 
 def test_find_pixel_shift():
@@ -69,13 +69,13 @@ def test_find_pixel_shift():
 
     # Test a real and complex im
     big_im = t.rand((30,70))
-    im1 = t.stack((big_im[:-5,10:],t.zeros_like(big_im[:-5,10:])),dim=-1)
+    im1 = big_im[:-5,10:].to(dtype=t.complex64)
     im2 = big_im[5:,:-10]
     assert t.all(image_processing.find_pixel_shift(im1,im2) == t.LongTensor([5,-10]))
     assert t.all(image_processing.find_pixel_shift(im2,im1) == t.LongTensor([-5,10]))
     
     # Test two complex ims
-    big_im = t.rand((45,45,2))
+    big_im = t.rand((45,45)) + 1j * t.rand((45,45))
     im1 = big_im[:-5,:-4]
     im2 = big_im[5:,4:]
     assert t.all(image_processing.find_pixel_shift(im1,im2) == t.LongTensor([5,4]))
@@ -83,13 +83,13 @@ def test_find_pixel_shift():
 
 def test_find_subpixel_shift():
     # We can do this by creating a test probe and a test object
-    test_probe = t.rand((70,70,2))
-    test_obj = t.ones((300,300,2))
+    test_probe = t.rand((70,70)) + 1j * t.rand((70,70))
+    test_obj = t.ones((300,300)) + 1j * t.rand((300,300))
 
     shift = t.tensor((0.8,0.75))
     
-    im = interactions.ptycho_2D_sinc(test_probe, test_obj, shift)
-
+    im = interactions.ptycho_2D_sinc(test_probe, test_obj, shift, multiple_modes=False)
+    
     retrieved_shift = image_processing.find_subpixel_shift(im, test_probe, search_around=(0,0), resolution=50)
     # tolerance of 0.03 on this measurement
     assert t.all(t.abs(shift - retrieved_shift) < 0.03)
@@ -98,12 +98,13 @@ def test_find_subpixel_shift():
 def test_find_shift():
 
     # We can do this by creating a test probe and a test object
-    test_probe = t.rand((200,200,2))
-    test_obj = t.ones((300,300,2))
+    test_probe = t.rand((200,200)) + 1j * t.rand((200,200)) 
+    test_obj = t.ones((300,300)) + 1j *  t.rand((300,300)) 
 
     shift = t.tensor((0.8,0.75))
     
-    im = interactions.ptycho_2D_sinc(test_probe, test_obj, shift)[:-40,:-6]
+    im = interactions.ptycho_2D_sinc(test_probe, test_obj, shift,
+                                     multiple_modes=False)[:-40,:-6]
 
     retrieved_shift = image_processing.find_shift(im, test_probe[40:,6:], resolution=50)
     # tolerance of 0.03 on this measurement
@@ -111,14 +112,14 @@ def test_find_shift():
 
     
 def test_convolve_1d():
-    from matplotlib import pyplot as plt
     test_image = np.random.rand(400,300)
     #test_image = np.hstack((np.ones((400,150)),np.zeros((400,150))))
     xs = np.linspace(-100,100,300)
     kernel = 1/(1+xs**2)
 
     # First, we test with everything real, dim=1
-    convolved = image_processing.convolve_1d(t.Tensor(test_image),t.Tensor(kernel),dim=1)
+    convolved = image_processing.convolve_1d(t.as_tensor(test_image),
+                                             t.as_tensor(kernel),dim=1)
 
     np_result = np.abs(np.fft.ifft(np.fft.fft(test_image,axis=1) * np.fft.fft(np.fft.ifftshift(kernel)), axis=1))
     assert np.allclose(convolved.numpy(),np_result)
@@ -128,13 +129,16 @@ def test_convolve_1d():
     kernel = 1/(1+xs**2)
 
     # Then with dim=0, and a non-fftshifted kernel
-    convolved = image_processing.convolve_1d(t.Tensor(test_image),t.Tensor(np.fft.ifftshift(kernel)), fftshift_kernel=False)
+    convolved = image_processing.convolve_1d(t.as_tensor(test_image),
+                                             t.as_tensor(np.fft.ifftshift(kernel)),
+                                             fftshift_kernel=False)
 
     np_result = np.abs(np.fft.ifft(np.fft.fft(test_image,axis=0) * np.fft.fft(np.fft.ifftshift(kernel))[:,None], axis=0))
     assert np.allclose(convolved.numpy(),np_result)
 
     # And finally with complex input
-    convolved = cmath.torch_to_complex(image_processing.convolve_1d(cmath.complex_to_torch(test_image),cmath.complex_to_torch(kernel)))
+    convolved = image_processing.convolve_1d(t.as_tensor(test_image,dtype=t.complex64),
+                                             t.as_tensor(kernel,dtype=t.complex64)).numpy()
 
     np_result = np.fft.ifft(np.fft.fft(test_image,axis=0) * np.fft.fft(np.fft.ifftshift(kernel))[:,None], axis=0)
     assert np.allclose(convolved,np_result)

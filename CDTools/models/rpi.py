@@ -4,7 +4,6 @@ import torch as t
 from CDTools.models import CDIModel
 from CDTools.datasets import Ptycho2DDataset
 from CDTools import tools
-from CDTools.tools import cmath
 from CDTools.tools import plotting as p
 from CDTools.tools.interactions import RPI_interaction
 from CDTools.tools import initializers
@@ -51,6 +50,10 @@ __all__ = ['RPI']
 __all__ = ['RPI']
 
 class RPI(CDIModel):
+
+    @property
+    def obj(self):
+        return t.complex(self.obj_real, self.obj_imag)
     
     def __init__(self, wavelength, detector_geometry, probe_basis,
                  probe, obj_guess, detector_slice=None, 
@@ -73,8 +76,8 @@ class RPI(CDIModel):
                 
         self.probe_basis = t.Tensor(probe_basis)
         
-        scale_factor = t.Tensor([probe.shape[-2]/obj_guess.shape[-2],
-                                 probe.shape[-3]/obj_guess.shape[-3]])
+        scale_factor = t.Tensor([probe.shape[-1]/obj_guess.shape[-1],
+                                 probe.shape[-2]/obj_guess.shape[-2]])
         self.obj_basis = self.probe_basis / scale_factor
         self.detector_slice = detector_slice
 
@@ -89,12 +92,17 @@ class RPI(CDIModel):
             self.mask = t.BoolTensor(mask)
         
             
-        self.probe = probe.to(t.float32)
+        self.probe = probe.to(t.complex64)
 
-        if obj_guess.dim() == 3:
-            obj_guess = obj_guess[None,:,:,:]
+        if obj_guess.dim() == 2:
+            obj_guess = obj_guess[None,:,:]
             
-        self.obj = t.nn.Parameter(obj_guess.to(t.float32))
+
+        self.obj_real = t.nn.Parameter(obj_guess.real.to(t.float32))
+        self.obj_imag = t.nn.Parameter(obj_guess.imag.to(t.float32))
+        
+        # Wait for LBFGS to be updated for complex-valued parameters
+        #self.obj = t.nn.Parameter(obj_guess.to(t.float32))
         
         if background is None:
             if detector_slice is not None:
@@ -146,7 +154,7 @@ class RPI(CDIModel):
                                                    oversampling=oversampling)
 
         if not isinstance(probe,t.Tensor):
-            probe = cmath.complex_to_torch(probe)
+            probe = t.as_tensor(probe)
         
         # Potentially need all of this orientation stuff later
         
@@ -190,8 +198,8 @@ class RPI(CDIModel):
             # I think something to do with the fact that the object is defined
             # on a coarser grid needs to be accounted for here that is not
             # accounted for yet
-            scale = t.sum(patterns[0]) / t.sum(cmath.cabssq(probe))
-            obj_guess = scale * cmath.expi(2 * np.pi * t.rand([n_modes,]+obj_size))
+            scale = t.sum(patterns[0]) / t.sum(t.abs(probe)**2)
+            obj_guess = scale * t.exp(2j * np.pi * t.rand([n_modes,]+obj_size))
         elif initialization.lower().strip() == 'spectral':
             if background is not None:
                 obj_guess = initializers.RPI_spectral_init(
@@ -218,9 +226,9 @@ class RPI(CDIModel):
 
 
     def random_init(self, pattern):
-        scale = t.sum(pattern) / t.sum(cmath.cabssq(self.probe))
-        self.obj.data = scale * cmath.expi(
-            2 * np.pi * t.rand(self.obj.shape[:-1])).to(
+        scale = t.sum(pattern) / t.sum(t.abs(self.probe)**2)
+        self.obj.data = scale * t.exp(
+            2j * np.pi * t.rand(self.obj.shape)).to(
                 dtype=self.obj.dtype, device=self.obj.device)
         
     def spectral_init(self, pattern):
@@ -249,8 +257,8 @@ class RPI(CDIModel):
             pr = self.probe[i]
             # Here we have a 3D probe (one single mode)
             # and a 4D object (multiple modes mixing incoherently)
-            exit_waves = RPI_interaction(pr[:,:,:],
-                                         self.obj_support[None,:,:] * self.obj)
+            exit_waves = RPI_interaction(pr,
+                                         self.obj_support * self.obj)
                 
             all_exit_waves.append(exit_waves)
 
@@ -266,7 +274,7 @@ class RPI(CDIModel):
         try:
             # will fail if index has no length, for example when index
             # is just an int. In this case, we just do nothing instead
-            output = output.unsqueeze(1).repeat(1,len(index),1,1,1)
+            output = output.unsqueeze(0).repeat(1,len(index),1,1,1)
         except TypeError:
             pass
         
@@ -297,8 +305,8 @@ class RPI(CDIModel):
         #return tools.losses.poisson_nll(real_data, sim_data, mask=mask)
 
     def regularizer(self, factors):
-        return factors[0] * t.sum(cmath.cabssq(self.obj[0,:,:,:])) \
-            + factors[1] * t.sum(cmath.cabssq(self.obj[1:,:,:,:]))
+        return factors[0] * t.sum(t.abs(self.obj[0,:,:])**2) \
+            + factors[1] * t.sum(t.abs(self.obj[1:,:,:])**2)
         
     def to(self, *args, **kwargs):
         super(RPI, self).to(*args, **kwargs)
@@ -330,7 +338,7 @@ class RPI(CDIModel):
     plot_list = [
         ('Root Sum Squared Amplitude of all Probes',
          lambda self, fig: p.plot_amplitude(
-             np.sqrt(np.sum(cmath.cabssq(self.probe).cpu().numpy(),axis=0)),
+             np.sqrt(np.sum((t.abs(self.probe)**2).cpu().numpy(),axis=0)),
              fig=fig, basis=self.probe_basis)),
         ('Dominant Object Amplitude', 
          lambda self, fig: p.plot_amplitude(self.obj[0], fig=fig,
@@ -355,13 +363,13 @@ class RPI(CDIModel):
         # continues to use that standard pattern
         probe_basis = self.probe_basis.detach().cpu().numpy()
         obj_basis = self.obj_basis.detach().cpu().numpy()
-        probe = cmath.torch_to_complex(self.probe.detach().cpu())
+        probe = self.probe.detach().cpu().numpy()
         # Provide the option to save out the subdominant objects or
         # just the dominant one
         if full_obj:
-            obj = cmath.torch_to_complex(self.obj.detach().cpu())
+            obj = self.obj.detach().cpu().numpy()
         else:
-            obj = cmath.torch_to_complex(self.obj[0].detach().cpu())
+            obj = self.obj[0].detach().cpu().numpy()
         background = self.background.detach().cpu().numpy()**2
         
         return {'probe_basis': probe_basis, 'obj_basis': obj_basis,

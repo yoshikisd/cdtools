@@ -17,13 +17,11 @@ having numpy and torch defined under CDTools.tools.cmath, you know?
 from __future__ import division, print_function, absolute_import
 
 
-from CDTools.tools import cmath
 from CDTools.tools import losses
 from CDTools.tools import data
 from CDTools.tools import image_processing
 from CDTools.tools import initializers
 from CDTools.tools import plotting
-from CDTools.tools import projectors
 from CDTools.tools import interactions
 from CDTools.tools import propagators
 from CDTools.tools import measurements

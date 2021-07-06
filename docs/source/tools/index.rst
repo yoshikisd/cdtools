@@ -4,7 +4,6 @@ Tools
 .. toctree::
    :maxdepth: 1
 
-   cmath
    image_processing
    data
    initializers
@@ -14,4 +13,3 @@ Tools
    losses
    plotting
    analysis
-   projectors
