@@ -1,5 +1,3 @@
-from __future__ import division, print_function, absolute_import
-
 import CDTools
 from matplotlib import pyplot as plt
 import numpy as np

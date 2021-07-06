@@ -1,9 +1,9 @@
-from __future__ import division, print_function, absolute_import
-
 import CDTools
 from matplotlib import pyplot as plt
-import pickle
+from scipy import io
 
+
+# A simple dataset collected from our optical setup
 filename = 'example_data/lab_ptycho_data.cxi'
 dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
 
@@ -19,14 +19,14 @@ dataset.get_as(device='cuda')
 
 
 model.translation_offsets.requires_grad = False
-for i, loss in enumerate(model.Adam_optimize(50, dataset)):
+for loss in model.Adam_optimize(50, dataset):
     model.inspect(dataset)
-    print(i,loss)
+    print(model.report())
 
 model.tidy_probes()
-exit()
-with open('example_reconstructions/lab_ptycho.pickle', 'wb') as f:
-    pickle.dump(model.save_results(dataset),f)
+
+io.savemat('example_reconstructions/lab_ptycho.mat',
+           model.save_results(dataset))
 
 model.compare(dataset)
 plt.show()

@@ -369,7 +369,7 @@ class Bragg2DPtycho(CDIModel):
         
         pix_trans -= self.min_translation
         props -= self.median_propagation
-
+        
         if self.translation_offsets is not None:
             pix_trans += self.translation_scale * self.translation_offsets[index]
 
@@ -379,6 +379,8 @@ class Bragg2DPtycho(CDIModel):
 
         
         for j in range(prs.shape[0]):
+            # I believe this -1 sign is in error, but I need a dataset with
+            # well understood geometry to figure it out
             propagator = t.exp(
                 1j*(props[j]*(2*np.pi)/self.wavelength)
                 * self.universal_propagator)

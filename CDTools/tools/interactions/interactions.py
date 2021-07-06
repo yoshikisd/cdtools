@@ -15,7 +15,6 @@ __all__ = ['translations_to_pixel', 'pixel_to_translations',
            'RPI_interaction']
 
 
-
 def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0.,0.,1.])):
     """Takes real space translations and outputs them in pixel space
     
@@ -448,7 +447,6 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
         I,J = t.meshgrid(i,j)
         I = 2 * np.pi * I / probe.shape[-2]
         J = 2 * np.pi * J / probe.shape[-1]
-
         phase_masks = t.exp(1j*(-subpixel_translations[:,0,None,None]*I
                                 -subpixel_translations[:,1,None,None]*J))
         
@@ -461,6 +459,7 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
 
         shifted_probe = t.fft.ifft2(t.fft.ifftshift(shifted_fft_probe,
                                                     dim=(-1,-2)))
+
         if multiple_modes: # Multi-mode probe
             output = shifted_probe * selections[...,None,:,:]
         else:

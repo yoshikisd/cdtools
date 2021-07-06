@@ -164,8 +164,8 @@ def plot_image(im, plot_func=lambda x: x, fig=None, basis=None, units='$\\mu$m',
             basis_norm = np.linalg.norm(np_basis, axis = 0)
             basis_norm = basis_norm * get_units_factor(units)
 
-            extent = [0, to_plot.shape[-1]*basis_norm[1], 0,
-                      to_plot.shape[-2]*basis_norm[0]]
+            extent = [0, im.shape[-1]*basis_norm[1], 0,
+                      im.shape[-2]*basis_norm[0]]
         else:
             extent=None
 

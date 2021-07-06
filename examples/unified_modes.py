@@ -1,11 +1,7 @@
-from __future__ import division, print_function, absolute_import
-
 import CDTools
-from CDTools.tools import plotting as p
 from matplotlib import pyplot as plt
-import pickle
-import torch as t
-from CDTools.tools import cmath
+from scipy import io
+
 
 filename = 'example_data/lab_ptycho_data.cxi'
 dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
@@ -21,21 +17,21 @@ model.to(device='cuda')
 dataset.get_as(device='cuda')
 
 model.translation_offsets.requires_grad = False
-for i, loss in enumerate(model.Adam_optimize(200, dataset)):
+for loss in model.Adam_optimize(200, dataset):
     model.inspect(dataset)
-    print(i,loss)
+    print(model.report())
 
 model.tidy_probes()
 
-for i, loss in enumerate(model.Adam_optimize(200, dataset, lr=0.0001)):
+for loss in model.Adam_optimize(200, dataset, lr=0.0001):
     model.inspect(dataset)
-    print(i,loss)
+    print(model.report())
 
 model.tidy_probes(normalize=True)
 model.inspect(dataset)
                          
-with open('example_reconstructions/unified_modes.pickle', 'wb') as f:
-    pickle.dump(model.save_results(dataset),f)
+io.savemat('example_reconstructions/unified_modes.mat',
+           model.save_results(dataset))
 
 model.compare(dataset)
 plt.show()

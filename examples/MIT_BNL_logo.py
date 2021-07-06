@@ -1,5 +1,3 @@
-from __future__ import division, print_function, absolute_import
-
 import CDTools
 from matplotlib import pyplot as plt
 
@@ -23,7 +21,7 @@ dataset.mask = dataset.mask[70:-70,70:-70]
 model = CDTools.models.FancyPtycho.from_dataset(dataset,
                                                 translation_scale = 4,
                                                 n_modes=2,
-                                                propagation_distance=-73e-6)
+                                                propagation_distance=73e-6)
 
 # Move to the GPU
 model.to(device='cuda')
@@ -32,20 +30,20 @@ dataset.get_as(device='cuda')
 
 # We turn off position reconstruction for the first phase
 model.translation_offsets.requires_grad = False
-for i, loss in enumerate(model.Adam_optimize(10, dataset, batch_size=15)):
+for loss in model.Adam_optimize(10, dataset, batch_size=15):
     model.inspect(dataset)
-    print(i,loss)
+    print(model.report())
 
 # And we turn it on for the second phase
 model.translation_offsets.requires_grad = True
-for i, loss in enumerate(model.Adam_optimize(20, dataset, batch_size=15)):
+for loss in model.Adam_optimize(20, dataset, batch_size=15):
     model.inspect(dataset)
-    print(i,loss)
+    print(model.report())
     
 # The third phase lowers the rate further
-for i, loss in enumerate(model.Adam_optimize(10, dataset, batch_size=15, lr=0.0005)):
+for loss in model.Adam_optimize(10, dataset, batch_size=15, lr=0.0005):
     model.inspect(dataset)
-    print(i,loss)
+    print(model.report())
 
     
 model.inspect(dataset)

@@ -178,7 +178,6 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
 
 
     # And we extract the shift from the window
-    print(upsampled.shape)
     sh = t.as_tensor(upsampled.shape, device=upsampled.device)
     cormax = t.as_tensor([t.div(t.argmax(upsampled), sh[1],
                                 rounding_mode='floor'),
@@ -186,9 +185,6 @@ def find_subpixel_shift(im1, im2, search_around=(0,0), resolution=10):
                          device=upsampled.device)
 
     sh_over_2 = t.div(sh,2,rounding_mode='floor')
-    print(cormax.shape)
-    print(sh.shape)
-    print(sh_over_2.shape)
     subpixel_shift = ((cormax + sh_over_2) % sh - sh_over_2).to(dtype=upsampled.dtype)
 
     return search_around.to(device=upsampled.device, dtype=upsampled.dtype) + \
