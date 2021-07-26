@@ -21,6 +21,7 @@ __all__ = ['get_entry_info',
            'get_mask',
            'get_dark',
            'get_data',
+           'get_shot_to_shot_info',
            'get_ptycho_translations',
            'create_cxi',
            'add_entry_info',
@@ -30,7 +31,9 @@ __all__ = ['get_entry_info',
            'add_mask',
            'add_dark',
            'add_data',
+           'add_shot_to_shot_info',
            'add_ptycho_translations']
+
 
 #
 # Functions to inspect the basic attributes of a cxi file represented as an
@@ -365,6 +368,48 @@ def get_data(cxi_file, cut_zeroes = True):
     return data, axes
 
 
+def get_shot_to_shot_info(cxi_file, field_name):
+    """Gets a specified dataset of shot-to-shot information from the cxi file
+
+    The data is assumed to be in the form of an array, with one dimension
+    being the number of patterns being stored in the dataset. This is
+    helpful for storing additional readback data on the shot-to-shot
+    level that may be important but doens't have a clearly defined
+    place to be stored in the .cxi file specification. Such data includes
+    shot-to-shot probe intensity measurements, polarizer positions, etc.
+
+    It will look for this data in 3 places (in the following order):
+
+    1) entry_1/data_1/<field_name>
+    2) entry_1/sample_1/geometry_1/<field_name>
+    3) entry_1/instrument_1/detector_1/<field_name>
+
+    This function is also used internally to read out the translations
+    associated with a ptychography experiment
+
+    Parameters
+    ----------
+    cxi_file : h5py.File
+        A file object to be read
+    field_name : str
+        The name of the field to be read from
+
+    Returns
+    -------
+    data : np.array
+        An array storing the translations defined in the cxi file
+    """
+    if 'entry_1/data_1/' + field_name in cxi_file:
+        pull_from = 'entry_1/data_1/' + field_name
+    elif 'entry_1/sample_1/geometry_1/' + field_name in cxi_file:
+        pull_from = 'entry_1/sample_1/geometry_1/' + field_name
+    elif 'entry_1/instrument_1/detector_1/' in cxi_file:
+        pull_from = 'entry_1/instrument_1/detector_1/' + field_name
+    else:
+        raise KeyError('Data is not defined within cxi file')
+
+    return np.array(cxi_file[pull_from]).astype(np.float32)
+
 
 def get_ptycho_translations(cxi_file):
     """Gets an array of x,y,z translations, if such an array has been defined in the file
@@ -382,27 +427,14 @@ def get_ptycho_translations(cxi_file):
     -------
     translations : np.array
         An array storing the translations defined in the cxi file
-    axes : list(str)
-        A list of the axes defined in the axes attribute, if any
-
     """
 
-    if 'entry_1/data_1/translation' in cxi_file:
-        pull_from = 'entry_1/data_1/translation'
-    elif 'entry_1/sample_1/geometry_1/translation' in cxi_file:
-        pull_from = 'entry_1/sample_1/geometry_1/translation'
-    elif 'entry_1/instrument_1/detector_1/translation' in cxi_file:
-        pull_from = 'entry_1/instrument_1/detector_1/translation'
-    else:
-        raise KeyError('Translations are not defined within cxi file')
-
-    translations = -np.array(cxi_file[pull_from]).astype(np.float32)
-    return translations
-
+    translations = get_shot_to_shot_info(cxi_file, 'translation')
+    return -translations
 
 
 #
-# It might be useful to make some helper functions to help write cxi files
+# Now we move on to the helper functions for writing CXI files
 #
 
 
@@ -650,6 +682,70 @@ def add_data(cxi_file, data, axes=None):
             axes_str = str(axes)
         det1['data'].attrs['axes'] = np.string_(axes_str)
 
+        
+def add_shot_to_shot_info(cxi_file, data, field_name):
+    """Adds a specified dataset of shot-to-shot information to the cxi file
+
+    The data is assumed to be in the form of an array, with one dimension
+    being the number of patterns being stored in the dataset. This is
+    helpful for storing additional readback data on the shot-to-shot
+    level that may be important but doens't have a clearly defined
+    place to be stored in the .cxi file specification. Such data includes
+    shot-to-shot probe intensity measurements, polarizer positions, etc.
+
+    This function is also used internally to store the translations
+    associated with a ptychography experiment
+    
+    It will store this data in 3 places:
+
+    1) The entry_1/sample_1/geometry_1/<field_name> path
+    2) A softlink at entry_1/data_1/<field_name>
+    3) A softlink at entry_1/instrument_1/detector_1/<field_name>
+
+    The geometry and detector paths may not always be relevant, but this
+    ensures that the data is always available in any of the places that
+    an eventual reader may go to look for, e.g., the translations.
+
+    Parameters
+    ----------
+    cxi_file : h5py.File
+        The file to add the translations to
+    data : array
+        The data to be saved
+    field_name : str
+        The field name to save the data under
+    """
+    
+    if 'entry_1/sample_1' not in cxi_file:
+        cxi_file['entry_1'].create_group('sample_1')
+    s1 = cxi_file['entry_1/sample_1']
+
+    if 'geometry_1' not in s1:
+        s1.create_group('geometry_1')
+    g1 = s1['geometry_1']
+
+    if 'entry_1/data_1' not in cxi_file:
+        cxi_file['entry_1'].create_group('data_1')
+    data1 = cxi_file['entry_1/data_1']
+
+    if 'entry_1/instrument_1' not in cxi_file:
+        cxi_file['entry_1'].create_group('instrument_1')
+    i1 = cxi_file['entry_1/instrument_1']
+    if 'detector_1' not in i1:
+        i1.create_group('detector_1')
+    det1 = i1['detector_1']
+
+
+    if isinstance(data, t.Tensor):
+        data = data.detach().cpu().numpy()
+
+
+    g1.create_dataset(field_name, data=data)
+    data1[field_name] = h5py.SoftLink('/entry_1/sample_1/geometry_1/'
+                                      + field_name)
+    det1[field_name] = h5py.SoftLink('/entry_1/sample_1/geometry_1/'
+                                      + field_name)
+
 
 def add_ptycho_translations(cxi_file, translations):
     """Adds the specified translations to the cxi file
@@ -671,34 +767,8 @@ def add_ptycho_translations(cxi_file, translations):
     translations : array
         The translations to be saved
     """
-
-    if 'entry_1/sample_1' not in cxi_file:
-        cxi_file['entry_1'].create_group('sample_1')
-    s1 = cxi_file['entry_1/sample_1']
-
-    if 'geometry_1' not in s1:
-        s1.create_group('geometry_1')
-    g1 = s1['geometry_1']
-
-    if 'entry_1/data_1' not in cxi_file:
-        cxi_file['entry_1'].create_group('data_1')
-    data1 = cxi_file['entry_1/data_1']
-
-    if 'entry_1/instrument_1' not in cxi_file:
-        cxi_file['entry_1'].create_group('instrument_1')
-    i1 = cxi_file['entry_1/instrument_1']
-    if 'detector_1' not in i1:
-        i1.create_group('detector_1')
-    det1 = i1['detector_1']
-
-
-    if isinstance(translations, t.Tensor):
-        translations = translations.detach().cpu().numpy()
-
     # accounting for the different definition between cxi files and
     # CDTools
     translations = -translations
 
-    g1.create_dataset('translation', data=translations)
-    data1['translation'] = h5py.SoftLink('/entry_1/sample_1/geometry_1/translation')
-    det1['translation'] = h5py.SoftLink('/entry_1/sample_1/geometry_1/translation')
+    add_shot_to_shot_info(cxi_file, translations, 'translation')

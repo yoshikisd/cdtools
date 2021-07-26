@@ -10,6 +10,7 @@ import torch as t
 # that any optimizations in the future don't change the results
 
 def test_amplitude_mse():
+    
     # Make some fake data
     data = np.random.rand(10,100,100)
     # And add some noise to it

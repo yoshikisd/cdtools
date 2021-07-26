@@ -4,8 +4,7 @@ import torch as t
 from copy import copy
 import h5py
 import pathlib
-
-from CDTools.datasets import CDataset
+from CDTools.datasets import CDataset, Ptycho2DDataset
 from CDTools.tools import data as cdtdata
 from CDTools.tools import plotting
 from torch.utils import data as torchdata
@@ -13,10 +12,10 @@ from matplotlib import pyplot as plt
 from matplotlib.widgets import Slider
 from matplotlib import ticker
 
-__all__ = ['Ptycho2DDataset']
+__all__ = ['PolarizedPtycho2DDataset']
 
 
-class Ptycho2DDataset(CDataset):
+class PolarizedPtycho2DDataset(Ptycho2DDataset):
     """The standard dataset for a 2D ptychography scan
 
     Subclasses datasets.CDataset
@@ -25,9 +24,9 @@ class Ptycho2DDataset(CDataset):
     It should save and load files compatible with most reconstruction
     programs, although it is only tested against SHARP.
     """
-    def __init__(self, translations, patterns, axes=None, *args, **kwargs):
-        """The __init__ function allows construction from python objects.
 
+    def __init__(self, translations, polarizer_angles, analyzer_angles, patterns, axes=None, *args, **kwargs):
+        """The __init__ function allows construction from python objects.
 
         The detector_geometry dictionary is defined to have the
         entries defined by the outputs of data.get_detector_geometry.
@@ -35,12 +34,13 @@ class Ptycho2DDataset(CDataset):
 
         Parameters
         ----------
-        translations : array
+        translations : array (nx3 t.tensor when polarized=True)
             An nx3 array containing the probe translations at each scan point
         patterns : array
             An nxmxl array containing the full stack of measured diffraction patterns
         axes : list(str)
-            A list of names for the axes of the probe translations
+            A
+             of names for the axes of the probe translations
         entry_info : dict
             A dictionary containing the entry_info metadata
         sample_info : dict
@@ -57,20 +57,12 @@ class Ptycho2DDataset(CDataset):
             An initial guess for the not-previously-subtracted
             detector background
         """
+        
+        super(PolarizedPtycho2DDataset,self).__init__(translations, patterns,
+                                             *args, **kwargs)
+        self.polarizer = t.tensor(polarizer_angles, dtype=t.float32)
+        self.analyzer = t.tensor(analyzer_angles, dtype=t.float32)
 
-
-        super(Ptycho2DDataset,self).__init__(*args, **kwargs)
-        self.axes = copy(axes)
-        self.translations = t.tensor(translations, dtype=t.float32)
-        self.patterns = t.tensor(patterns, dtype=t.float32)
-        if self.mask is None:
-            self.mask = t.ones(self.patterns.shape[-2:]).to(dtype=t.bool)
-        self.mask.masked_fill_(t.isnan(t.sum(self.patterns,dim=(0,))),0)
-        self.patterns.masked_fill_(t.isnan(self.patterns),0)
-
-
-    def __len__(self):
-        return self.patterns.shape[0]
 
     def _load(self, index):
         """ Internal function to load data
@@ -86,21 +78,30 @@ class Ptycho2DDataset(CDataset):
 
         1) The indices of the patterns to use
         2) The recorded probe positions associated with those points
+        3) The angles of the polarizers if polarized=True
 
         Parameters
         ----------
-        index : int or slice
+        index (polarized=False): int or slice
              The index or indices of the scan points to use
+
+        index (polarized=True): 
+            tuple ((phi1, phi2), ind) 
+
+            ind - index or indices of the scan points to use (in a (phi1, phi2) polarization state), int or slice
+            (phi1, phi2) - angles of the 1st and 2nd polarizers, ints
 
         Returns
         -------
         inputs : tuple
              A tuple of the inputs to the related forward models
+             if polarized: inputs = ((phi1, phi2), ind, transl[(phi1, phi2)][ind])
         outputs : tuple
              The output pattern or stack of output patterns
         """
-        return (index, self.translations[index]), self.patterns[index]
-
+        return ((index, self.translations[index],
+                 self.polarizer[index], self.analyzer[index]),
+                self.patterns[index])
 
     def to(self, *args, **kwargs):
         """Sends the relevant data to the given device and dtype
@@ -110,9 +111,9 @@ class Ptycho2DDataset(CDataset):
 
         Accepts the same parameters as torch.Tensor.to
         """
-        super(Ptycho2DDataset,self).to(*args,**kwargs)
-        self.translations = self.translations.to(*args, **kwargs)
-        self.patterns = self.patterns.to(*args, **kwargs)
+        super(PolarizedPtycho2DDataset, self).to(*args, **kwargs)
+        self.polarizer = self.polarizer.to(*args, **kwargs)
+        self.analyzer = self.analyzer.to(*args, **kwargs)
 
 
     # It sucks that I can't reuse the base factory method here,
@@ -121,7 +122,7 @@ class Ptycho2DDataset(CDataset):
     def from_cxi(cls, cxi_file):
         """Generates a new CDataset from a .cxi file directly
 
-        This generates a new Ptycho2DDataset from a .cxi file storing
+        This generates a new PolarizedPtycho2DDataset from a .cxi file storing
         a 2D ptychography scan.
 
         Parameters
@@ -131,38 +132,34 @@ class Ptycho2DDataset(CDataset):
 
         Returns
         -------
-        dataset : Ptycho2DDataset
+        dataset : PolarizedPtycho2DDataset
             The constructed dataset object
         """
         # If a bare string is passed
         if isinstance(cxi_file, str) or isinstance(cxi_file, pathlib.Path):
-            with h5py.File(cxi_file,'r') as f:
-                return cls.from_cxi(f)
+            with h5py.File(cxi_file, 'r') as f:
+                return cls.from_cxi(f, polarized)
 
         # Generate a base dataset
-        dataset = CDataset.from_cxi(cxi_file)
-        # Mutate the class to this subclass (BasicPtychoDataset)
+        dataset = Ptycho2DDataset.from_cxi(cxi_file)
+
+        # Mutate the class to this subclass (PolarizedPtycho2DDataset)
         dataset.__class__ = cls
 
-        # Load the data that is only relevant for this class
-        patterns, axes = cdtdata.get_data(cxi_file)
-        translations = cdtdata.get_ptycho_translations(cxi_file)
+        # Now, we save out the polarizer and analyzer states
+        polarizer = cdtdata.get_shot_to_shot_info(cxi_file, 'polarizer_angle')
+        analyzer = cdtdata.get_shot_to_shot_info(cxi_file, 'analyzer_angle')
 
-        # And now re-do the stuff from __init__
-        dataset.translations = t.Tensor(translations).clone()
-        dataset.patterns = t.Tensor(patterns).clone()
-        dataset.axes = axes
-        if dataset.mask is None:
-            dataset.mask = t.ones(dataset.patterns.shape[-2:]).to(dtype=t.bool)
-
+        dataset.analyzer = t.tensor(analyzer, dtype=t.float32)
+        dataset.polarizer = t.tensor(polarizer, dtype=t.float32)
+        
         return dataset
 
-
-    def to_cxi(self, cxi_file):
-        """Saves out a Ptycho2DDataset as a .cxi file
+    def to_cxi(self, cxi_file, polarized=False):
+        """Saves out a PolarizedPtycho2DDataset as a .cxi file
 
         This function saves all the compatible information in a
-        Ptycho2DDataset object into a .cxi file. This saved .cxi file
+        PolarizedPtycho2DDataset object into a .cxi file. This saved .cxi file
         should be compatible with any standard .cxi file based
         reconstruction tool, such as SHARP.
 
@@ -175,15 +172,16 @@ class Ptycho2DDataset(CDataset):
         # If a bare string is passed
         if isinstance(cxi_file, str) or isinstance(cxi_file, pathlib.Path):
             with cdtdata.create_cxi(cxi_file) as f:
-                return self.to_cxi(f)
+                return self.to_cxi(f, polarized)
 
-        super(Ptycho2DDataset,self).to_cxi(cxi_file)
-        if hasattr(self, 'axes'):
-            cdtdata.add_data(cxi_file, self.patterns, axes=self.axes)
-        else:
-            cdtdata.add_data(cxi_file, self.patterns)
-        cdtdata.add_ptycho_translations(cxi_file, self.translations)
+        # This saves the translations, patterns, etc.
+        super(PolarizedPtycho2DDataset, self).to_cxi(cxi_file)
 
+        # Now, we save out the polarizer and analyzer states
+        cdtdata.add_shot_to_shot_info(cxi_file, self.polarizer,
+                                      'polarizer_angle')
+        cdtdata.add_shot_to_shot_info(cxi_file, self.analyzer,
+                                      'analyzer_angle')
 
     def inspect(self, logarithmic=True, units='um'):
         """Launches an interactive plot for perusing the data

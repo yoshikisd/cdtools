@@ -183,7 +183,7 @@ def standardize(probe, obj, obj_slice=None, correct_ramp=False):
     else:
         single_probe = False
 
-    normalization = t.sqrt(t.sum(t.abs(probe[0])**2) / (len(probe[0].view(-1))))
+    normalization = t.sqrt(t.mean(t.abs(probe[0])**2))
     probe = probe / normalization
     obj = obj * normalization
 

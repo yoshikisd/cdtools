@@ -292,6 +292,19 @@ def ptycho_cxi_3():
 
     f.close()
 
+    
+@pytest.fixture(scope='module')
+def polarized_ptycho_cxi(ptycho_cxi_1):
+    f, expected = ptycho_cxi_1
+
+    data1f = f['entry_1/data_1']
+    expected['analyzer_angle'] = np.random.rand(100).astype(np.float32)
+    data1f.create_dataset('analyzer_angle', data=expected['analyzer_angle'])
+    expected['polarizer_angle'] = np.random.rand(100).astype(np.float32)
+    data1f.create_dataset('polarizer_angle', data=expected['polarizer_angle'])
+
+    yield f, expected
+    
 
 # As specific issues start to crop up with loading CXI files from different
 # beamlines, put a fixture here that replicates the issue so that we can

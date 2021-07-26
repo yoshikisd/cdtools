@@ -79,6 +79,13 @@ def test_get_data(test_ptycho_cxis):
         assert axes == expected['axes']
 
 
+def test_get_shot_to_shot_info(polarized_ptycho_cxi):
+    cxi, expected = polarized_ptycho_cxi
+    for key in ('analyzer_angle', 'polarizer_angle'):
+        assert np.allclose(data.get_shot_to_shot_info(cxi, key),
+                           expected[key])
+
+
 def test_get_ptycho_translations(test_ptycho_cxis):
     for cxi, expected in test_ptycho_cxis:
         assert np.allclose(data.get_ptycho_translations(cxi),
@@ -241,7 +248,25 @@ def test_add_data(tmp_path):
 
     assert np.allclose(fake_data.numpy(),read_data)
 
+def test_add_shot_to_shot_info(tmp_path):
+    
+    analyzer = np.random.rand(100)
 
+    with data.create_cxi(tmp_path / 'test_add_shot_to_shot_info.cxi') as f:
+        data.add_shot_to_shot_info(f, analyzer, 'analyzer_angle')
+    
+    with h5py.File(tmp_path / 'test_add_shot_to_shot_info.cxi') as f:
+        # Check this directly since we want to make sure it saved
+        # it in all the places it should have
+        read_analyzer_1 = np.array(f['entry_1/data_1/analyzer_angle'])
+        read_analyzer_2 = np.array(f['entry_1/instrument_1/detector_1/analyzer_angle'])
+        read_analyzer_3 = np.array(f['entry_1/sample_1/geometry_1/analyzer_angle'])
+
+    assert np.allclose(analyzer, read_analyzer_1)
+    assert np.allclose(analyzer, read_analyzer_2)
+    assert np.allclose(analyzer, read_analyzer_3)
+    
+        
 def test_add_ptycho_translations(tmp_path):
     
     translations = np.random.rand(3,100)
