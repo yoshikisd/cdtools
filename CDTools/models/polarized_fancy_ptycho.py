@@ -16,7 +16,7 @@ class PolarizedFancyPtycho(FancyPtycho):
 
     def __init__(self, wavelength, detector_geometry,
                  probe_basis,
-                 probe_guess, obj_guess,
+                 probe_guess, obj_guess, polarizer, analyzer,
                  detector_slice=None,
                  surface_normal=np.array([0.,0.,1.]),
                  min_translation = t.Tensor([0,0]),
@@ -25,7 +25,7 @@ class PolarizedFancyPtycho(FancyPtycho):
                  polarizer_scale=1, analyzer_scale=1,  mask=None,
                  weights = None, translation_scale = 1, saturation=None,
                  probe_support = None, obj_support=None, oversampling=1,
-                 loss='amplitude mse',units='um', polarizer, analyzer):
+                 loss='amplitude mse',units='um'):
         
         super(FancyPtycho, self).__init__(wavelength, detector_geometry,
                  probe_basis,
@@ -53,14 +53,20 @@ class PolarizedFancyPtycho(FancyPtycho):
         
         super(PolarizedFancyPtycho, cls).from_dataset(dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um')
 
+
+
         # always do this on the cpu
         get_as_args = dataset.get_as_args
         dataset.get_as(device='cpu')
         (indices, translations), patterns = dataset[:]
         dataset.get_as(*get_as_args[0],**get_as_args[1])
 
+
         # Set to none to avoid issues with things outside the detector
-      
+        model.probe.data = model.probe.data.unsqueeze(-3)
+
+
+
         ewg = tools.initializers.exit_wave_geometry
         probe_basis, probe_shape, det_slice =  ewg(det_basis,
                                                    det_shape,
@@ -71,14 +77,16 @@ class PolarizedFancyPtycho(FancyPtycho):
                                                    opt_for_fft=opt_for_fft,
                                                    oversampling=oversampling)
         scalar_probe_shape = probe_shape.clone()
-        probe_shape = t.stack((probe_shape[:-2], t.tensor([2, 1]), probe_shape([-2:])))
+        probe_shape = t.stack((probe_shape[:-2], t.tensor([2,]), probe_shape([-2:])))
 
         obj_size, min_translation = tools.initializers.calc_object_setup(scalar_probe_shape, pix_translations, padding=200)
         obj_size = t.cat((t.tensor([2, 2]), obj_size))
 
+        tensor vs tensor.data
+
         # Finally, initialize the probe and  object using this information
         if probe_size is None:
-            probe = tools.initializers.SHARP_style_probe(dataset, scalar_probe_shape, det_slice, propagation_distance=propagation_distance, oversampling=oversampling, polarized=True)
+            model.probe.data = tools.initializers.SHARP_style_probe(dataset, scalar_probe_shape, det_slice, propagation_distance=propagation_distance, oversampling=oversampling, polarized=True)
         else:
             probe = tools.initializers.gaussian_probe(dataset, probe_basis, scalar_probe_shape, probe_size, propagation_distance=propagation_distance, polarized=True)
 
@@ -130,9 +138,11 @@ class PolarizedFancyPtycho(FancyPtycho):
 
         # I DON'T KNOW WHAT PROBE NORM IS (AS WELL AS OBJ SUPP AND PROBE SUPP)
 
+        pol_probes = polarization.apply_polarizer(polarizer, pol_probes)
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
             prs, self.obj_support * self.obj,pix_trans,
-            shift_probe=True, multiple_modes=True, polarized=True, polarizer=polarizer, analyzer=analyzer)
+            shift_probe=True, multiple_modes=True, polarized=True)
+        analyzed_exit_waves = polarization.apply_polarizer(analyzer, exit_waves)
 
         #exit_waves = self.probe_norm * tools.interactions.ptycho_2D_round(
         #    prs, self.obj_support * self.obj,pix_trans,
@@ -158,7 +168,7 @@ class PolarizedFancyPtycho(FancyPtycho):
     
     def measurement(self, wavefields):
         wavefields_x = wavefields[..., 0, :, :, :]
-        wavefields_x = wavefields[..., 1, :, :, :]
+        wavefields_y = wavefields[..., 1, :, :, :]
         out_x = tools.measurements.quadratic_background(wavefields_x,
                             self.background,
                             detector_slice=self.detector_slice,
@@ -167,7 +177,7 @@ class PolarizedFancyPtycho(FancyPtycho):
                             oversampling=self.oversampling)
         # now, set bckgr to 0 since t shouldn't be calculated twice
         out_y = tools.measurements.quadratic_background(wavefields_y,
-                            0,
+                            None,
                             detector_slice=self.detector_slice,
                             measurement=tools.measurements.incoherent_sum,
                             saturation=self.saturation,

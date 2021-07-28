@@ -48,21 +48,17 @@ def apply_jones_matrix(probe, jones_matrix):
 	Parameters:
 	----------
 	probe: t.Tensor
-		A (...)x2x1xMxL tensor representing the probe
+		A (...)x2xMxL tensor representing the probe
 	jones_matrix: t.tensor
 		(...)x2x2
 
 	Returns:
 	--------
 	linearly polarized probe: t.Tensor
-		(...)x2x1xMxL 
+		(...)x2xMxL 
 	"""
-	probe = probe.to(dtype=t.cfloat)
-	probe = probe.transpose(-1, -3).transpose(-2, -4)
-	polarized_probe = t.matmul(jones_matrix.to(dtype=t.cfloat), probe)
 
-	# Transpose it back
-	return polarized_probe.transpose(-1, -3).transpose(-2, -4)
+	return t.tensordot(jones_matrix,probe,dims=[[-1,],[-3]])
 
 def apply_phase_retardance(probe, phase_shift):
 	"""
