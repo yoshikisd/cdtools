@@ -27,6 +27,7 @@ defining a new ptychography model before attempting to do so.
 from CDTools.models.base import CDIModel
 from CDTools.models.simple_ptycho import SimplePtycho
 from CDTools.models.fancy_ptycho import FancyPtycho
+from CDTools.models.polarized_fancy_ptycho import PolarizedFancyPtycho
 from CDTools.models.bragg_2d_ptycho import Bragg2DPtycho
 from CDTools.models.multislice_2d_ptycho import Multislice2DPtycho
 from CDTools.models.rpi import RPI

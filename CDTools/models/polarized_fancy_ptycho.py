@@ -1,6 +1,3 @@
-cd ..
-_future__ import division, print_function, absolute_import
-
 import torch as t
 from CDTools.models import CDIModel, FancyPtycho
 from CDTools.datasets import Ptycho2DDataset
