@@ -118,15 +118,17 @@ class PolarizedFancyPtycho(FancyPtycho):
 
              
         # This restricts the basis probes to stay within the probe support
-        basis_prs = self.probe * self.probe_support[...,:,:]    
-
+        basis_prs = self.probe * self.probe_support[...,:,:]   # This makes no sense 
+        # self.probe is an Nx2xXxY stach of probes
 
         # Now we construct the probes for each shot from the basis probes
         Ws = self.weights[index]
         if len(self.weights[0].shape) == 0:
             # If a purely stable coherent illumination is defined
-            prs = Ws[...,None,None,None] * basis_prs
+            # Ws is a tensor of length M, M is the number of frames to be processed
+            prs = Ws[...,None,None,None,None] * basis_prs
         else:
+            raise NotImplementedError('Unstable Modes not Implemented for polarized light')
             # If a frame-by-frame weight matrix is defined
             # This takes the dot product of all the weight matrices with
             # the probes. The output has dimensions of translation, then
