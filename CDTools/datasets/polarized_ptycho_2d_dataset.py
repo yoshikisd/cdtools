@@ -138,7 +138,7 @@ class PolarizedPtycho2DDataset(Ptycho2DDataset):
         # If a bare string is passed
         if isinstance(cxi_file, str) or isinstance(cxi_file, pathlib.Path):
             with h5py.File(cxi_file, 'r') as f:
-                return cls.from_cxi(f, polarized)
+                return cls.from_cxi(f)
 
         # Generate a base dataset
         dataset = Ptycho2DDataset.from_cxi(cxi_file)
@@ -172,7 +172,7 @@ class PolarizedPtycho2DDataset(Ptycho2DDataset):
         # If a bare string is passed
         if isinstance(cxi_file, str) or isinstance(cxi_file, pathlib.Path):
             with cdtdata.create_cxi(cxi_file) as f:
-                return self.to_cxi(f, polarized)
+                return self.to_cxi(f)
 
         # This saves the translations, patterns, etc.
         super(PolarizedPtycho2DDataset, self).to_cxi(cxi_file)
