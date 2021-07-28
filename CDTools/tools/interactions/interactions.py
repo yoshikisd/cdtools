@@ -7,7 +7,7 @@ for ptychographic reconstruction.
 
 import torch as t
 import numpy as np
-from CDTools.tools import propagators, image_processing
+from CDTools.tools import propagators, image_processing, polarization
 
 __all__ = ['translations_to_pixel', 'pixel_to_translations',
            'project_translations_to_sample',
@@ -385,7 +385,7 @@ def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
         return t.stack(exit_waves)
 
 
-def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multiple_modes=True):
+def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multiple_modes=True, polarized=False, polarizer=None, analyzer=None):
     """Returns a stack of exit waves accounting for subpixel shifts
  
     This function returns a collection of exit waves, with the first
@@ -437,6 +437,13 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
     selections = t.stack([obj[tr[0]:tr[0]+probe.shape[-2],
                               tr[1]:tr[1]+probe.shape[-1]]
                           for tr in integer_translations])
+    if polarized:
+        polarized_probes = t.stack([polarization.apply_linear_polarizer(probe, polarizer[idx]) for idx in range(polarizer.shape)])
+        # Nx(P)x2x1xMxL tensor
+        selections = t.stack([obj[:, :,tr[0]:tr[0]+probe.shape[-2],
+                          tr[1]:tr[1]+probe.shape[-1]]
+                      for tr in integer_translations])
+        # Nx2x2xMxL tensor
     
     exit_waves = []
     if shift_probe:
@@ -449,22 +456,44 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
         J = 2 * np.pi * J / probe.shape[-1]
         phase_masks = t.exp(1j*(-subpixel_translations[:,0,None,None]*I
                                 -subpixel_translations[:,1,None,None]*J))
+
+        if polarized:
+            phase_masks = t.stack((phase_masks, phase_masks), dim=-4)
+            phase_masks = t.unsqueeze(phase_masks, dim=-3)
+            # Nx2x1xMxL tensor
+            # probe is (P)x2x1xMxL tensor
         
         fft_probe = t.fft.fftshift(t.fft.fft2(probe),dim=(-1,-2))
 
+
         if multiple_modes: # Multi-mode probe
-            shifted_fft_probe = fft_probe * phase_masks[...,None,:,:]
+            if polarized:
+                shifted_fft_probe = fft_probe * phase_masks[...,None,:,:,:,:]
+            else:
+                shifted_fft_probe = fft_probe * phase_masks[...,None,:,:]
         else:
             shifted_fft_probe = fft_probe * phase_masks
+
 
         shifted_probe = t.fft.ifft2(t.fft.ifftshift(shifted_fft_probe,
                                                     dim=(-1,-2)))
 
-        if multiple_modes: # Multi-mode probe
-            output = shifted_probe * selections[...,None,:,:]
+        if not polarized:
+            if multiple_modes: # Multi-mode probe
+                output = shifted_probe * selections[...,None,:,:]
+            else:
+                output = shifted_probe * selections
+        # selections: Nx2x2xMxL
+        # probe: Nx(P)x2x1xMxL
         else:
-            output = shifted_probe * selections
-        
+            if multiple_modes:
+                selections = selections[..., None, :,:,:,:]
+            shift_probe = shifted_probe.transpose(-1, -3).transpose(-2, -4)
+            selections = selections.transpose(-1, -3).transpose(-2, -4)
+            output = t.matmul(selections, shift_probe).transpose(-1, -3).transpose(-2, -4)
+            
+            output = t.stack([polarization.apply_linear_polarizer(output[idx, ...], analyzer[idx]) for  idx in range(analyzer.shape)])
+    
     else:
         raise NotImplementedError('Object shift not yet implemented')
 

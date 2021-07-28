@@ -4,6 +4,13 @@ import math
 from math import sin
 from math import cos
 
+__all__ = ['apply_linear_polarizer',
+		   'apply_phase_retardance',
+		   'apply_half_wave_plate',
+		   'apply_quarter_wave_plate',
+		   'apply_circular_polarizer',
+		   'apply_jones_matrix']
+		   
 def apply_linear_polarizer(probe, polar_angle):
 	"""
 	Applies a linear polarizer to the probe

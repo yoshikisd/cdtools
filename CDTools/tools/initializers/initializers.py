@@ -5,6 +5,7 @@ initialize the reconstrucions, and the heuristic calculations for
 geierating sensible initializations for the probe guess.
 """
 
+import math
 import numpy as np
 import torch as t
 from CDTools.tools.propagators import *
@@ -210,7 +211,7 @@ def gaussian(shape, sigma, amplitude=1, center = None, curvature=[0,0]):
 
 
 
-def gaussian_probe(dataset, basis, shape, sigma, propagation_distance=0):
+def gaussian_probe(dataset, basis, shape, sigma, propagation_distance=0, polarized=False, left_polarized=True):
     """Initializes a gaussian probe based on experimental parameters
 
     This function generates a gaussian probe initialization which has a
@@ -272,13 +273,33 @@ def gaussian_probe(dataset, basis, shape, sigma, propagation_distance=0):
         
     # Finally, we should calculate the average pattern intensity from the
     # dataset and normalize the gaussian probe. This should be done by
-    avg_intensities = [t.sum(dataset[idx][1]) for idx in range(len(dataset))]
+    if not polarized:
+        avg_intensities = [t.sum(dataset[idx][1]) for idx in range(len(dataset))]
+
+    else:
+        polarizer = dataset.polarizer.tolist()
+        analyzer = dataset.analyzer.tolist()
+        factors = [(math.cos(math.radians(polarizer[idx] - analyzer[idx])))**2 for idx in range(len(dataset)) if (abs(polarizer[idx] - analyzer[idx]) > 5)]
+        avg_intensities = [t.sum(dataset[idx][1]) / factor[idx] for idx in range(len(dataset))]
+
     avg_intensity = t.mean(t.tensor(avg_intensities))
     probe_intensity = t.sum(t.abs(probe)**2)
-    return avg_intensity / probe_intensity * probe
-    
+    probe = t.sqrt(avg_intensity / probe_intensity) * probe
 
-def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, oversampling=1):
+    if polarized:
+        if left_polarized == True:
+            x = 1j
+        else:
+            x = -1j
+        probe = t.stack((probe.to(dtype=t.cfloat), x * probe.to(dtype=t.cfloat)), dim=-4)
+        return probe[..., None, :, :]
+
+    return probe
+
+
+
+
+def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, oversampling=1, polarized=False, left_polarized=True):
     """Generates a SHARP style probe guess from a dataset
 
     What we call the "SHARP" style probe guess is to take a mean of all
@@ -320,12 +341,21 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, over
 
     # to use the mask or not?
     intensities = np.zeros([dim // oversampling for dim in shape])
+    
+    if polarized:
+        factors = [(math.cos(math.radians(polarizer[idx] - analyzer[idx])))**2 for idx in range(len(dataset)) if abs(polarizer[idx] - analyzer[idx]) > 5]
+    else:
+        factors = [1 for idx in range(len(dataset))]
+
+
     for params, im in dataset:
         if hasattr(dataset,'mask') and dataset.mask is not None:
-            intensities[det_slice] += dataset.mask.cpu().numpy() * im.cpu().numpy()
+            intensities[det_slice] += dataset.mask.cpu().numpy() * im.cpu().numpy() / factors[params[0]]
         else:
-            intensities[det_slice] += im.cpu().numpy()         
+            intensities[det_slice] += im.cpu().numpy() / params[factors[0]]       
     intensities /= len(dataset)
+
+
 
     # Subtract off a known background if it's stored
     if hasattr(dataset, 'background') and dataset.background is not None:
@@ -374,6 +404,14 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, over
     top = shape[1]//2 - probe_guess.shape[1] // 2 
     final_probe[left:left+probe_guess.shape[0],
                 top:top+probe_guess.shape[1]] = probe_guess
+
+    if polarized:
+        if left_polarized:
+            x = 1j
+        else:
+            x = -1j
+        final_probe = t.stack((final_probe.to(dtype=t.cfloat), final_probe.to(dtype=t.cfloat)), dim=-4)
+        final_probe = final_probe[..., None, :, :]
     
     return final_probe
 
