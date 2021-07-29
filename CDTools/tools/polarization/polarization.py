@@ -11,7 +11,7 @@ __all__ = ['apply_linear_polarizer',
 		   'apply_circular_polarizer',
 		   'apply_jones_matrix']
 		   
-def apply_linear_polarizer(probe, polarizer):
+def apply_linear_polarizer(probe, polarizer, transpose=True):
 	"""
 	Applies a linear polarizer to the probe
 
@@ -31,21 +31,16 @@ def apply_linear_polarizer(probe, polarizer):
 	probe = probe.to(dtype=t.cfloat)
 	if len(polarizer) == 1:
 		theta = math.radians(polarizer)
-		polarizer = t.tensor([[(cos(theta)) ** 2, sin(2 * theta) / 2], [sin(2 * theta) / 2, sin(theta) ** 2]]).to(dtype=t.cfloat)
+		jones_matrices = t.tensor([[(cos(theta)) ** 2, sin(2 * theta) / 2], [sin(2 * theta) / 2, sin(theta) ** 2]]).to(dtype=t.cfloat)
 	else:
 		pol_cos = lambda idx: cos(math.radians(polarizer[idx]))
 		pol_sin = lambda idx: sin(math.radians(polarizer[idx]))
 		jones_matrices = t.stack(([t.tensor([[(pol_cos(idx)) ** 2, pol_sin(idx) * pol_cos(idx)], [pol_sin(idx) * pol_cos(idx), (pol_sin(idx)) ** 2]]).to(dtype=t.cfloat) for idx in range(len(polarizer))]))
-	# I haven't figured out how to multiply tensors using tensordot yet, 
-	# so we'll be temporarily using matmul on the previously tranposed vector 
-	# (since it returns the matrix multiplication product over the last two dimensions)
-	#Swap the dimensions for the prober to be (...)xMxLx2x1 to perform matmul on it 
-	# Transpose it back
 
-	return apply_jones_matrix(probe, jones_matrices)
+	return apply_jones_matrix(probe, jones_matrices, transpose=transpose)
 
 
-def apply_jones_matrix(probe, jones_matrix):
+def apply_jones_matrix(probe, jones_matrix, transpose=True):
 	"""
 	Applies a given Jones matrix to the probe
 
@@ -58,17 +53,28 @@ def apply_jones_matrix(probe, jones_matrix):
 
 	Returns:
 	--------
-	linearly polarized probe: t.Tensor
+	a probe with the jones matrix applied: t.Tensor
 		(...N)x2xMxL 
 	"""
-	jones_matrix = jones_matrix[..., None, None, :, :]
-	# make it (N)x1x1x2x2
-	probe = probe[..., None, :, :]
-	probe = probe.transpose(-1, -3).transpose(-2, -4)
-	# (...N)xMxLx2x1
-	output = t.matmul(jones_matrix, probe).transpose(-2, -4).transpose(-1, -3)
-	# (...N)x2x1xMxL
+	if transpose:
+		jones_matrix = jones_matrix[..., None, None, :, :]
+		# make it (N)x1x1x2x2
+		probe = probe[..., None, :, :]
+		probe = probe.transpose(-1, -3).transpose(-2, -4)
+		# (...N)xMxLx2x1
+		output = t.matmul(jones_matrix, probe).transpose(-2, -4).transpose(-1, -3)
+		# (...N)x2x1xMxL
+
+
+	else:
+	# use element-wise multiplicaation and summation to contract a coordinate
+		jones_matrix = jones_matrix[..., None, None]
+		probe = t.stack((probe, probe), dim=-4)
+		output = t.sum(jones_matrix * probe, dim=-3)
+		#(...N)x2x1xMxL
+
 	return output.squeeze(-3)
+	#(...N)x2x1xMxL 
 
 def apply_phase_retardance(probe, phase_shift):
 	"""
@@ -168,14 +174,21 @@ def apply_half_wave_plate(probe, fast_axis_angle):
 	# Transpose it back
 	return polarized_probe.transpose(-1, -3).transpose(-2, -4)
 
-# probe = t.rand(3, 2, 1, 5, 6)
-# print(apply_linear_polarizer(probe, 30).shape)
-# print(apply_circular_polarizer(probe).shape)
-# print(apply_phase_retardance(probe, 29).shape)
-# print(apply_half_wave_plate(probe, 29).shape)
-# print(apply_quarter_wave_plate(probe, 29).shape)
+# probe = t.rand(17, 7, 2, 6, 4)
+# polarizer = t.rand(7)
+# out = apply_linear_polarizer(probe, polarizer)
+# out2 = apply_linear_polarizer(probe, polarizer, transpose=False)
 
+# print(out.shape)
+# print(out2.shape)
 
+# a = t.ones(17, 8, 2, 3, 4)
+# b = t.ones(2, 1, 1)
 
-# d = t.cat(([a for i in range(3)]))
-# print(d.shape)
+probe = t.ones(5, 2, 3, 3)
+
+polarizer = t.tensor([0])
+
+exitw = apply_linear_polarizer(probe, polarizer)
+print(exitw[:, 0, :, :])
+print('y', exitw[:, 1, :, :])
