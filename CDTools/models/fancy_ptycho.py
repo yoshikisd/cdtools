@@ -123,8 +123,11 @@ class FancyPtycho(CDIModel):
 
         
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um'):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um', polarized=False):
         
+        # if polarized=True, this function takes care of the dataset iterator by taking into account the polarizer and analyzer components
+        # however, it drops them afterwards and treats the dataset as if it's not polarized
+
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
         det_shape = dataset[0][1].shape
@@ -133,7 +136,10 @@ class FancyPtycho(CDIModel):
         # always do this on the cpu
         get_as_args = dataset.get_as_args
         dataset.get_as(device='cpu')
-        (indices, translations), patterns = dataset[:]
+        if not polarized:
+            (indices, translations), patterns = dataset[:]
+        else:
+            (indices, translations, polarizer, analyzer), patterns = dataset[:]
         dataset.get_as(*get_as_args[0],**get_as_args[1])
 
         # Set to none to avoid issues with things outside the detector

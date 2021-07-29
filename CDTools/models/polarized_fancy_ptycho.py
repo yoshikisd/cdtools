@@ -9,6 +9,7 @@ from datetime import datetime
 import numpy as np
 from scipy import linalg as sla
 from copy import copy
+from CDTools.tools import polarization
 
 __all__ = ['PolarizedFancyPtycho']
 
@@ -49,60 +50,28 @@ class PolarizedFancyPtycho(FancyPtycho):
             self.analyzer_offsets = t.nn.Parameter(t.tensor(analyzer_offsets).to(dtype=t.float32)) / analyzer_scale
         
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um'):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um', left_polarized=True):
         
-        super(PolarizedFancyPtycho, cls).from_dataset(dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um')
+        model = FancyPtycho.from_dataset(dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um', polarized=True)
 
 
+        # Mutate the class to its subclass 
+        model.__class__ = cls
 
-        # always do this on the cpu
-        get_as_args = dataset.get_as_args
-        dataset.get_as(device='cpu')
-        (indices, translations), patterns = dataset[:]
-        dataset.get_as(*get_as_args[0],**get_as_args[1])
-
-
-        # Set to none to avoid issues with things outside the detector
-        model.probe.data = model.probe.data.unsqueeze(-3)
-
-
-
-        ewg = tools.initializers.exit_wave_geometry
-        probe_basis, probe_shape, det_slice =  ewg(det_basis,
-                                                   det_shape,
-                                                   wavelength,
-                                                   distance,
-                                                   center=center,
-                                                   padding=padding,
-                                                   opt_for_fft=opt_for_fft,
-                                                   oversampling=oversampling)
-        scalar_probe_shape = probe_shape.clone()
-        probe_shape = t.stack((probe_shape[:-2], t.tensor([2,]), probe_shape([-2:])))
-
-        obj_size, min_translation = tools.initializers.calc_object_setup(scalar_probe_shape, pix_translations, padding=200)
-        obj_size = t.cat((t.tensor([2, 2]), obj_size))
-
-        tensor vs tensor.data
-
-        # Finally, initialize the probe and  object using this information
-        if probe_size is None:
-            model.probe.data = tools.initializers.SHARP_style_probe(dataset, scalar_probe_shape, det_slice, propagation_distance=propagation_distance, oversampling=oversampling, polarized=True)
+        if left_polarized:
+            x = 1j
         else:
-            probe = tools.initializers.gaussian_probe(dataset, probe_basis, scalar_probe_shape, probe_size, propagation_distance=propagation_distance, polarized=True)
+            x = -1j
+        # model.probe.data = t.stack((model.probe.data.to(dtype=t.cfloat), x * model.probe.data.to(dtype=t.cfloat)), dim=-3)
+        # obj = t.stack((model.obj.data, model.obj.data), dim=-3)
+        # model.obj.data = t.stack((obj, obj), dim=-4)
+        print('probe guess shape:', model.probe.shape)
+        print('object guess shape:', model.obj.shape)
+        
 
-        return cls(wavelength, det_geo, probe_basis, probe, obj,
-                   detector_slice=det_slice,
-                   surface_normal=surface_normal,
-                   min_translation=min_translation,
-                   translation_offsets = translation_offsets,
-                   weights=Ws, mask=mask, background=background,
-                   translation_scale=translation_scale,
-                   saturation=saturation,
-                   probe_support=probe_support,
-                   obj_support=obj_support,
-                   oversampling=oversampling,
-                   loss=loss,units=units)
-                   
+        # tensor vs tensor.data
+        return model
+
     
     def interaction(self, index, translations, polarizer, analyzer):
 
@@ -118,7 +87,7 @@ class PolarizedFancyPtycho(FancyPtycho):
 
              
         # This restricts the basis probes to stay within the probe support
-        basis_prs = self.probe * self.probe_support[...,:,:]   # This makes no sense 
+        basis_prs = self.probe * self.probe_support[...,:,:] # This makes no sense 
         # self.probe is an Nx2xXxY stach of probes
 
         # Now we construct the probes for each shot from the basis probes
@@ -129,34 +98,26 @@ class PolarizedFancyPtycho(FancyPtycho):
             prs = Ws[...,None,None,None,None] * basis_prs
         else:
             raise NotImplementedError('Unstable Modes not Implemented for polarized light')
-            # If a frame-by-frame weight matrix is defined
-            # This takes the dot product of all the weight matrices with
-            # the probes. The output has dimensions of translation, then
-            # coherent mode index, then x,y, and then complex index
-            # Maybe this can be done with a matmul now?
-            prs = t.sum(Ws[...,None,None] * basis_prs, axis=-3)
-        # Now we actually do the interaction, using the sinc subpixel
-        # translation model as per usual
 
-        # I DON'T KNOW WHAT PROBE NORM IS (AS WELL AS OBJ SUPP AND PROBE SUPP)
+        pol_probes = polarization.apply_linear_polarizer(prs, polarizer)
 
-        pol_probes = polarization.apply_polarizer(polarizer, pol_probes)
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
             prs, self.obj_support * self.obj,pix_trans,
             shift_probe=True, multiple_modes=True, polarized=True)
-        analyzed_exit_waves = polarization.apply_polarizer(analyzer, exit_waves)
+
+        analyzed_exit_waves = polarization.apply_linear_polarizer(exit_waves, analyzer)
 
         #exit_waves = self.probe_norm * tools.interactions.ptycho_2D_round(
         #    prs, self.obj_support * self.obj,pix_trans,
         #    multiple_modes=True)
         
-        return exit_waves
+        return analyzed_exit_waves
     
 
-    def vectorial_wavefields(wavefields, func, *args. **kwargs):
+    def vectorial_wavefields(wavefields, func, *args, **kwargs):
         wavefields_x = wavefields[..., 0, :, :, :]
         wavefields_y = wavefields[..., 1, :, :, :]
-        out_x = func(wavefields_x. *args, **kwargs)
+        out_x = func(wavefields_x, *args, **kwargs)
         out_y = func(wavefields_y, *args, **kwargs)
         out = t.stack((out_x, out_y), dim=-4)
         return out[..., None, :, :]

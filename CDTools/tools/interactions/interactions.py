@@ -438,8 +438,6 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
                               tr[1]:tr[1]+probe.shape[-1]]
                           for tr in integer_translations])
     if polarized:
-        polarized_probes = t.stack([polarization.apply_linear_polarizer(probe, polarizer[idx]) for idx in range(polarizer.shape)])
-        # Nx(P)x2x1xMxL tensor
         selections = t.stack([obj[:, :,tr[0]:tr[0]+probe.shape[-2],
                           tr[1]:tr[1]+probe.shape[-1]]
                       for tr in integer_translations])
@@ -491,9 +489,7 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
             shift_probe = shifted_probe.transpose(-1, -3).transpose(-2, -4)
             selections = selections.transpose(-1, -3).transpose(-2, -4)
             output = t.matmul(selections, shift_probe).transpose(-1, -3).transpose(-2, -4)
-            
-            output = t.stack([polarization.apply_linear_polarizer(output[idx, ...], analyzer[idx]) for  idx in range(analyzer.shape)])
-    
+
     else:
         raise NotImplementedError('Object shift not yet implemented')
 
