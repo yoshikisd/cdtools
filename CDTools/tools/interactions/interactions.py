@@ -454,19 +454,19 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
         J = 2 * np.pi * J / probe.shape[-1]
         phase_masks = t.exp(1j*(-subpixel_translations[:,0,None,None]*I
                                 -subpixel_translations[:,1,None,None]*J))
+        print('phase masks', phase_masks.shape)
 
         if polarized:
-            phase_masks = t.stack((phase_masks, phase_masks), dim=-4)
-            phase_masks = t.unsqueeze(phase_masks, dim=-3)
+            phase_masks = phase_masks[..., None, :, :]
             # Nx2x1xMxL tensor
-            # probe is (P)x2x1xMxL tensor
+            # probe is (N)(P)x2xMxL tensor
         
         fft_probe = t.fft.fftshift(t.fft.fft2(probe),dim=(-1,-2))
 
 
         if multiple_modes: # Multi-mode probe
             if polarized:
-                shifted_fft_probe = fft_probe * phase_masks[...,None,:,:,:,:]
+                shifted_fft_probe = fft_probe * phase_masks[...,None,:,:,:]
             else:
                 shifted_fft_probe = fft_probe * phase_masks[...,None,:,:]
         else:
@@ -475,6 +475,7 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
 
         shifted_probe = t.fft.ifft2(t.fft.ifftshift(shifted_fft_probe,
                                                     dim=(-1,-2)))
+        print('shifted_probe', shifted_probe.shape)
 
         if not polarized:
             if multiple_modes: # Multi-mode probe
@@ -484,11 +485,10 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
         # selections: Nx2x2xMxL
         # probe: Nx(P)x2x1xMxL
         else:
-            if multiple_modes:
-                selections = selections[..., None, :,:,:,:]
-            shift_probe = shifted_probe.transpose(-1, -3).transpose(-2, -4)
-            selections = selections.transpose(-1, -3).transpose(-2, -4)
-            output = t.matmul(selections, shift_probe).transpose(-1, -3).transpose(-2, -4)
+            # print('F', shift_probe)
+            output = polarization.apply_jones_matrix(shifted_probe, selections)
+            print('selections', selections.shape)
+            print('output', output.shape)
 
     else:
         raise NotImplementedError('Object shift not yet implemented')

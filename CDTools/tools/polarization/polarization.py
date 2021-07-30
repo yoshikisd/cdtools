@@ -11,24 +11,24 @@ __all__ = ['apply_linear_polarizer',
 		   'apply_circular_polarizer',
 		   'apply_jones_matrix']
 		   
-def apply_linear_polarizer(probe, polarizer, transpose=True):
+def apply_linear_polarizer(probe, polarizer, multiple_modes=True, transpose=True):
 	"""
 	Applies a linear polarizer to the probe
 
 	Parameters:
 	----------
 	probe: t.Tensor
-		A (...)x2x1xMxL tensor representing the probe, MxL - the size of the probe
+		A (N)(P)x2xMxL tensor representing the probe, MxL - the size of the probe
 		The angle between the fast-axis of the linear polarizer and the horizontal axis
 	polarizer: t.Tensor
-		A 1D tensor representing the polarizer angles for each of the patterns (or a single tensor of shape (1))
+		A 1D tensor (N) representing the polarizer angles for each of the patterns (or a single tensor of shape (1))
 
 	Returns:
 	--------
 	linearly polarized probe: t.Tensor
-		(...)x2x1xMxL 
+		(N)(P)x2x1xMxL 
 	"""
-	probe = probe.to(dtype=t.cfloat)
+
 	if len(polarizer) == 1:
 		theta = math.radians(polarizer)
 		jones_matrices = t.tensor([[(cos(theta)) ** 2, sin(2 * theta) / 2], [sin(2 * theta) / 2, sin(theta) ** 2]]).to(dtype=t.cfloat)
@@ -37,44 +37,61 @@ def apply_linear_polarizer(probe, polarizer, transpose=True):
 		pol_sin = lambda idx: sin(math.radians(polarizer[idx]))
 		jones_matrices = t.stack(([t.tensor([[(pol_cos(idx)) ** 2, pol_sin(idx) * pol_cos(idx)], [pol_sin(idx) * pol_cos(idx), (pol_sin(idx)) ** 2]]).to(dtype=t.cfloat) for idx in range(len(polarizer))]))
 
-	return apply_jones_matrix(probe, jones_matrices, transpose=transpose)
+	return apply_jones_matrix(probe, jones_matrices, transpose=transpose, multiple_modes=multiple_modes)
 
-
-def apply_jones_matrix(probe, jones_matrix, transpose=True):
+def apply_jones_matrix(probe, jones_matrix, transpose=True, multiple_modes=True):
 	"""
 	Applies a given Jones matrix to the probe
 
 	Parameters:
 	----------
 	probe: t.Tensor
-		A (...N)x2xMxL tensor representing the probe
+		A (N)(P)x2xMxL tensor representing the probe
 	jones_matrix: t.tensor
-		(N)x2x2
+		(N)x2x2 
 
 	Returns:
 	--------
 	a probe with the jones matrix applied: t.Tensor
-		(...N)x2xMxL 
+		(N)(P)x2xMxL 
 	"""
-	if transpose:
-		jones_matrix = jones_matrix[..., None, None, :, :]
-		# make it (N)x1x1x2x2
-		probe = probe[..., None, :, :]
-		probe = probe.transpose(-1, -3).transpose(-2, -4)
-		# (...N)xMxLx2x1
-		output = t.matmul(jones_matrix, probe).transpose(-2, -4).transpose(-1, -3)
-		# (...N)x2x1xMxL
+	if multiple_modes:
+		if transpose:
+			if len(jones_matrix.shape) >= 4:
+				jones_matrix = jones_matrix[..., None, :, :, :, :]	
+			else:
+				jones_matrix = jones_matrix[..., None, :, :, None, None]
+			probe = probe[..., None, :, :]
+			jones_matrix = jones_matrix.transpose(-1, -3).transpose(-2, -4) 
+			# (N)1xMxLx2x2 or (N)1x1x1x2x2
+			probe = probe.transpose(-1, -3).transpose(-2, -4)
+			output = t.matmul(jones_matrix, probe).transpose(-2, -4).transpose(-1, -3).squeeze(-3)
+			# (N)Px2xMxL
 
+		else:
+			if len(jones_matrix.shape) < 4:
+				jones_matrix = jones_matrix[..., None, :, :, :, :]
+			probe = t.stack((probe, probe), dim=-4)
+			output = t.sum(jones_matrix * probe, dim=-3)
+			#(N)x2xMxL
 
 	else:
-	# use element-wise multiplicaation and summation to contract a coordinate
-		jones_matrix = jones_matrix[..., None, None]
-		probe = t.stack((probe, probe), dim=-4)
-		output = t.sum(jones_matrix * probe, dim=-3)
-		#(...N)x2x1xMxL
+		if transpose:	
+			if len(jones_matrix.shape) < 4:
+				jones_matrix = jones_matrix[..., None, None]
+			probe = probe[..., None, :, :]
+			probe = probe.transpose(-1, -3).transpose(-2, -4)
+			jones_matrix = jones_matrix.transpose(-1, -3).transpose(-2, -4)
+			output = t.matmul(jones_matrix, probe).transpose(-2, -4).transpose(-1, -3).squeeze(-3)
 
-	return output.squeeze(-3)
-	#(...N)x2x1xMxL 
+		else:
+			if len(jones_matrix.shape) < 4:
+				jones_matrix = jones_matrix[..., None, None]
+			probe = t.stack((probe, probe), dim=-4)
+			output = t.sum(jones_matrix * probe, dim=-3)
+	
+	return output
+
 
 def apply_phase_retardance(probe, phase_shift):
 	"""
@@ -185,10 +202,15 @@ def apply_half_wave_plate(probe, fast_axis_angle):
 # a = t.ones(17, 8, 2, 3, 4)
 # b = t.ones(2, 1, 1)
 
-probe = t.ones(5, 2, 3, 3)
 
-polarizer = t.tensor([0])
 
-exitw = apply_linear_polarizer(probe, polarizer)
-print(exitw[:, 0, :, :])
-print('y', exitw[:, 1, :, :])
+# probe = t.ones(5, 2, 3, 3)
+
+# polarizer = t.tensor([45])
+
+# exitw = apply_linear_polarizer(probe, polarizer)
+# print(exitw[:, 0, :, :])
+# print('y', exitw[:, 1, :, :])
+
+a = t.ones(2, 4)
+print(t.sum(a, dim=1).shape)

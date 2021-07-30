@@ -62,18 +62,16 @@ class PolarizedFancyPtycho(FancyPtycho):
             x = 1j
         else:
             x = -1j
-        # model.probe.data = t.stack((model.probe.data.to(dtype=t.cfloat), x * model.probe.data.to(dtype=t.cfloat)), dim=-3)
-        # obj = t.stack((model.obj.data, model.obj.data), dim=-3)
-        # model.obj.data = t.stack((obj, obj), dim=-4)
-        print('probe guess shape:', model.probe.shape)
-        print('object guess shape:', model.obj.shape)
-        
+        model.probe.data = t.stack((model.probe.data.to(dtype=t.cfloat), x * model.probe.data.to(dtype=t.cfloat)), dim=-3)
+        obj = t.stack((model.obj.data, model.obj.data), dim=-3)
+        model.obj.data = t.stack((obj, obj), dim=-4)        
 
         # tensor vs tensor.data
         return model
 
     
-    def interaction(self, index, translations, polarizer, analyzer):
+    # WHAT IS INDEX?
+    def interaction(self, index, translations, polarizer, analyzer, test=False):
 
         # Step 1 is to convert the translations for each position into a
         # value in pixels
@@ -99,18 +97,15 @@ class PolarizedFancyPtycho(FancyPtycho):
         else:
             raise NotImplementedError('Unstable Modes not Implemented for polarized light')
 
+        print('probes', prs.shape)
         pol_probes = polarization.apply_linear_polarizer(prs, polarizer)
-
+        print('pol_probes',pol_probes.shape)
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
             prs, self.obj_support * self.obj,pix_trans,
             shift_probe=True, multiple_modes=True, polarized=True)
 
         analyzed_exit_waves = polarization.apply_linear_polarizer(exit_waves, analyzer)
 
-        #exit_waves = self.probe_norm * tools.interactions.ptycho_2D_round(
-        #    prs, self.obj_support * self.obj,pix_trans,
-        #    multiple_modes=True)
-        
         return analyzed_exit_waves
     
 
@@ -123,10 +118,10 @@ class PolarizedFancyPtycho(FancyPtycho):
         return out[..., None, :, :]
 
     def forward_propagator(self, wavefields):
-        return vectorial_wavefields(wavefields, tools.propagators.far_field)
+        return tools.propagators.far_field
 
     def backward_propagator(self, wavefields):
-        return vectorial_wavefields(wavefields, tools.propagators.inverse_far_field)
+        return tools.propagators.inverse_far_field
 
     
     def measurement(self, wavefields):
