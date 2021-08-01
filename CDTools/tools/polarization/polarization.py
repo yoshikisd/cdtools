@@ -48,12 +48,14 @@ def apply_jones_matrix(probe, jones_matrix, transpose=True, multiple_modes=True)
 	probe: t.Tensor
 		A (N)(P)x2xMxL tensor representing the probe
 	jones_matrix: t.tensor
-		(N)x2x2 
+		(N)x2x2x(M)x(L) 
 
 	Returns:
 	--------
 	a probe with the jones matrix applied: t.Tensor
 		(N)(P)x2xMxL 
+
+	Assume that if the probe has a dimension (N), so does the jones matrix
 	"""
 	if multiple_modes:
 		if transpose:
@@ -80,9 +82,12 @@ def apply_jones_matrix(probe, jones_matrix, transpose=True, multiple_modes=True)
 			if len(jones_matrix.shape) < 4:
 				jones_matrix = jones_matrix[..., None, None]
 			probe = probe[..., None, :, :]
+			print('probs', probe.shape)
+			print('joness', jones_matrix.shape)
 			probe = probe.transpose(-1, -3).transpose(-2, -4)
 			jones_matrix = jones_matrix.transpose(-1, -3).transpose(-2, -4)
 			output = t.matmul(jones_matrix, probe).transpose(-2, -4).transpose(-1, -3).squeeze(-3)
+
 
 		else:
 			if len(jones_matrix.shape) < 4:

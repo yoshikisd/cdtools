@@ -118,15 +118,15 @@ class PolarizedFancyPtycho(FancyPtycho):
         return out[..., None, :, :]
 
     def forward_propagator(self, wavefields):
-        return tools.propagators.far_field
+        return tools.propagators.far_field(wavefields)
 
     def backward_propagator(self, wavefields):
-        return tools.propagators.inverse_far_field
+        return tools.propagators.inverse_far_field(wavefields)
 
     
     def measurement(self, wavefields):
-        wavefields_x = wavefields[..., 0, :, :, :]
-        wavefields_y = wavefields[..., 1, :, :, :]
+        wavefields_x = wavefields[..., 0, :, :]
+        wavefields_y = wavefields[..., 1, :, :]
         out_x = tools.measurements.quadratic_background(wavefields_x,
                             self.background,
                             detector_slice=self.detector_slice,
@@ -135,7 +135,7 @@ class PolarizedFancyPtycho(FancyPtycho):
                             oversampling=self.oversampling)
         # now, set bckgr to 0 since t shouldn't be calculated twice
         out_y = tools.measurements.quadratic_background(wavefields_y,
-                            None,
+                            0,
                             detector_slice=self.detector_slice,
                             measurement=tools.measurements.incoherent_sum,
                             saturation=self.saturation,
