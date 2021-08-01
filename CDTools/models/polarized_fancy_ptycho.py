@@ -96,10 +96,9 @@ class PolarizedFancyPtycho(FancyPtycho):
             prs = Ws[...,None,None,None,None] * basis_prs
         else:
             raise NotImplementedError('Unstable Modes not Implemented for polarized light')
-
-        print('probes', prs.shape)
+            
         pol_probes = polarization.apply_linear_polarizer(prs, polarizer)
-        print('pol_probes',pol_probes.shape)
+
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
             prs, self.obj_support * self.obj,pix_trans,
             shift_probe=True, multiple_modes=True, polarized=True)
