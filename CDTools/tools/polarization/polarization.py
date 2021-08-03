@@ -30,6 +30,7 @@ def apply_linear_polarizer(probe, polarizer, multiple_modes=True, transpose=True
 	"""
 
 	if len(polarizer.shape) == 1:
+		print('polarizer', polarizer)
 		theta = math.radians(polarizer)
 		jones_matrices = t.tensor([[(cos(theta)) ** 2, sin(2 * theta) / 2], [sin(2 * theta) / 2, sin(theta) ** 2]]).to(dtype=t.cfloat)
 	else:
