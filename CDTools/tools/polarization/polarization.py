@@ -61,9 +61,13 @@ def apply_jones_matrix(probe, jones_matrix, transpose=True, multiple_modes=True)
 		if transpose:
 			if len(jones_matrix.shape) >= 4:
 				jones_matrix = jones_matrix[..., None, :, :, :, :]	
+
 			else:
 				jones_matrix = jones_matrix[..., None, :, :, None, None]
 			probe = probe[..., None, :, :]
+			# if jones matrices do not differ from pattern to pattern
+			if len(probe.shape) > len(jones_matrix.shape):
+				jones_matrix = jones_matrix[None, ...]
 			jones_matrix = jones_matrix.transpose(-1, -3).transpose(-2, -4) 
 			# (N)1xMxLx2x2 or (N)1x1x1x2x2
 			probe = probe.transpose(-1, -3).transpose(-2, -4)
@@ -82,8 +86,9 @@ def apply_jones_matrix(probe, jones_matrix, transpose=True, multiple_modes=True)
 			if len(jones_matrix.shape) < 4:
 				jones_matrix = jones_matrix[..., None, None]
 			probe = probe[..., None, :, :]
-			print('probs', probe.shape)
-			print('joness', jones_matrix.shape)
+			# if jones matrices do not differ from pattern to pattern
+			if len(probe.shape) > len(jones_matrix.shape):
+				jones_matrix = jones_matrix[None, ...]
 			probe = probe.transpose(-1, -3).transpose(-2, -4)
 			jones_matrix = jones_matrix.transpose(-1, -3).transpose(-2, -4)
 			output = t.matmul(jones_matrix, probe).transpose(-2, -4).transpose(-1, -3).squeeze(-3)
