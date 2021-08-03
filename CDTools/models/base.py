@@ -42,6 +42,8 @@ import time
 #import pytorch_warmup
 from .complex_adam import MyAdam
 from .complex_lbfgs import MyLBFGS
+from matplotlib.backends.backend_pdf import PdfPages
+pp = PdfPages('multipage.pdf')
 
 __all__ = ['CDIModel']
 
@@ -514,6 +516,7 @@ class CDIModel(t.nn.Module):
             if update:
                 plt.draw()
                 fig.canvas.start_event_loop(0.001)
+            pp.savefig()
                 
         if first_update:
             plt.pause(0.05 * len(self.figs))
