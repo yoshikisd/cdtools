@@ -10,6 +10,7 @@ __all__ = ['apply_linear_polarizer',
 		   'apply_quarter_wave_plate',
 		   'apply_circular_polarizer',
 		   'apply_jones_matrix']
+print()
 		   
 def apply_linear_polarizer(probe, polarizer, multiple_modes=True, transpose=True):
 	"""
@@ -29,14 +30,9 @@ def apply_linear_polarizer(probe, polarizer, multiple_modes=True, transpose=True
 		(N)(P)x2x1xMxL 
 	"""
 
-	if len(polarizer.shape) == 1:
-		print('polarizer', polarizer)
-		theta = math.radians(polarizer)
-		jones_matrices = t.tensor([[(cos(theta)) ** 2, sin(2 * theta) / 2], [sin(2 * theta) / 2, sin(theta) ** 2]]).to(dtype=t.cfloat)
-	else:
-		pol_cos = lambda idx: cos(math.radians(polarizer[idx]))
-		pol_sin = lambda idx: sin(math.radians(polarizer[idx]))
-		jones_matrices = t.stack(([t.tensor([[(pol_cos(idx)) ** 2, pol_sin(idx) * pol_cos(idx)], [pol_sin(idx) * pol_cos(idx), (pol_sin(idx)) ** 2]]).to(dtype=t.cfloat) for idx in range(len(polarizer))]))
+	pol_cos = lambda idx: cos(math.radians(polarizer[idx]))
+	pol_sin = lambda idx: sin(math.radians(polarizer[idx]))
+	jones_matrices = t.stack(([t.tensor([[(pol_cos(idx)) ** 2, pol_sin(idx) * pol_cos(idx)], [pol_sin(idx) * pol_cos(idx), (pol_sin(idx)) ** 2]]).to(dtype=t.cfloat) for idx in range(len(polarizer))]))
 
 	return apply_jones_matrix(probe, jones_matrices, transpose=transpose, multiple_modes=multiple_modes)
 
