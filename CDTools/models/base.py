@@ -42,6 +42,8 @@ import time
 #import pytorch_warmup
 from .complex_adam import MyAdam
 from .complex_lbfgs import MyLBFGS
+from matplotlib.backends.backend_pdf import PdfPages
+
 
 __all__ = ['CDIModel']
 
@@ -497,12 +499,16 @@ class CDIModel(t.nn.Module):
             try:
                 plotter(self,fig)
                 plt.title(name)
-                
+                print('f', idx)
+                plt.savefig('img-{0}.pdf'.format(idx), bbox_inches='tight')
+            
             except TypeError as e:
                 if dataset is not None:
                     try:
                         plotter(self, fig, dataset)
                         plt.title(name)
+                        print('f', idx)
+                        plt.savefig('img-{0}.pdf'.format(idx), bbox_inches='tight')
                     except (IndexError, KeyError, AttributeError, np.linalg.LinAlgError) as e:
                         pass
 

@@ -68,9 +68,9 @@ class PolarizedPtycho2DDataset(Ptycho2DDataset):
 
         polarizer = []
         analyzer = []
-        for k in t.tensor(translations).shape[0]:
-            polarizer.append((k//3)%3)
-            analyzer.append((k%3))
+        for k in range(t.tensor(translations).shape[0]):
+            polarizer.append((k//3)%3 * 45)
+            analyzer.append((k%3 * 45))
         self.polarizer = t.tensor(polarizer)
         self.analyzer = t.tensor(analyzer)
 
