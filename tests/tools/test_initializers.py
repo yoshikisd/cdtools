@@ -145,9 +145,10 @@ def test_gaussian_probe(ptycho_cxi_1):
         normalization += np.sum(im.cpu().numpy())
     normalization /= len(dataset)
 
-    normalization_1 = normalization /  np.sum(np.abs(np_probe)**2)
+    normalization_1 = np.sqrt(normalization / np.sum(np.abs(np_probe)**2))
     
     probe = initializers.gaussian_probe(dataset, basis, shape, sigma).numpy()
+ 
     assert np.allclose(probe, normalization_1*np_probe)
 
     # And then a propagated probe
@@ -159,7 +160,7 @@ def test_gaussian_probe(ptycho_cxi_1):
     Rz =  z * (1 + (zr / z)**2)
     np_probe  =  np.exp(-Rs**2 / wz**2) * np.exp(-1j * k * Rs**2 / (2 * Rz))
 
-    normalization_2 = normalization /  np.sum(np.abs(np_probe)**2)
+    normalization_2 = np.sqrt(normalization /  np.sum(np.abs(np_probe)**2))
     
     probe = initializers.gaussian_probe(dataset, basis, shape, sigma,
                                         propagation_distance=z).numpy()

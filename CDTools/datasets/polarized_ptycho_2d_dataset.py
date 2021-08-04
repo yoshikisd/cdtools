@@ -62,18 +62,10 @@ class PolarizedPtycho2DDataset(Ptycho2DDataset):
                                              *args, **kwargs)
         
         
-        # self.polarizer = t.tensor(polarizer_angles, dtype=t.float32)
-        # self.analyzer = t.tensor(analyzer_angles, dtype=t.float32)
+        self.polarizer = t.tensor(polarizer_angles, dtype=t.float32)
+        self.analyzer = t.tensor(analyzer_angles, dtype=t.float32)
         
-
-        polarizer = []
-        analyzer = []
-        for k in range(t.tensor(translations).shape[0]):
-            polarizer.append((k//3)%3 * 45)
-            analyzer.append((k%3 * 45))
-        self.polarizer = t.tensor(polarizer)
-        self.analyzer = t.tensor(analyzer)
-
+        
     def _load(self, index):
         """ Internal function to load data
 
@@ -157,17 +149,8 @@ class PolarizedPtycho2DDataset(Ptycho2DDataset):
         dataset.__class__ = cls
 
         # Now, we save out the polarizer and analyzer states
-        # polarizer = cdtdata.get_shot_to_shot_info(cxi_file, 'polarizer_angle')
-        # analyzer = cdtdata.get_shot_to_shot_info(cxi_file, 'analyzer_angle')
-
-        polarizer = []
-        analyzer = []
-        for k in range(dataset.translations.shape[0]):
-            polarizer.append((k//3)%3)
-            analyzer.append((k%3))
-        dataset.polarizer = t.tensor(polarizer)
-        dataset.analyzer = t.tensor(analyzer)
-
+        polarizer = cdtdata.get_shot_to_shot_info(cxi_file, 'polarizer_angle')
+        analyzer = cdtdata.get_shot_to_shot_info(cxi_file, 'analyzer_angle')
 
         dataset.analyzer = t.tensor(analyzer, dtype=t.float32)
         dataset.polarizer = t.tensor(polarizer, dtype=t.float32)

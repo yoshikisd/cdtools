@@ -308,6 +308,8 @@ def test_PolarizedPtycho2DDataset_init():
                                        detector_geometry=detector_geometry,
                                        mask=mask)
 
+    print(analyzer.dtype)
+    print(dataset.analyzer.dtype)
     assert t.all(t.eq(dataset.mask,t.BoolTensor(mask)))
     assert dataset.entry_info == entry_info
     assert dataset.sample_info == sample_info
