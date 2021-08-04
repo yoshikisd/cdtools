@@ -43,7 +43,7 @@ import time
 from .complex_adam import MyAdam
 from .complex_lbfgs import MyLBFGS
 from matplotlib.backends.backend_pdf import PdfPages
-pp = PdfPages('multipage.pdf')
+
 
 __all__ = ['CDIModel']
 
@@ -478,7 +478,7 @@ class CDIModel(t.nn.Module):
             self.figs = []
 
         idx = 0
-        for plots in self.plot_list:
+        for plots, c in in enumerate(self.plot_list):
             # If a conditional is included in the plot
             try:
                 if len(plots) >=3 and not plots[2](self):
@@ -505,6 +505,7 @@ class CDIModel(t.nn.Module):
                     try:
                         plotter(self, fig, dataset)
                         plt.title(name)
+                        plt.savefig('img-{0}.pdf'.format(index), bbox_inches='tight')
                     except (IndexError, KeyError, AttributeError, np.linalg.LinAlgError) as e:
                         pass
 
@@ -516,7 +517,6 @@ class CDIModel(t.nn.Module):
             if update:
                 plt.draw()
                 fig.canvas.start_event_loop(0.001)
-            pp.savefig()
                 
         if first_update:
             plt.pause(0.05 * len(self.figs))
