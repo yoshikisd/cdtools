@@ -31,8 +31,8 @@ def apply_linear_polarizer(probe, polarizer, multiple_modes=True, transpose=True
     """
     # if len(polarizer.shape) == 0:
     #     polarizer = t.tensor([polarizer])
-    if transpose:
-        print('a')
+    if len(polarizer,shape) == 0:
+        polarizer = t.tensor([polarizer])
     pol_cos = lambda idx: cos(math.radians(polarizer[idx]))
     pol_sin = lambda idx: sin(math.radians(polarizer[idx]))
     jones_matrices = t.stack(([t.tensor([[(pol_cos(idx)) ** 2, pol_sin(idx) * pol_cos(idx)], [pol_sin(idx) * pol_cos(idx), (pol_sin(idx)) ** 2]]).to(dtype=t.cfloat) for idx in range(len(polarizer))]))
