@@ -317,7 +317,6 @@ def get_dark(cxi_file):
     return darks
 
 
-
 def get_data(cxi_file, cut_zeroes = True):
     """Returns an array with the full stack of detector data defined in the cxi file object
 
@@ -350,10 +349,12 @@ def get_data(cxi_file, cut_zeroes = True):
         pull_from = 'entry_1/instrument_1/detector_1/data'
     else:
         raise KeyError('Data is not defined within cxi file')
-    data = np.array(cxi_file[pull_from]).astype(np.float32)
 
+    data = cxi_file[pull_from][:]
+    
+    # Use maximum in-place to avoid allocating any more memory than is needed
     if cut_zeroes:
-        data[data < 0] = 0
+        np.maximum(data,0,data)
 
     if 'axes' in cxi_file[pull_from].attrs:
         try:

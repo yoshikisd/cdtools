@@ -217,5 +217,5 @@ def apply_half_wave_plate(probe, fast_axis_angle):
 # print(exitw[:, 0, :, :])
 # print('y', exitw[:, 1, :, :])
 
-a = t.ones(2, 4)
-print(t.sum(a, dim=1).shape)
+#a = t.ones(2, 4)
+#print(t.sum(a, dim=1).shape)
