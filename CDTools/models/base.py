@@ -505,6 +505,7 @@ class CDIModel(t.nn.Module):
                     try:
                         plotter(self, fig, dataset)
                         plt.title(name)
+                        print('f', idx)
                         plt.savefig('img-{0}.pdf'.format(idx), bbox_inches='tight')
                     except (IndexError, KeyError, AttributeError, np.linalg.LinAlgError) as e:
                         pass
