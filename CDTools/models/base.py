@@ -478,7 +478,7 @@ class CDIModel(t.nn.Module):
             self.figs = []
 
         idx = 0
-        for plots, c in enumerate(self.plot_list):
+        for plots in self.plot_list:
             # If a conditional is included in the plot
             try:
                 if len(plots) >=3 and not plots[2](self):
@@ -505,7 +505,7 @@ class CDIModel(t.nn.Module):
                     try:
                         plotter(self, fig, dataset)
                         plt.title(name)
-                        plt.savefig('img-{0}.pdf'.format(index), bbox_inches='tight')
+                        plt.savefig('img-{0}.pdf'.format(idx), bbox_inches='tight')
                     except (IndexError, KeyError, AttributeError, np.linalg.LinAlgError) as e:
                         pass
 
