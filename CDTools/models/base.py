@@ -478,7 +478,7 @@ class CDIModel(t.nn.Module):
             self.figs = []
 
         idx = 0
-        for plots, c in in enumerate(self.plot_list):
+        for plots, c in enumerate(self.plot_list):
             # If a conditional is included in the plot
             try:
                 if len(plots) >=3 and not plots[2](self):
