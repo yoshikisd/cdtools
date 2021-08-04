@@ -499,7 +499,9 @@ class CDIModel(t.nn.Module):
             try:
                 plotter(self,fig)
                 plt.title(name)
-                
+                print('f', idx)
+                plt.savefig('img-{0}.pdf'.format(idx), bbox_inches='tight')
+            
             except TypeError as e:
                 if dataset is not None:
                     try:
