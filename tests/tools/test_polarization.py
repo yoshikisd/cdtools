@@ -1,23 +1,33 @@
-from __future__ import division, print_function, absolute_import
 import numpy as np
 import torch as t
-from copy import copy
-import h5py
-import pathlib
-from CDTools.datasets import CDataset, Ptycho2DDataset, PolarizedPtycho2DDataset
-from CDTools.tools import data as cdtdata, initializers, polarization, interactions
 from CDTools.tools.polarization import apply_jones_matrix as jones
-from CDTools.tools import plotting
-from torch.utils import data as torchdata
-from matplotlib import pyplot as plt
-from matplotlib.widgets import Slider
-from matplotlib import ticker
-from CDTools.models import FancyPtycho, PolarizedFancyPtycho
-from torch.utils import data as torchdata
+
+# Abe - I removed all the imports that didn't need to be here.
+
+# Abe - A few issues. First, you could just write "from math import cos, sin"
+# Second, we already have numpy imported, so better to use np.cos and np.sin
 from math import cos as cos, sin as sin
+# numpy also has np.pi and np.deg2rad 
 import math
 
 
+# Further comments:
+#
+# 1) You should also introduce an assert statement for the output shape
+# checking, e.g. assert out.shape == t.Size(<shape>). See example in the
+# first test.
+#
+# 2) Instead of using "assert a and b and c and d...", use separate assert
+# statements for each condition. This is both more readable, and it allows the
+# testing system to pinpoint exactly which of the assert statements failed.
+#
+# 3) USE SPACES INSTEAD OF TABS!!! 4 spaces per indent is the convention for
+# this project.
+#
+# 4) Docstrings should go after the function definition, rather than before
+#
+# 5) Still missing cases where Jones matrix has multiple entries (N) but probe
+# doesn't. Low priority.
 
 
 angle = 87
@@ -27,6 +37,7 @@ def polarizer(angle):
 	theta = math.radians(angle)
 	polarizer = t.tensor([[(cos(theta)) ** 2, sin(2 * theta) / 2], [sin(2 * theta) / 2, sin(theta) ** 2]]).to(dtype=t.cfloat)
 	return polarizer
+
 exponent = t.exp(-1j * math.pi / 4 * t.ones(2, 2))
 theta2 = math.radians(angle_2)
 quarter_plate = t.tensor([[(cos(theta2))**2 + 1j * (sin(theta2))**2, (1 - 1j) * sin(theta2) * cos(theta2)], 
@@ -54,13 +65,15 @@ jones_matrix: same jones matrix applied to all the pixels
 '''
 transpose = True
 def test_apply_jones_matrix_no_modes_no_mult_patterns_one_jones_matr():	
-	probe = t.rand(2, 4, 4, dtype=t.cfloat)
+	probe = t.rand(2, 3, 4, dtype=t.cfloat)
 	print(polarizer)
 	out = jones(jones(probe, polarizer(angle), multiple_modes=False, transpose=transpose), 
 		quarter_plate, multiple_modes=False, transpose=transpose)
 	print('expected shape:(2, 3, 4)')
 	print('actual:', out.shape)
 	print('simulated:', out)
+
+	assert out.shape == t.Size((2,3,4))
 
 	assert np.allclose(np.real(out[0]), np.imag(out[1]))
 
@@ -75,6 +88,7 @@ jones_matrix: jones matrices differ from pixel to pixel
 	3: [:, :, -2:, :-2] - 90
 	4: [:, :, -2:, -2:] - 45
 '''
+
 def test_apply_jones_matrix_no_modes_no_mult_patterns_diff_jones_matr():	
 	jones_matr = build_from_quarters(jones_plate, jones0, jones90, jones45)
 	probe = t.ones(2, 4, 4).to(dtype=t.cfloat)
@@ -88,12 +102,13 @@ def test_apply_jones_matrix_no_modes_no_mult_patterns_diff_jones_matr():
 	print('simulated:', out.shape)
 	print('simulated:', out)
 
-	assert (np.allclose(np.real(out[0, :-2, :-2]), np.imag(out[1, :-2, :-2]))
-		and t.allclose(out[0, :-2, -2:], t.ones(2, 2, dtype=t.cfloat))
-		and t.allclose(out[1, :-2, -2:], t.zeros(2, 2, dtype=t.cfloat))
-		and t.allclose(out[0, -2:, :-2], t.zeros(2, 2, dtype=t.cfloat))
-		and t.allclose(out[1, -2:, :-2], t.ones(2, 2, dtype=t.cfloat))
-		and t.allclose(out[0, -2:, -2:], out[0, -2:, -2:]))
+	# Example of using multiple asserts
+	assert np.allclose(np.real(out[0, :-2, :-2]), np.imag(out[1, :-2, :-2]))
+	assert t.allclose(out[0, :-2, -2:], t.ones(2, 2, dtype=t.cfloat))
+	assert t.allclose(out[1, :-2, -2:], t.zeros(2, 2, dtype=t.cfloat))
+	assert t.allclose(out[0, -2:, :-2], t.zeros(2, 2, dtype=t.cfloat))
+	assert t.allclose(out[1, -2:, :-2], t.ones(2, 2, dtype=t.cfloat))
+	assert t.allclose(out[0, -2:, -2:], out[0, -2:, -2:])
 	
 
 '''
@@ -320,19 +335,7 @@ def test_apply_jones_matrix_mult_modes_mult_patterns_diff_jones_matr():
 		and np.allclose(np.real(out[2, 3, 0, -2:, -2:]), np.real(out[2, 3, 0, -2:, -2:])))
 
 
-
-
-
-	'''
-	I REALIZED THAT ANOTHER POSSIBLE SISTUATION WE HAVEN'T CONSIDERED BEFORE IS WHEN THE JONES MATRIX DOESN'T DIFFER ACROSS THE PATTERNS
-	IN OTHER WORDS, PROBE.SHAPE CONTAINS N (NUM OF PATTERNS) BUT JONES_MATRIX.SHAPE DOESN'T
-	
-
-	NOW, WE'LL TEST THE CASES WHEN THE PROBE DOESN'T DIFFER FROM PATTERN TO PATTERN
-	'''
-
-
-	'''
+'''
 probe: no multiple modes, multiple diffr patterns
 	Nx2xMxL = 3x2x4x4
 jones_matrix: same jones matrix applied to all the pixels

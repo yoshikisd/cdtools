@@ -278,7 +278,7 @@ def test_near_field():
     assert z.grad != 0
     assert spacing.grad[0] != 0
     assert wavelength.grad !=0
-
+    
 
 def test_generalized_near_field():
 

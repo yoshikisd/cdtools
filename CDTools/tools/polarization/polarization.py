@@ -1,5 +1,8 @@
 import numpy as numpy
 import torch as t
+# Abe - again, we don't need math here. replace with torch-native functions
+# in all the definitions here. We have to use torch here if we want to be
+# able to calculate derivatives w.r.t. the polarizer angle, say.
 import math
 from math import sin
 from math import cos
@@ -10,8 +13,10 @@ __all__ = ['apply_linear_polarizer',
            'apply_quarter_wave_plate',
            'apply_circular_polarizer',
            'apply_jones_matrix']
-print()
-           
+
+
+# Abe - 
+
 def apply_linear_polarizer(probe, polarizer, multiple_modes=True, transpose=True):
     """
     Applies a linear polarizer to the probe
@@ -33,6 +38,9 @@ def apply_linear_polarizer(probe, polarizer, multiple_modes=True, transpose=True
     #     polarizer = t.tensor([polarizer])
     if len(polarizer,shape) == 0:
         polarizer = t.tensor([polarizer])
+
+    # Abe - Something feels overly complicated about this. Let's take a look
+    # at it together and do some simplification
     pol_cos = lambda idx: cos(math.radians(polarizer[idx]))
     pol_sin = lambda idx: sin(math.radians(polarizer[idx]))
     jones_matrices = t.stack(([t.tensor([[(pol_cos(idx)) ** 2, pol_sin(idx) * pol_cos(idx)], [pol_sin(idx) * pol_cos(idx), (pol_sin(idx)) ** 2]]).to(dtype=t.cfloat) for idx in range(len(polarizer))]))
