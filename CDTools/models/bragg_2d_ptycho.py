@@ -57,14 +57,13 @@ class Bragg2DPtycho(CDIModel):
     def __init__(self, wavelength, detector_geometry,
                  probe_basis, probe_guess, obj_guess,
                  detector_slice=None,
-                 min_translation = t.Tensor([0,0]),
-                 median_propagation = t.Tensor(data=[0]),
-                 background = None, translation_offsets=None, mask=None,
-                 weights = None, translation_scale = 1, saturation=None,
-                 probe_support = None, obj_support=None, oversampling=1,
+                 min_translation=t.tensor([0, 0], dtype=t.float32),
+                 median_propagation=t.tensor(0, dtype=t.float32),
+                 background=None, translation_offsets=None, mask=None,
+                 weights=None, translation_scale=1, saturation=None,
+                 probe_support=None, oversampling=1,
                  propagate_probe=True, correct_tilt=True, lens=False):
 
-        
         # We need the detector geometry
         # We need the probe basis (but in this case, we don't need the surface
         # normal because it comes implied by the probe basis
@@ -73,93 +72,89 @@ class Bragg2DPtycho(CDIModel):
         # The median propagation should be needed as well
         # translation_offsets can stay 2D for now
         # propagate_probe and correct_tilt are important!
-        
-        super(Bragg2DPtycho,self).__init__()
-        self.wavelength = t.Tensor([wavelength])
+
+        super(Bragg2DPtycho, self).__init__()
+        self.wavelength = t.tensor(wavelength)
         self.detector_geometry = copy(detector_geometry)
         det_geo = self.detector_geometry
         if hasattr(det_geo, 'distance'):
-            det_geo['distance'] = t.Tensor(det_geo['distance'])
+            det_geo['distance'] = t.tensor(det_geo['distance'])
         if hasattr(det_geo, 'basis'):
-            det_geo['basis'] = t.Tensor(det_geo['basis'])
+            det_geo['basis'] = t.tensor(det_geo['basis'])
         if hasattr(det_geo, 'corner'):
-            det_geo['corner'] = t.Tensor(det_geo['corner'])
+            det_geo['corner'] = t.tensor(det_geo['corner'])
 
-        self.min_translation = t.Tensor(min_translation)
-        self.median_propagation = median_propagation
+        self.min_translation = t.tensor(min_translation)
+        self.median_propagation = t.tensor(median_propagation)
         
-        self.probe_basis = t.Tensor(probe_basis)
-        self.detector_slice = detector_slice
+        self.probe_basis = t.tensor(probe_basis)
+        self.detector_slice = copy(detector_slice)
 
         # calculate the surface normal from the probe basis
         surface_normal =  np.cross(np.array(probe_basis)[:,1],
                            np.array(probe_basis)[:,0])
         surface_normal /= np.linalg.norm(surface_normal)
-        self.surface_normal = t.Tensor(surface_normal)
+        self.surface_normal = t.tensor(surface_normal)
         
         self.saturation = saturation
         
         if mask is None:
             self.mask = mask
         else:
-            self.mask = t.BoolTensor(mask)
-        
+            self.mask = t.tensor(mask, dtype=t.bool)
+
+        probe_guess = t.tensor(probe_guess, dtype=t.complex64)
+        obj_guess = t.tensor(obj_guess, dtype=t.complex64)
+
         # We rescale the probe here so it learns at the same rate as the
         # object
-        if probe_guess.dim() > 3:
-            self.probe_norm = 1 * t.max(t.abs(probe_guess[0]).to(t.float32))
+        if probe_guess.dim() > 2:
+            self.probe_norm = 1 * t.max(t.abs(probe_guess[0]))
         else:
-            self.probe_norm = 1 * t.max(t.abs(probe_guess).to(t.float32))         
+            self.probe_norm = 1 * t.max(t.abs(probe_guess))        
 
         # Not strictly necessary but otherwise it will return
         # a probe with the stuff outside of the support unchanged after
         # optimization
         if probe_support is not None:
+            self.probe_support = t.tensor(probe_support, dtype=t.bool)
             probe_guess = probe_guess * probe_support
             # This seems dumb, but otherwise it winds up with a mixture
             # of negative and positive zeros and it's super annoying when
             # you look at the phase map
             probe_guess[probe_guess == 0] = 0
-            
-        self.probe = t.nn.Parameter(probe_guess.to(t.complex64)
-                                    / self.probe_norm)
-        
-        self.obj = t.nn.Parameter(obj_guess.to(t.complex64))
-        
+        else:
+            self.probe_support = t.ones(self.probe[0].shape, dtype=t.bool)
+
+        self.probe = t.nn.Parameter(probe_guess / self.probe_norm)
+        self.obj = t.nn.Parameter(obj_guess)
+
         if background is None:
             if detector_slice is not None:
-                background = 1e-6 * t.ones(self.probe[0][self.detector_slice].shape)
+                background = 1e-6 * t.ones(
+                    self.probe[0][self.detector_slice].shape,
+                    dtype=t.float32)
             else:
-                background = 1e-6 * t.ones(self.probe[0].shape)
+                background = 1e-6 * t.ones(self.probe[0].shape,
+                                           dtype=t.float32)
 
-                
-        self.background = t.nn.Parameter(t.as_tensor(background,dtype=t.float32))
+        self.background = t.nn.Parameter(background)
 
         if weights is None:
             self.weights = None
         else:
-            self.weights = t.nn.Parameter(t.as_tensor(weights,dtype=t.float32))
-        
+            # No incoherent + unstable here yet
+            self.weights = t.nn.Parameter(t.tensor(weights,
+                                                   dtype=t.float32))
+
         if translation_offsets is None:
             self.translation_offsets = None
         else:
-            self.translation_offsets = t.nn.Parameter(
-                t.as_tensor(translation_offsets,dtype=t.float32) /
-                translation_scale)
+            t_o = t.tensor(translation_offsets, dtype=t.float32)
+            t_o = t_o / translation_scale
+            self.translation_offsets = t.nn.Parameter(t_o)
 
         self.translation_scale = translation_scale
-
-        if probe_support is not None:
-            self.probe_support = probe_support
-        else:
-            self.probe_support = t.ones(self.probe[0].shape,dtype=t.bool)
-
-        if obj_support is not None:
-            self.obj_support = obj_support
-            self.obj.data = self.obj * obj_support
-        else:
-            self.obj_support = t.ones_like(self.obj, dtype=t.bool)
-
 
         self.oversampling = oversampling
 
@@ -174,7 +169,7 @@ class Bragg2DPtycho(CDIModel):
             self.k_map, self.intensity_map = \
                 tools.propagators.generate_high_NA_k_intensity_map(
                     self.probe_basis,
-                    self.detector_geometry['basis']/ oversampling,
+                    self.detector_geometry['basis'] / oversampling,
                     probe_shape,
                     self.detector_geometry['distance'],
                     self.wavelength,dtype=t.float32,
@@ -183,21 +178,21 @@ class Bragg2DPtycho(CDIModel):
             self.k_map = None
             self.intensity_map = None
 
-        self.prop_dir = t.Tensor([0,0,1]).to(dtype=t.float32)
+        self.prop_dir = t.tensor([0, 0, 1], dtype=t.float32)
 
         # This propagator should be able to be multiplied by the propagation
         # distance each time to get a propagator
-        self.universal_propagator = t.angle(ggasp(self.probe.shape[1:],
-                                    self.probe_basis, self.wavelength,
-                                    t.Tensor([0,0,self.wavelength/(2*np.pi)]),
-                                    propagation_vector=self.prop_dir,
-                                    dtype=t.complex64,
-                                    propagate_along_offset=True))
+        self.universal_propagator = t.angle(ggasp(
+            self.probe.shape[1:],
+            self.probe_basis, self.wavelength,
+            t.tensor([0, 0, self.wavelength/(2*np.pi)], dtype=t.float32),
+            propagation_vector=self.prop_dir,
+            dtype=t.complex64,
+            propagate_along_offset=True))
 
 
-        
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=True, propagate_probe=True,correct_tilt=True, lens=False, opt_for_fft=False):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, propagate_probe=True,correct_tilt=True, lens=False, opt_for_fft=False):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -262,11 +257,8 @@ class Bragg2DPtycho(CDIModel):
         # equal the input vector with a trailing 0, so we can do the
         # projection with a pseudoinverse and removing the last column
 
-        projector = np.linalg.pinv(mat)[:,:3]
-        
-        
+        projector = np.linalg.pinv(mat)[:, :3]
         probe_basis = t.Tensor(np.dot(projector, ew_basis))
-        
 
         # Now we need a much better way to handle the translations here
         # than translations_to_pixel
@@ -324,17 +316,6 @@ class Bragg2DPtycho(CDIModel):
         else:
             probe_support = None;
 
-        if restrict_obj != -1:
-            ro = restrict_obj
-            os = np.array(obj_size)
-            ps = np.array(probe_shape)
-            obj_support = t.zeros(obj.shape,dtype=t.bool)
-            obj_support[ps[0]//2-ro:os[0]+ro-ps[0]//2,
-                        ps[1]//2-ro:os[1]+ro-ps[1]//2] = 1
-        else:
-            obj_support = None
-
-
         # Here we need to implement a simple condition to choose whether
         # to propagate the probe or not
         if not( propagate_probe is True or propagate_probe is False):
@@ -353,7 +334,6 @@ class Bragg2DPtycho(CDIModel):
                    translation_scale=translation_scale,
                    saturation=saturation,
                    probe_support=probe_support,
-                   obj_support=obj_support,
                    oversampling=oversampling,
                    propagate_probe=propagate_probe,
                    correct_tilt=correct_tilt,
@@ -385,7 +365,7 @@ class Bragg2DPtycho(CDIModel):
             prs[j] = tools.propagators.near_field(prs[j], propagator)
 
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
-            prs, self.obj_support * self.obj,pix_trans,
+            prs, self.obj,pix_trans,
             shift_probe=True, multiple_modes=True)
 
         return exit_waves
@@ -443,7 +423,6 @@ class Bragg2DPtycho(CDIModel):
         self.probe_basis = self.probe_basis.to(*args,**kwargs)
         self.probe_norm = self.probe_norm.to(*args,**kwargs)
         self.probe_support = self.probe_support.to(*args,**kwargs)
-        self.obj_support = self.obj_support.to(*args,**kwargs)
         self.surface_normal = self.surface_normal.to(*args, **kwargs)
         self.prop_dir = self.prop_dir.to(*args, **kwargs)
         self.universal_propagator = self.universal_propagator.to(*args,**kwargs)

@@ -22,7 +22,7 @@ class SimplePtycho(CDIModel):
                  surface_normal=np.array([0.,0.,1.]), mask=None):
 
         super(SimplePtycho,self).__init__()
-        self.wavelength = t.tensor([wavelength])
+        self.wavelength = t.tensor(wavelength)
         self.detector_geometry = copy(detector_geometry)
         det_geo = self.detector_geometry
         if hasattr(det_geo, 'distance'):
@@ -35,23 +35,24 @@ class SimplePtycho(CDIModel):
         self.min_translation = t.tensor(min_translation)
 
         self.probe_basis = t.tensor(probe_basis)
-        self.detector_slice = detector_slice
+        self.detector_slice = copy(detector_slice)
 
         self.surface_normal = t.tensor(surface_normal)
 
         if mask is None:
             self.mask = None
         else:
-            self.mask = t.BoolTensor(mask)
+            self.mask = t.tensor(mask, dtype=t.bool)
+
+        probe_guess = t.tensor(probe_guess, dtype=t.complex64)
+        obj_guess = t.tensor(obj_guess, dtype=t.complex64)
 
         # We rescale the probe here so it learns at the same rate as the
         # object
-        self.probe_norm = t.max(t.abs(probe_guess.to(t.complex64)))
+        self.probe_norm = t.max(t.abs(probe_guess))
 
-        self.probe = t.nn.Parameter(probe_guess.to(t.complex64)
-                                    / self.probe_norm)
-        self.obj = t.nn.Parameter(obj_guess.to(t.complex64))
-
+        self.probe = t.nn.Parameter(probe_guess / self.probe_norm)
+        self.obj = t.nn.Parameter(obj_guess)
 
 
     @classmethod

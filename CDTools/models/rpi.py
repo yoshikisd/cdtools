@@ -51,67 +51,70 @@ class RPI(CDIModel):
         return t.complex(self.obj_real, self.obj_imag)
     
     def __init__(self, wavelength, detector_geometry, probe_basis,
-                 probe, obj_guess, detector_slice=None, 
-                 background = None, mask=None, saturation=None,
+                 probe, obj_guess, detector_slice=None,
+                 background=None, mask=None, saturation=None,
                  obj_support=None, oversampling=1):
 
-        super(RPI,self).__init__()
+        super(RPI, self).__init__()
 
-        self.wavelength = t.Tensor([wavelength])
+        self.wavelength = t.tensor(wavelength)
         self.detector_geometry = copy(detector_geometry)
         
         det_geo = self.detector_geometry
         if hasattr(det_geo, 'distance'):
-            det_geo['distance'] = t.Tensor(det_geo['distance'])
+            det_geo['distance'] = t.tensor(det_geo['distance'])
         if hasattr(det_geo, 'basis'):
-            det_geo['basis'] = t.Tensor(det_geo['basis'])
+            det_geo['basis'] = t.tensor(det_geo['basis'])
         if hasattr(det_geo, 'corner'):
-            det_geo['corner'] = t.Tensor(det_geo['corner'])
+            det_geo['corner'] = t.tensor(det_geo['corner'])
 
-                
-        self.probe_basis = t.Tensor(probe_basis)
-        
-        scale_factor = t.Tensor([probe.shape[-1]/obj_guess.shape[-1],
+        self.probe_basis = t.tensor(probe_basis)
+
+        scale_factor = t.tensor([probe.shape[-1]/obj_guess.shape[-1],
                                  probe.shape[-2]/obj_guess.shape[-2]])
         self.obj_basis = self.probe_basis / scale_factor
         self.detector_slice = detector_slice
 
         # Maybe something to include in a bit
-        #self.surface_normal = t.Tensor(surface_normal)
+        # self.surface_normal = t.tensor(surface_normal)
         
         self.saturation = saturation
         
         if mask is None:
             self.mask = mask
         else:
-            self.mask = t.BoolTensor(mask)
+            self.mask = t.tensor(mask, dtype=t.bool)
         
             
-        self.probe = probe.to(t.complex64)
+        self.probe = t.tensor(probe, dtype=t.complex64)
 
         if obj_guess.dim() == 2:
-            obj_guess = obj_guess[None,:,:]
-            
+            obj_guess = obj_guess[None, :, :]
 
-        self.obj_real = t.nn.Parameter(obj_guess.real.to(t.float32))
-        self.obj_imag = t.nn.Parameter(obj_guess.imag.to(t.float32))
+        obj_guess = t.tensor(obj_guess, dtype=t.complex64)
+        
+        self.obj_real = t.nn.Parameter(obj_guess.real)
+        self.obj_imag = t.nn.Parameter(obj_guess.imag)
         
         # Wait for LBFGS to be updated for complex-valued parameters
-        #self.obj = t.nn.Parameter(obj_guess.to(t.float32))
-        
+        # self.obj = t.nn.Parameter(obj_guess.to(t.float32))
+
         if background is None:
             if detector_slice is not None:
-                background = 1e-6 * t.ones(self.probe[0][self.detector_slice].shape[:-1])
+                background = 1e-6 * t.ones(
+                    self.probe[0][self.detector_slice].shape,
+                    dtype=t.float32)
             else:
-                background = 1e-6 * t.ones(self.probe[0].shape[:-1])
+                background = 1e-6 * t.ones(self.probe[0].shape,
+                                           dtype=t.float32)
                 
-        self.background = t.Tensor(background).to(t.float32)
+        self.background = t.tensor(background, dtype=t.float32)
 
         if obj_support is not None:
             self.obj_support = obj_support
-            self.obj.data = self.obj * obj_support[None,...]
+            self.obj.data = self.obj * obj_support[None, ...]
         else:
-            self.obj_support = t.ones_like(self.obj[0,...])
+            self.obj_support = t.ones_like(self.obj[0, ...])
 
         self.oversampling = oversampling
 

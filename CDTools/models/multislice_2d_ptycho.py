@@ -18,21 +18,27 @@ class Multislice2DPtycho(CDIModel):
 
     @property
     def probe(self):
-        return t.complex(self.probe_real,self.probe_imag)
+        return t.complex(self.probe_real, self.probe_imag)
 
     @property
     def obj(self):
-        return t.complex(self.obj_real,self.obj_imag)
-    
-    def __init__(self, wavelength, detector_geometry,
+        return t.complex(self.obj_real, self.obj_imag)
+
+    def __init__(self,
+                 wavelength,
+                 detector_geometry,
                  probe_basis,
                  probe_guess, obj_guess, dz, nz,
                  detector_slice=None,
-                 surface_normal=np.array([0.,0.,1.]),
-                 min_translation = t.Tensor([0,0]),
-                 background = None, translation_offsets=None, mask=None,
-                 weights = None, translation_scale = 1, saturation=None,
-                 probe_support = None,
+                 surface_normal=np.array([0., 0., 1.]),
+                 min_translation=t.Tensor([0, 0]),
+                 background=None,
+                 translation_offsets=None,
+                 mask=None,
+                 weights=None,
+                 translation_scale=1,
+                 saturation=None,
+                 probe_support=None,
                  oversampling=1,
                  bandlimit=None,
                  subpixel=True,
@@ -40,69 +46,71 @@ class Multislice2DPtycho(CDIModel):
                  fourier_probe=False,
                  prevent_aliasing=True,
                  phase_only=False,
-                 units='um'):
-        
-        super(Multislice2DPtycho,self).__init__()
-        self.wavelength = t.Tensor([wavelength])
+                 units='um',
+                 ):
+
+        super(Multislice2DPtycho, self).__init__()
+        self.wavelength = t.tensor(wavelength)
         self.detector_geometry = copy(detector_geometry)
         self.dz = dz
         self.nz = nz
         det_geo = self.detector_geometry
         if hasattr(det_geo, 'distance'):
-            det_geo['distance'] = t.Tensor(det_geo['distance'])
+            det_geo['distance'] = t.tensor(det_geo['distance'])
         if hasattr(det_geo, 'basis'):
-            det_geo['basis'] = t.Tensor(det_geo['basis'])
+            det_geo['basis'] = t.tensor(det_geo['basis'])
         if hasattr(det_geo, 'corner'):
-            det_geo['corner'] = t.Tensor(det_geo['corner'])
+            det_geo['corner'] = t.tensor(det_geo['corner'])
 
-        self.min_translation = t.Tensor(min_translation)
+        self.min_translation = t.tensor(min_translation)
 
-        self.probe_basis = t.Tensor(probe_basis)
-        self.detector_slice = detector_slice
-        self.surface_normal = t.Tensor(surface_normal)
-        
+        self.probe_basis = t.tensor(probe_basis)
+        self.detector_slice = copy(detector_slice)
+        self.surface_normal = t.tensor(surface_normal)
+
         self.saturation = saturation
         self.subpixel = subpixel
         self.exponentiate_obj = exponentiate_obj
         self.fourier_probe = fourier_probe
         self.units = units
-        self.phase_only=phase_only
-        self.prevent_aliasing=prevent_aliasing
-        
+        self.phase_only = phase_only
+        self.prevent_aliasing = prevent_aliasing
+
         if mask is None:
             self.mask = mask
         else:
-            self.mask = t.BoolTensor(mask)
-        
+            self.mask = t.tensor(mask, dtype=t.bool)
+
+        probe_guess = t.tensor(probe_guess, dtype=t.complex64)
+        obj_guess = t.tensor(obj_guess, dtype=t.complex64)
+
         # We rescale the probe here so it learns at the same rate as the
         # object
         if probe_guess.dim() > 3:
-            self.probe_norm = 1 * t.max(t.abs(probe_guess[0]).to(t.float32))
+            self.probe_norm = 1 * t.max(t.abs(probe_guess[0]))
         else:
-            self.probe_norm = 1 * t.max(t.abs(probe_guess).to(t.float32))
+            self.probe_norm = 1 * t.max(t.abs(probe_guess))
 
-        pg = probe_guess.to(t.complex64)/self.probe_norm
+        pg = probe_guess / self.probe_norm
         self.probe_real = t.nn.Parameter(pg.real)
         self.probe_imag = t.nn.Parameter(pg.imag)
 
-        og = obj_guess.to(t.complex64)
-        self.obj_real = t.nn.Parameter(og.real)
-        self.obj_imag = t.nn.Parameter(og.imag)
-        
-        
+        self.obj_real = t.nn.Parameter(obj_guess.real)
+        self.obj_imag = t.nn.Parameter(obj_guess.imag)
+
         #self.probe = t.nn.Parameter(probe_guess.to(t.complex64)
         #                            / self.probe_norm)
-        
         #self.obj = t.nn.Parameter(obj_guess.to(t.complex64))
 
         if background is None:
             if detector_slice is not None:
-                background = 1e-6 * t.ones(self.probe[0][self.detector_slice].shape)
+                background = 1e-6 * t.ones(
+                    self.probe[0][self.detector_slice].shape, dtype=t.float32)
             else:
-                background = 1e-6 * t.ones(self.probe[0].shape)
+                background = 1e-6 * t.ones(self.probe[0].shape,
+                                           dtype=t.float32)
 
-                
-        self.background = t.nn.Parameter(t.as_tensor(background,dtype=t.float32))
+        self.background = t.nn.Parameter(background)
 
         if weights is None:
             self.weights = None
@@ -111,47 +119,43 @@ class Multislice2DPtycho(CDIModel):
             # weights and complex-valued per-mode weight matrices
             if len(weights.shape) == 1:
                 # This is if it's just a list of numbers
-                self.weights = t.nn.Parameter(t.as_tensor(weights,
-                                                          dtype=t.float32))
+                self.weights = t.nn.Parameter(t.tensor(weights,
+                                                       dtype=t.float32))
             else:
-                # Now this is a matrix of weights, so we 
-                self.weights = t.nn.Parameter(t.as_tensor(weights,
-                                                          dtype=t.complex64))
-        
+                # Now this is a matrix of weights, so it needs to be complex
+                self.weights = t.nn.Parameter(t.tensor(weights,
+                                                       dtype=t.complex64))
+
         if translation_offsets is None:
             self.translation_offsets = None
         else:
-            self.translation_offsets = t.nn.Parameter(t.as_tensor(translation_offsets,dtype=t.float32)/ translation_scale) 
+            t_o = t.tensor(translation_offsets, dtype=t.float32)
+            t_o = t_o / translation_scale
+            self.translation_offsets = t.nn.Parameter(t_o)
 
         self.translation_scale = translation_scale
 
         if probe_support is not None:
-            self.probe_support = t.as_tensor(probe_support,dtype=t.bool)
+            self.probe_support = t.tensor(probe_support, dtype=t.bool)
         else:
-            self.probe_support = None#t.ones_like(self.probe,dtype=t.bool)#None
-        
+            self.probe_support = None
+
         self.oversampling = oversampling
 
-        spacing = np.linalg.norm(self.probe_basis,axis=0)
+        spacing = np.linalg.norm(self.probe_basis, axis=0)
         shape = np.array(self.probe.shape[1:])
         if prevent_aliasing:
             shape *= 2
             spacing /= 2
-        
+
         self.bandlimit = bandlimit
 
+        self.as_prop = tools.propagators.generate_angular_spectrum_propagator(shape, spacing, self.wavelength, self.dz, self.bandlimit)
 
-        self.as_prop = tools.propagators.generate_angular_spectrum_propagator(shape, spacing, self.wavelength, self.dz, bandlimit=1/np.sqrt(2))#self.bandlimit)
-        #plt.imshow(t.abs(self.as_prop))
-        #plt.figure()
-        #plt.imshow(t.abs(t.fft.fftshift(t.fft.ifft2(self.as_prop))))
-        #plt.show()
-        #exit()
 
-        
     @classmethod
-    def from_dataset(cls, dataset, dz, nz, probe_convergence_semiangle, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=None, replicate_slice=False, subpixel=True, exponentiate_obj=True, units='um', fourier_probe=False, phase_only=False, prevent_aliasing=True, probe_support_radius=None):
-        
+    def from_dataset(cls, dataset, dz, nz, probe_convergence_semiangle, padding=0, n_modes=1, dm_rank=None, translation_scale=1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, bandlimit=None, replicate_slice=False, subpixel=True, exponentiate_obj=True, units='um', fourier_probe=False, phase_only=False, prevent_aliasing=True, probe_support_radius=None):
+
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
         det_shape = dataset[0][1].shape
@@ -161,24 +165,24 @@ class Multislice2DPtycho(CDIModel):
         get_as_args = dataset.get_as_args
         dataset.get_as(device='cpu')
         (indices, translations), patterns = dataset[:]
-        dataset.get_as(*get_as_args[0],**get_as_args[1])
+        dataset.get_as(*get_as_args[0], **get_as_args[1])
 
         # Set to none to avoid issues with things outside the detector
         if auto_center:
-            center = tools.image_processing.centroid(t.sum(patterns,dim=0))
+            center = tools.image_processing.centroid(t.sum(patterns, dim=0))
         else:
             center = None
-            
+
         # Then, generate the probe geometry from the dataset
         ewg = tools.initializers.exit_wave_geometry
-        probe_basis, probe_shape, det_slice =  ewg(det_basis,
-                                                   det_shape,
-                                                   wavelength,
-                                                   distance,
-                                                   center=center,
-                                                   padding=padding,
-                                                   opt_for_fft=False,
-                                                   oversampling=oversampling)
+        probe_basis, probe_shape, det_slice = ewg(det_basis,
+                                                  det_shape,
+                                                  wavelength,
+                                                  distance,
+                                                  center=center,
+                                                  padding=padding,
+                                                  opt_for_fft=False,
+                                                  oversampling=oversampling)
 
 
         if hasattr(dataset, 'sample_info') and \
@@ -226,7 +230,6 @@ class Multislice2DPtycho(CDIModel):
         # For a Fourier space probe
         if fourier_probe:
             probe = tools.propagators.far_field(probe)
-
 
         # Consider a different start
         if exponentiate_obj:
