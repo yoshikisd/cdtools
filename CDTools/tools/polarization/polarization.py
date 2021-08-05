@@ -17,6 +17,7 @@ __all__ = ['apply_linear_polarizer',
 
 # Abe - split these into two functions
 
+# Note for the future: this function should
 def generate_linear_polarizer(pol_angle):
     single_angle = False
 

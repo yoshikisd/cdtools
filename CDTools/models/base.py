@@ -105,7 +105,7 @@ class CDIModel(t.nn.Module):
 
     def AD_optimize(self, iterations, data_loader,  optimizer,\
                     scheduler=None, regularization_factor=None, thread=True,
-                    calculation_width=10, warmup_scheduler=None):
+                    calculation_width=10):
         """Runs a round of reconstruction using the provided optimizer
         
         This is the basic automatic differentiation reconstruction tool
@@ -155,28 +155,21 @@ class CDIModel(t.nn.Module):
                     
                     total_loss = 0
                     for inp, pats in zip(input_chunks, pattern_chunks):
-                        # This is just used to allow graceful exit when threading
+                        # This is just used to allow graceful exit when
+                        # threading
                         if stop_event is not None and stop_event.is_set():
                             exit()
 
                         sim_patterns = self.forward(*inp)
-                        
-                        #sim_patterns.retain_grad()
+
                         if hasattr(self, 'mask'):
                             loss = self.loss(pats,sim_patterns, mask=self.mask)
                         else:
                             loss = self.loss(pats,sim_patterns)
 
-                        loss.backward()#retain_variables=True)
-                        #plt.figure()
-                        #plt.imshow(sim_patterns.grad.cpu()[0])
-                        #plt.colorbar()
-                        #plt.show()
+                        loss.backward()
                     
-                        total_loss += loss.detach()    
-
-                    #print('probe grad')
-                    #print(t.mean(self.obj.grad))
+                        total_loss += loss.detach()
 
                     if regularization_factor is not None \
                        and hasattr(self, 'regularizer'):
@@ -184,21 +177,7 @@ class CDIModel(t.nn.Module):
                         loss.backward()
                     return total_loss
 
-                                    
-
-                if warmup_scheduler is not None:
-                    old_lrs = [group['lr'] for group in
-                               optimizer.param_groups]
-                    warmup_scheduler.dampen()
-                    #print([group['lr'] for group in
-                    #       optimizer.param_groups], end='\r')
-                    
                 loss += optimizer.step(closure).detach().cpu().numpy()
-
-                if warmup_scheduler is not None:
-                    for old_lr, group in zip(old_lrs, optimizer.param_groups):
-                        group['lr'] = old_lr
-    
                 
             loss /= normalization
             if scheduler is not None:
@@ -213,8 +192,13 @@ class CDIModel(t.nn.Module):
             result_queue = queue.Queue()
             stop_event = threading.Event()
             def target():
-                result_queue.put(run_iteration(stop_event))
-            
+                try:
+                    result_queue.put(run_iteration(stop_event))
+                except Exception as e:
+                    # If something bad happens, put the exception into the
+                    # result queue
+                    result_queue.put(e)
+                    
         for it in range(iterations):
             if thread:
                 calc = threading.Thread(target=target, name='calculator', daemon=True)
@@ -231,8 +215,15 @@ class CDIModel(t.nn.Module):
                     print('\nAsking execution thread to stop cleanly - please be patient.')
                     calc.join()
                     raise e
-                    
-                yield result_queue.get()
+
+                res = result_queue.get()
+
+                # If something went wrong in the thead, we'll get an exception
+                if isinstance(res, Exception):
+                    raise res
+
+                yield res
+
             else:
                 yield run_iteration()
 
@@ -240,7 +231,7 @@ class CDIModel(t.nn.Module):
     def Adam_optimize(self, iterations, dataset, batch_size=15, lr=0.005,
                       schedule=False, amsgrad=False, subset=None,
                       regularization_factor=None, thread=True,
-                      calculation_width=10, warmup=False):
+                      calculation_width=10):
         """Runs a round of reconstruction using the Adam optimizer
         
         This is generally accepted to be the most robust algorithm for use
@@ -292,15 +283,8 @@ class CDIModel(t.nn.Module):
         else:
             scheduler = None
 
-        if warmup:
-            print('Warmup is not currently implemented, sorry!')
-            #warmup_scheduler = pytorch_warmup.UntunedLinearWarmup(optimizer)
-        else:
-            warmup_scheduler = None
-            
         return self.AD_optimize(iterations, data_loader, optimizer,
                                 scheduler=scheduler,
-                                warmup_scheduler=warmup_scheduler,
                                 regularization_factor=regularization_factor,
                                 thread=thread,
                                 calculation_width=calculation_width)
@@ -421,7 +405,13 @@ class CDIModel(t.nn.Module):
 
 
     def report(self):
-        """Returns a string informing on the latest reconstruction iteration"""
+        """Returns a string informing on the latest reconstruction iteration
+
+        Returns
+        -------
+        report : str
+            A string with basic info on the latest iteration
+        """
         if hasattr(self, 'latest_loss'):
             return 'Iteration ' + str(self.iteration_count) + \
                   ' completed in %0.2f s with loss ' %\
@@ -457,7 +447,7 @@ class CDIModel(t.nn.Module):
         dataset : CDataset
             Optional, a dataset matched to the model type
         update : bool
-            Whether to update existing plots or plot new ones
+            Default True, whether to update existing plots or plot new ones
         
         """
                 
@@ -494,16 +484,13 @@ class CDIModel(t.nn.Module):
             try:
                 plotter(self,fig)
                 plt.title(name)
-                print('f', idx)
-                plt.savefig('img-{0}.pdf'.format(idx), bbox_inches='tight')
-            
+                            
             except TypeError as e:
                 if dataset is not None:
                     try:
                         plotter(self, fig, dataset)
                         plt.title(name)
-                        print('f', idx)
-                        plt.savefig('img-{0}.pdf'.format(idx), bbox_inches='tight')
+                        
                     except (IndexError, KeyError, AttributeError, np.linalg.LinAlgError) as e:
                         pass
 
@@ -519,7 +506,39 @@ class CDIModel(t.nn.Module):
         if first_update:
             plt.pause(0.05 * len(self.figs))
 
+            
+    def save_figures(self, prefix='', extension='.eps'):
+        """Saves all currently open inspection figures.
 
+        Note that this function is not very intelligent - so, for example,
+        if multiple probe modes are being reconstructed and the probe
+        plotting function allows one to scroll between different modes, it
+        will simply save whichever mode happens to be showing at the moment.
+        Therefore, this should not be treated as a good way of saving out
+        the full state of the reconstruction.
+
+        By default, the files will be named by the figure titles as defined
+        in the plot_list. Files can be saved with any extension suported by
+        matplotlib.pyplot.savefig.
+        
+        Parameters
+        ----------
+        prefix : str
+            Optional, a string to prepend to the saved figure names
+        extention : strategy
+            Default is .eps, the file extension to save with.
+        """
+        
+        if hasattr(self, 'figs') and self.figs:
+            figs = self.figs
+        else:
+            return # No figures to save
+
+        for fig in self.figs:
+            fig.savefig(prefix + fig.axes[0].get_title() + extension,
+                        bbox_inches = 'tight')
+
+            
     def compare(self, dataset):
         """Opens a tool for comparing simulated and measured diffraction patterns
         

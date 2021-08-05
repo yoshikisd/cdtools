@@ -353,6 +353,7 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     propagator : torch.Tensor
         A phase mask which accounts for the phase change that each plane wave will undergo.
     """
+    
     # Internally, the generalized propagation function is used, so we start
     # by creating an appropriate basis
     # This creates a real-valued tensor which matches the kind of complex
