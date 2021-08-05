@@ -15,7 +15,25 @@ __all__ = ['apply_linear_polarizer',
            'apply_jones_matrix']
 
 
-# Abe - 
+# Abe - split these into two functions
+
+def generate_linear_polarizer(pol_angle):
+    single_angle = False
+
+    pol_angle = t.as_tensor(pol_angle)
+    if pol_angle.dim() == 0:
+        pol_angle = t.unsqueeze(pol_angle,0)
+        single_angle = True
+
+    pol_angle_rad = t.deg2rad(pol_angle)
+    jones_matrices = t.stack([t.tensor([[(t.cos(p)) ** 2, t.sin(p) * t.cos(p)],
+                                        [t.sin(p) * t.cos(p), (t.sin(p)) ** 2]])
+                              for p in polarizer])
+    if single_angle:
+        return jones_matrices[0].to(dtype=t.cfloat) 
+    else:
+        return jones_matrices.to(dtype=t.cfloat)
+    
 
 def apply_linear_polarizer(probe, polarizer, multiple_modes=True, transpose=True):
     """
@@ -34,18 +52,9 @@ def apply_linear_polarizer(probe, polarizer, multiple_modes=True, transpose=True
     linearly polarized probe: t.Tensor
         (N)(P)x2x1xMxL 
     """
-    # if len(polarizer.shape) == 0:
-    #     polarizer = t.tensor([polarizer])
-    if len(polarizer,shape) == 0:
-        polarizer = t.tensor([polarizer])
-
-    # Abe - Something feels overly complicated about this. Let's take a look
-    # at it together and do some simplification
-    pol_cos = lambda idx: cos(math.radians(polarizer[idx]))
-    pol_sin = lambda idx: sin(math.radians(polarizer[idx]))
-    jones_matrices = t.stack(([t.tensor([[(pol_cos(idx)) ** 2, pol_sin(idx) * pol_cos(idx)], [pol_sin(idx) * pol_cos(idx), (pol_sin(idx)) ** 2]]).to(dtype=t.cfloat) for idx in range(len(polarizer))]))
-
+    jones_matrices = generate_linear_polarizer(polarization)
     return apply_jones_matrix(probe, jones_matrices, transpose=transpose, multiple_modes=multiple_modes)
+
 
 def apply_jones_matrix(probe, jones_matrix, transpose=True, multiple_modes=True):
     """
