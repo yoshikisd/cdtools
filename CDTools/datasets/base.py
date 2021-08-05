@@ -13,29 +13,15 @@ of the following functions:
 
 """
 
-from __future__ import division, print_function, absolute_import
-
-import numpy as np
 import torch as t
 from copy import copy
 import h5py
 import pathlib
 from CDTools.tools import data as cdtdata
-from CDTools.tools import plotting
 from torch.utils import data as torchdata
-from matplotlib import pyplot as plt
-from matplotlib.widgets import Slider
-from matplotlib import ticker
-
 
 __all__ = ['CDataset']
 
-#
-# This loads and stores all the kinds of metadata that are common to
-# All different kinds of diffraction experiments
-# Other datasets can subclass this and not worry about loading and
-# saving that metadata.
-#
 
 class CDataset(torchdata.Dataset):
     """ The base dataset class which all other datasets subclass
@@ -47,7 +33,7 @@ class CDataset(torchdata.Dataset):
     storage of the metadata portions of .cxi files, as well as the tools
     needed to allow for easy mixing of data on the CPU and GPU.
     """
-    
+
     def __init__(self, entry_info=None, sample_info=None,
                  wavelength=None,
                  detector_geometry=None, mask=None,
@@ -55,9 +41,9 @@ class CDataset(torchdata.Dataset):
 
         """The __init__ function allows construction from python objects.
 
-        The detector_geometry dictionary is defined to have the 
+        The detector_geometry dictionary is defined to have the
         entries defined by the outputs of data.get_detector_geometry.
-        
+
 
         Parameters
         ----------
@@ -71,13 +57,13 @@ class CDataset(torchdata.Dataset):
             A dictionary containing the various detector geometry
             parameters
         mask : array
-            A mask for the detector, defined as 1 for live pixels, 0 
+            A mask for the detector, defined as 1 for live pixels, 0
             for dead
         background : array
-            An initial guess for the not-previously-subtracted 
+            An initial guess for the not-previously-subtracted
             detector background
         """
-        
+
         # Force pass-by-value-like behavior to stop strangeness
         self.entry_info = copy(entry_info)
         self.sample_info = copy(sample_info)
@@ -91,38 +77,38 @@ class CDataset(torchdata.Dataset):
             self.background = t.tensor(background, dtype=t.float32)
         else:
             self.background = None
-    
+
         self.get_as(device='cpu')
 
-            
-    def to(self,*args,**kwargs):
+
+    def to(self, *args, **kwargs):
         """Sends the relevant data to the given device and dtype
 
         This function sends the stored mask and background to the
         specified device and dtype
-        
+
         Accepts the same parameters as torch.Tensor.to
         """
         # The mask should always stay a uint8, but it should switch devices
         mask_kwargs = copy(kwargs)
         try:
             mask_kwargs.pop('dtype')
-        except KeyError as r:
+        except KeyError:
             pass
-        
+
         if self.mask is not None:
-            self.mask = self.mask.to(*args,**mask_kwargs)          
+            self.mask = self.mask.to(*args,**mask_kwargs)
         if self.background is not None:
-            self.background = self.background.to(*args,**kwargs)          
-        
+            self.background = self.background.to(*args,**kwargs)
+
 
     def get_as(self, *args, **kwargs):
         """Sets the dataset to return data on the given device and dtype
-        
+
         Oftentimes there isn't room to store an entire dataset on a GPU,
         but it is still worth running the calculation on the GPU even with
         the overhead incurred by transferring data back and forth. In that
-        case, get_as can be used instead of to, to declare a set of 
+        case, get_as can be used instead of to, to declare a set of
         device and dtype that the data should be returned as, whenever it
         is accessed through the __getitem__ function (as it would be in
         any reconstructions).

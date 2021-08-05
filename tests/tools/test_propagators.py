@@ -1,5 +1,3 @@
-from __future__ import division, print_function, absolute_import
-
 from CDTools.tools import initializers
 from CDTools.tools import propagators
 from CDTools.tools import image_processing
@@ -8,7 +6,6 @@ import numpy as np
 import torch as t
 import pytest
 import scipy.misc
-from scipy.fftpack import fftshift, ifftshift
 from scipy import stats
 from matplotlib import pyplot as plt
 

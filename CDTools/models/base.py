@@ -28,8 +28,6 @@ loss
 
 """
 
-from __future__ import division, print_function, absolute_import
-
 import torch as t
 from torch.utils import data as torchdata
 from matplotlib import pyplot as plt
@@ -39,11 +37,8 @@ import numpy as np
 import threading
 import queue
 import time
-#import pytorch_warmup
 from .complex_adam import MyAdam
 from .complex_lbfgs import MyLBFGS
-from matplotlib.backends.backend_pdf import PdfPages
-
 
 __all__ = ['CDIModel']
 

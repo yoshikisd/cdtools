@@ -1,6 +1,3 @@
-from __future__ import division, print_function, absolute_import
-
-import pytest
 import numpy as np
 from scipy import fftpack as ffts
 import torch as t

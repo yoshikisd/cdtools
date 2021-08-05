@@ -1,11 +1,8 @@
-from __future__ import division, print_function, absolute_import
-
 from CDTools.datasets import *
 from CDTools.tools import data as cdtdata
 import numpy as np
 import torch as t
 import h5py
-import pytest
 import datetime
 
 

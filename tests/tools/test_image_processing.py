@@ -1,13 +1,8 @@
-from __future__ import division, print_function, absolute_import
-
-
-import pytest
 import numpy as np
 import torch as t
 
-from CDTools.tools import image_processing, initializers, interactions
+from CDTools.tools import image_processing, interactions
 from scipy import ndimage
-from scipy.signal import fftconvolve
 
 def test_centroid():
     # Test single im

@@ -1,16 +1,10 @@
-from __future__ import division, print_function, absolute_import
 import numpy as np
 import torch as t
-from copy import copy
 import h5py
 import pathlib
-from CDTools.datasets import CDataset, Ptycho2DDataset
+from CDTools.datasets import Ptycho2DDataset
 from CDTools.tools import data as cdtdata
 from CDTools.tools import plotting
-from torch.utils import data as torchdata
-from matplotlib import pyplot as plt
-from matplotlib.widgets import Slider
-from matplotlib import ticker
 
 __all__ = ['PolarizedPtycho2DDataset']
 
@@ -18,7 +12,7 @@ __all__ = ['PolarizedPtycho2DDataset']
 class PolarizedPtycho2DDataset(Ptycho2DDataset):
     """The standard dataset for a 2D ptychography scan
 
-    Subclasses datasets.CDataset
+    Subclasses datasets.Ptycho2DDataset
 
     This class loads and saves 2D ptychography scan data from .cxi files.
     It should save and load files compatible with most reconstruction
@@ -122,7 +116,7 @@ class PolarizedPtycho2DDataset(Ptycho2DDataset):
     # perhaps there is a way but I couldn't figure it out.
     @classmethod
     def from_cxi(cls, cxi_file):
-        """Generates a new CDataset from a .cxi file directly
+        """Generates a new PolarizedPtycho2DDataset from a .cxi file directly
 
         This generates a new PolarizedPtycho2DDataset from a .cxi file storing
         a 2D ptychography scan.

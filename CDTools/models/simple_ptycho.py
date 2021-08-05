@@ -1,5 +1,3 @@
-from __future__ import division, print_function, absolute_import
-
 import torch as t
 from CDTools.models import CDIModel
 from CDTools.datasets import Ptycho2DDataset
@@ -7,10 +5,8 @@ from CDTools import tools
 from CDTools.tools import plotting as p
 from copy import copy
 from torch.utils import data as torchdata
-from matplotlib import pyplot as plt
 from datetime import datetime
 import numpy as np
-from .complex_adam import MyAdam
 
 __all__ = ['SimplePtycho']
 

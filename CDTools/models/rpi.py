@@ -1,14 +1,9 @@
-from __future__ import division, print_function, absolute_import
-
 import torch as t
 from CDTools.models import CDIModel
-from CDTools.datasets import Ptycho2DDataset
 from CDTools import tools
 from CDTools.tools import plotting as p
 from CDTools.tools.interactions import RPI_interaction
 from CDTools.tools import initializers
-from matplotlib import pyplot as plt
-from datetime import datetime
 import numpy as np
 from copy import copy
 

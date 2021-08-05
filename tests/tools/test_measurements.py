@@ -1,9 +1,6 @@
-from __future__ import division, print_function, absolute_import
-
 from CDTools.tools import measurements
 import torch as t
 import numpy as np
-import pytest
 
 
 def test_intensity():

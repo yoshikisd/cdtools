@@ -1,5 +1,3 @@
-from __future__ import division, print_function, absolute_import
-
 from CDTools.tools import losses
 import numpy as np
 import torch as t

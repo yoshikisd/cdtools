@@ -1,17 +1,11 @@
-from __future__ import division, print_function, absolute_import
 import numpy as np
 import torch as t
 from copy import copy
 import h5py
 import pathlib
-
 from CDTools.datasets import CDataset
 from CDTools.tools import data as cdtdata
 from CDTools.tools import plotting
-from torch.utils import data as torchdata
-from matplotlib import pyplot as plt
-from matplotlib.widgets import Slider
-from matplotlib import ticker
 
 __all__ = ['Ptycho2DDataset']
 
@@ -125,7 +119,7 @@ class Ptycho2DDataset(CDataset):
     # perhaps there is a way but I couldn't figure it out.
     @classmethod
     def from_cxi(cls, cxi_file):
-        """Generates a new CDataset from a .cxi file directly
+        """Generates a new Ptycho2DDataset from a .cxi file directly
 
         This generates a new Ptycho2DDataset from a .cxi file storing
         a 2D ptychography scan.

@@ -1,9 +1,6 @@
-from __future__ import division, print_function, absolute_import
-
 from CDTools.tools import plotting
 from CDTools.tools import initializers
 import numpy as np
-import pytest
 import torch as t
 import scipy.misc
 import matplotlib.pyplot as plt
