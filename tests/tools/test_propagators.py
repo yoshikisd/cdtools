@@ -256,7 +256,7 @@ def test_near_field():
     # Again, 10^-3 is about all the accuracy we can expect
     assert np.max(np.abs(Emz-Emz_t)) < 1e-3 * np.max(np.abs(Emz))
 
-    # Finally, we check that the bandlimiting at least does something
+    # Then, we check that the bandlimiting at least does something
     asp = propagators.generate_angular_spectrum_propagator(
         E0.shape,(1.5e-9,1e-9),wavelength,z,remove_z_phase=True,
         dtype=t.complex128, bandlimit=0.3)
@@ -266,6 +266,20 @@ def test_near_field():
     assert asp[130,0] != 0
     assert asp[0,175] != 0
     
+    # Then, we check that automatic differentiation works
+    z = t.tensor([z],requires_grad=True)
+    spacing = t.tensor((1.5e-9,1e-9), requires_grad=True)
+    wavelength = t.tensor([wavelength], requires_grad=True)
+
+    asp = propagators.generate_angular_spectrum_propagator(
+        E0.shape, spacing, wavelength, z)
+
+    asp[10,10].backward()
+    assert z.grad != 0
+    assert spacing.grad[0] != 0
+    assert wavelength.grad !=0
+
+
 def test_generalized_near_field():
 
     # The strategy is to compare the propagation of a gaussian beam to

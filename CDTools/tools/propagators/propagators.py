@@ -366,9 +366,9 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     basis[1,0] = -spacing[0]
     basis[0,1] = -spacing[1]
     # And similarly, the offset is just z along the z direction
-    offset = t.zeros([3], dtype=basis.dtype)
+    #offset = t.tensor([0,0,z], dtype=basis.dtype)
+    offset = t.zeros(3, dtype=basis.dtype)
     offset[2] = z
-
     
     # And we call the generalized function! 
     propagator = generate_generalized_angular_spectrum_propagator(shape, basis,
@@ -500,20 +500,24 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
 
     # Now, we need to generate the out-of-plane direction, so we can
     # expand these Ks to the full Ks in 3D reciprocal space.
-
-    # THis is broken down into steps to avoid floating point underflow
+    
+    # This is broken down into 2 steps to avoid floating point underflow
     # which was a real problem that showed up for electron ptycho
     b1_dir = basis[:,0] / t.linalg.norm(basis[:,0])
     b2_dir = basis[:,1] / t.linalg.norm(basis[:,1])
     perpendicular_dir = t.cross(b1_dir,b2_dir)
-    perpendicular_dir /= t.linalg.norm(perpendicular_dir)
+    # Note that we cannot use in-place operations if we want to be able to
+    # use automatic differentiation successfully
+    perpendicular_dir = perpendicular_dir / t.linalg.norm(perpendicular_dir)
 
     # We set the sign of the propagation direction appropriately
     if propagation_vector is not None:
-        perpendicular_dir *= t.sign(t.dot(perpendicular_dir,propagation_vector))
+        perpendicular_dir = perpendicular_dir \
+            * t.sign(t.dot(perpendicular_dir,propagation_vector))
     else:
         pass
-        perpendicular_dir *= t.sign(t.dot(perpendicular_dir,offset_vector))
+        perpendicular_dir = perpendicular_dir * \
+            t.sign(t.dot(perpendicular_dir,offset_vector))
     
     # Then, if we have a propagation vector, we shift the in-plane
     # components of all the pixels to be centered around the in-plane
