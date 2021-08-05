@@ -73,50 +73,25 @@ def apply_jones_matrix(probe, jones_matrix, transpose=True, multiple_modes=True)
     a probe with the jones matrix applied: t.Tensor
         (N)(P)x2xMxL 
 
-    Assume that if the probe has a dimension (N), so does the jones matrix
     """
-    if multiple_modes:
-        if transpose:
-            if len(jones_matrix.shape) >= 4:
-                jones_matrix = jones_matrix[..., None, :, :, :, :]  
-
-            else:
-                jones_matrix = jones_matrix[..., None, :, :, None, None]
-            probe = probe[..., None, :, :]
-            # if jones matrices do not differ from pattern to pattern
-            if len(probe.shape) > len(jones_matrix.shape):
-                jones_matrix = jones_matrix[None, ...]
-            jones_matrix = jones_matrix.transpose(-1, -3).transpose(-2, -4) 
-            # (N)1xMxLx2x2 or (N)1x1x1x2x2
-            probe = probe.transpose(-1, -3).transpose(-2, -4)
-            output = t.matmul(jones_matrix, probe).transpose(-2, -4).transpose(-1, -3).squeeze(-3)
-            # (N)Px2xMxL
-
-        else:
-            if len(jones_matrix.shape) < 4:
-                jones_matrix = jones_matrix[..., None, :, :, :, :]
-            probe = t.stack((probe, probe), dim=-4)
-            output = t.sum(jones_matrix * probe, dim=-3)
-            #(N)x2xMxL
-
+    if transpose:
+        if jones_matrix.dim() < 4:
+            jones_matrix = jones_matrix[..., None, None]
+        if multiple_modes:
+            jones_matrix = jones_matrix.unsqueeze(-5)          
+        probe = probe[..., None, :, :]
+        # if jones matrices do not differ from pattern to pattern
+        if probe.dim() > jones_matrix.dim():
+            jones_matrix = jones_matrix.unsqueeze(0)
+        # vice versa
+        elif jones_matrix.dim() > probe.dim():
+            probe = probe.unsqueeze(0)
+        jones_matrix = jones_matrix.transpose(-1, -3).transpose(-2, -4) 
+        probe = probe.transpose(-1, -3).transpose(-2, -4)
+        output = t.matmul(jones_matrix, probe).transpose(-2, -4).transpose(-1, -3).squeeze(-3)
+        
     else:
-        if transpose:   
-            if len(jones_matrix.shape) < 4:
-                jones_matrix = jones_matrix[..., None, None]
-            probe = probe[..., None, :, :]
-            # if jones matrices do not differ from pattern to pattern
-            if len(probe.shape) > len(jones_matrix.shape):
-                jones_matrix = jones_matrix[None, ...]
-            probe = probe.transpose(-1, -3).transpose(-2, -4)
-            jones_matrix = jones_matrix.transpose(-1, -3).transpose(-2, -4)
-            output = t.matmul(jones_matrix, probe).transpose(-2, -4).transpose(-1, -3).squeeze(-3)
-
-
-        else:
-            if len(jones_matrix.shape) < 4:
-                jones_matrix = jones_matrix[..., None, None]
-            probe = t.stack((probe, probe), dim=-4)
-            output = t.sum(jones_matrix * probe, dim=-3)
+        raise NotImplementedError
     
     return output
 
