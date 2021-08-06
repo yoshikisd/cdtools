@@ -1,6 +1,8 @@
 import numpy as np
 import torch as t
+from CDTools.tools.polarization import apply_linear_polarizer, generate_linear_polarizer
 from CDTools.tools.polarization import apply_jones_matrix as jones
+
 
 # Abe - I removed all the imports that didn't need to be here.
 
@@ -75,6 +77,31 @@ def test_apply_jones_matrix_no_modes_no_mult_patterns_one_jones_matr():
 
     assert np.allclose(np.real(out[0]), np.imag(out[1]))
     assert out.shape == t.Size((2, 3, 4))
+
+
+def test_generate_linear_polarizer():
+    pol_angles = [0, 45, 90]
+    pol_angle1 = 45
+    pol_angle2 = t.tensor(90)
+    pol_angle3 = t.tensor([0])
+    pols = generate_linear_polarizer(pol_angles)
+    pol1 = generate_linear_polarizer(pol_angle1)
+    pol2 = generate_linear_polarizer(pol_angle2)
+    pol3 = generate_linear_polarizer(pol_angle3)
+    print('polarizers 0, 45, 90 (1D tensor) shape:', pols.shape)
+    print('shape of the polarizer generated from int:', pol1.shape)
+    print('shape of the polarizer generated from 0D tensor:', pol2.shape)
+    print('shape of the linear polarizer generated from t.Size(0) tensor:', pol3.shape)
+    print('90', pol2)
+    print(jones90)
+    probe = t.ones(4, 4)
+    jones_m = [jones0, jones45, jones90]
+    jones_m = t.stack([matr for matr in jones_m])
+    assert pols.shape == t.Size((3, 2, 2))
+    assert pol1.shape == t.Size((2, 2))
+    assert pol2.shape == t.Size((2, 2))
+    assert pol3.shape == t.Size((1, 2, 2))
+    assert t.allclose(pol1, jones45)
 
 
 def test_apply_jones_matrix_no_modes_no_mult_patterns_diff_jones_matr():    

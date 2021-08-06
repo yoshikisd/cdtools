@@ -12,7 +12,8 @@ __all__ = ['apply_linear_polarizer',
            'apply_half_wave_plate',
            'apply_quarter_wave_plate',
            'apply_circular_polarizer',
-           'apply_jones_matrix']
+           'apply_jones_matrix',
+           'generate_linear_polarizer']
 
 
 # Abe - split these into two functions
@@ -29,7 +30,7 @@ def generate_linear_polarizer(pol_angle):
     pol_angle_rad = t.deg2rad(pol_angle)
     jones_matrices = t.stack([t.tensor([[(t.cos(p)) ** 2, t.sin(p) * t.cos(p)],
                                         [t.sin(p) * t.cos(p), (t.sin(p)) ** 2]])
-                              for p in polarizer])
+                              for p in pol_angle_rad])
     if single_angle:
         return jones_matrices[0].to(dtype=t.cfloat) 
     else:
