@@ -114,12 +114,10 @@ def apply_phase_retardance(probe, phase_shift):
         (...)x2x1xMxL 
     """
     probe = probe.to(dtype=t.cfloat)
-    jones_matrix = t.tensor([[1, 0], [0, phase_shift]])
-    probe = probe.transpose(-1, -3).transpose(-2, -4)
-    polarized_probe = t.matmul(jones_matrix.to(dtype=t.cfloat), probe)
+    jones_matrix = t.tensor([[1, 0], [0, phase_shift]]).to(dtype=t.cfloat)
+    polarized = apply_jones_matrix(probe, jones_matrix)
 
-    # Transpose it back
-    return polarized_probe.transpose(-1, -3).transpose(-2, -4)
+    return polarized
 
 def apply_circular_polarizer(probe, left_polarized=True):
     """
@@ -128,25 +126,23 @@ def apply_circular_polarizer(probe, left_polarized=True):
     Parameters:
     ----------
     probe: t.Tensor
-        A (...)x2x1xMxL tensor representing the probe
+        A (...)x2xMxL tensor representing the probe
     left_polarizd: bool
         True for the left-polarization, False for the right
     
     Returns:
     --------
     circularly polarized probe: t.Tensor
-        (...)x2x1xMxL 
+        (...)x2xMxL 
     """
     probe = probe.to(dtype=t.cfloat)
     if left_polarized:
-        jones_matrix = (1/2 * t.tensor([[1, -1j], [1j, 1]]))
+        jones_matrix = (1/2 * t.tensor([[1, -1j], [1j, 1]])).to(dtype=t.cfloat)
     else:
-        jones_matrix = 1/2 * t.tensor([[1, 1j], [-1j, 1]])
-    probe = probe.transpose(-1, -3).transpose(-2, -4)
-    polarized_probe = t.matmul(jones_matrix.to(dtype=t.cfloat), probe)
+        jones_matrix = 1/2 * t.tensor([[1, 1j], [-1j, 1]]).to(dtype=t.cfloat)
+    polarized = apply_jones_matrix(probe, jones_matrix)
 
-    # Transpose it back
-    return polarized_probe.transpose(-1, -3).transpose(-2, -4)
+    return polarized
 
 def apply_quarter_wave_plate(probe, fast_axis_angle):
     """
@@ -165,12 +161,10 @@ def apply_quarter_wave_plate(probe, fast_axis_angle):
     probe = probe.to(dtype=t.cfloat)
     theta = math.radians(fast_axis_angle)
     exponent = t.exp(-1j * math.pi / 4 * t.ones(2, 2))
-    jones_matrix = exponent* t.tensor([[(cos(theta))**2 + 1j * (sin(theta))**2, (1 - 1j) * sin(theta) * cos(theta)], [(1 - 1j) * sin(theta) * cos(theta), (sin(theta))**2 + 1j * (cos(theta))**2]])
-    probe = probe.transpose(-1, -3).transpose(-2, -4)
-    polarized_probe = t.matmul(jones_matrix.to(dtype=t.cfloat), probe)
-    # Transpose it back
-    return polarized_probe.transpose(-1, -3).transpose(-2, -4)
+    jones_matrix = exponent* t.tensor([[(cos(theta))**2 + 1j * (sin(theta))**2, (1 - 1j) * sin(theta) * cos(theta)], [(1 - 1j) * sin(theta) * cos(theta), (sin(theta))**2 + 1j * (cos(theta))**2]]).to(dtype=t.cfloat)
+    out = apply_jones_matrix(probe, jones_matrix)
 
+    return out 
 
 def apply_half_wave_plate(probe, fast_axis_angle):
     """
@@ -189,32 +183,8 @@ def apply_half_wave_plate(probe, fast_axis_angle):
     probe = probe.to(dtype=t.cfloat)
     theta = math.radians(fast_axis_angle)
     exponent = t.exp(-1j * math.pi / 2 * t.ones(2, 2))
-    jones_matrix = exponent * t.tensor([[(cos(theta))**2 - (sin(theta))**2, 2 * sin(theta) * cos(theta)], [2 * sin(theta) * cos(theta), (sin(theta))**2 - (cos(theta))**2]])
-    probe = probe.transpose(-1, -3).transpose(-2, -4)
-    polarized_probe = t.matmul(jones_matrix.to(dtype=t.cfloat), probe)
-    # Transpose it back
-    return polarized_probe.transpose(-1, -3).transpose(-2, -4)
+    jones_matrix = exponent * t.tensor([[(cos(theta))**2 - (sin(theta))**2, 2 * sin(theta) * cos(theta)], [2 * sin(theta) * cos(theta), (sin(theta))**2 - (cos(theta))**2]]).to(dtype=t.cfloat)
+    out = apply_jones_matrix(probe, jones_matrix)
 
-# probe = t.rand(17, 7, 2, 6, 4)
-# polarizer = t.rand(7)
-# out = apply_linear_polarizer(probe, polarizer)
-# out2 = apply_linear_polarizer(probe, polarizer, transpose=False)
-
-# print(out.shape)
-# print(out2.shape)
-
-# a = t.ones(17, 8, 2, 3, 4)
-# b = t.ones(2, 1, 1)
-
-
-
-# probe = t.ones(5, 2, 3, 3)
-
-# polarizer = t.tensor([45])
-
-# exitw = apply_linear_polarizer(probe, polarizer)
-# print(exitw[:, 0, :, :])
-# print('y', exitw[:, 1, :, :])
-
-#a = t.ones(2, 4)
-#print(t.sum(a, dim=1).shape)
+    return out 
+    
