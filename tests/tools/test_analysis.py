@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import fftpack as ffts
+from scipy import linalg as la
 import torch as t
 from itertools import combinations
 
@@ -239,7 +240,6 @@ def test_calc_deconvolved_cross_correlation():
     assert np.allclose(test_cor_t.numpy(), np_cor)
 
     
-
 def test_calc_frc():
 
     obj1 = np.random.rand(270,230) + 1j * np.random.rand(270,230)
@@ -300,3 +300,141 @@ def test_calc_frc():
     assert np.allclose(bins, test_bins_t.numpy())
     assert np.allclose(frc, test_frc_t.numpy())
     assert np.allclose(threshold, test_threshold_t.numpy())
+
+    
+def test_calc_rms_error():
+    field_1 = t.rand(14,19, dtype=t.complex64)
+    field_2 = t.rand(14,19, dtype=t.complex64)
+
+    # Check that the calculation is insensitive to phase
+    assert t.allclose(analysis.calc_rms_error(field_1, field_2),
+                      analysis.calc_rms_error(field_1, np.exp(0.7j) * field_2))
+
+    # And that it is sensitive to phase if we turn off the 
+    assert not t.allclose(
+        analysis.calc_rms_error(field_1, field_2, align_phases=False),
+        analysis.calc_rms_error(field_1, np.exp(0.7j) * field_2,
+                                align_phases=False))
+
+    # Check that the result is positive
+    assert analysis.calc_rms_error(field_1, field_2) > 0
+
+    # And that it is a smaller number with align_phases on
+    assert (analysis.calc_rms_error(field_1, field_2) <=
+            analysis.calc_rms_error(field_1, field_2, align_phases=False))
+
+    # Now we check against an explicit implementation:
+    gamma = field_1 * t.conj(field_2)
+    gamma /= t.abs(gamma)
+
+    # This is an alternate way of doing the calculation. Actually, would this
+    # be a better implementation anyway? Probably no difference tbh.
+    rms_error_nophase = t.sqrt((t.mean(t.abs(field_1)**2) +
+                                t.mean(t.abs(field_2)**2) -
+                                2 * t.abs(t.mean(field_1 * t.conj(field_2)))))
+    assert t.allclose(rms_error_nophase,
+                      analysis.calc_rms_error(field_1, field_2))
+
+    rms_error_phase = t.sqrt((t.mean(t.abs(field_1)**2) +
+                              t.mean(t.abs(field_2)**2) -
+                              2 * t.real(t.mean(field_1 * t.conj(field_2)))))
+
+    assert t.allclose(rms_error_phase,
+                      analysis.calc_rms_error(field_1, field_2,
+                                              align_phases=False))
+
+    # Now let's test that it works along a dimension:
+    
+    field_1 = t.rand(3,14,19, dtype=t.complex64)
+    field_2 = t.rand(3,14,19, dtype=t.complex64)
+    result = analysis.calc_rms_error(field_1, field_2, normalize=True)
+    assert (result.shape == t.Size([3]))
+    
+    for i in range(3):
+        assert t.allclose(analysis.calc_rms_error(field_1[i],
+                                                  field_2[i],
+                                                  normalize=True),
+                          result[i])
+    
+
+def test_calc_fidelity():
+
+    fields_1 = t.rand(2,30,17, dtype=t.complex128)
+    fields_2 = t.rand(3,30,17, dtype=t.complex128)
+
+    dm_1 = t.reshape(fields_1, (2,-1))
+    dm_1 = t.tensordot(dm_1.transpose(0,1), dm_1.conj(), dims=1).numpy()
+    dm_2 = t.reshape(fields_2, (3,-1))
+    dm_2 = t.tensordot(dm_2.transpose(0,1), dm_2.conj(), dims=1).numpy()
+    
+    inner_mat = la.sqrtm(np.dot(np.dot(la.sqrtm(dm_1),dm_2),la.sqrtm(dm_1)))
+    fidelity = t.as_tensor(np.abs(np.trace(inner_mat))**2)
+    
+    assert t.isclose(fidelity, analysis.calc_fidelity(fields_1, fields_2))
+
+    fields_1 = t.rand(1,30,17, dtype=t.complex128)
+    fields_2 = t.rand(1,30,17, dtype=t.complex128)
+
+    assert t.isclose(t.abs(t.sum(fields_1*fields_2.conj()))**2,
+                     analysis.calc_fidelity(fields_1, fields_2))
+
+    # Checking that it works with extra dimensions
+    fields_1 = t.rand(3,3,30,17, dtype=t.complex128)
+    fields_2 = t.rand(3,1,30,17, dtype=t.complex128)
+    field_3 = t.rand(1,30,17, dtype=t.complex128)
+
+    fidelities = analysis.calc_fidelity(fields_1, fields_2)
+    fidelities_2 = analysis.calc_fidelity(fields_1, field_3)
+    for i in range(3):
+        assert t.isclose(analysis.calc_fidelity(fields_1[i], fields_2[i]),
+                         fidelities[i])
+        assert t.isclose(analysis.calc_fidelity(fields_1[i], field_3),
+                         fidelities_2[i])
+
+    # Check that the diensionality argument works
+    fields_1 = t.rand(3,2,12, dtype=t.complex128)
+    fields_2 = t.rand(3,2,12, dtype=t.complex128)
+
+    assert (analysis.calc_fidelity(fields_1, fields_2, dims=1).shape
+            == t.Size([3]))
+    
+    fields_1 = t.rand(3,2,12,4,5, dtype=t.complex128)
+    fields_2 = t.rand(3,2,12,4,5, dtype=t.complex128)
+
+    assert (analysis.calc_fidelity(fields_1, fields_2, dims=3).shape
+            == t.Size([3]))
+
+def test_calc_generalized_rms_error():
+
+    # Test that it matches the rms error for coherent fields
+    
+    fields_1 = t.rand(1,30,17, dtype=t.complex128)
+    fields_2 = t.rand(1,30,17, dtype=t.complex128)
+    
+    assert t.isclose(analysis.calc_generalized_rms_error(fields_1, fields_2),
+                     analysis.calc_rms_error(fields_1[0], fields_2[0],
+                                             align_phases=True))
+
+    # Test that it is independent of field order
+    fields_1 = t.rand(5,30,17, dtype=t.complex128)
+    fields_2 = t.rand(3,30,17, dtype=t.complex128)
+    fields_3 = fields_2.flip(0)
+    
+    assert t.isclose(analysis.calc_generalized_rms_error(fields_1, fields_2),
+                     analysis.calc_generalized_rms_error(fields_1, fields_3))
+
+    # Test with leading dimensions
+    fields_1 = t.rand(3,4,2,10,17, dtype=t.complex128)
+    fields_2 = t.rand(3,4,3,10,17, dtype=t.complex128)
+    
+    assert (analysis.calc_generalized_rms_error(fields_1, fields_2).shape
+            == t.Size([3,4]))
+
+    # And test with different number of dimensions dims
+    # Test that it is independent of field order
+    fields_1 = t.rand(3,6,17, dtype=t.complex128)
+    fields_2 = t.rand(3,1,17, dtype=t.complex128)
+    fields_3 = fields_2.flip(0)
+
+    assert (analysis.calc_generalized_rms_error(fields_1, fields_2, dims=1).shape == t.Size([3]))
+

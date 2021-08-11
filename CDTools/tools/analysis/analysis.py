@@ -15,7 +15,8 @@ from scipy import special
 
 __all__ = ['orthogonalize_probes', 'standardize', 'synthesize_reconstructions',
            'calc_consistency_prtf', 'calc_deconvolved_cross_correlation',
-           'calc_frc', 'calc_vn_entropy', 'calc_top_mode_fraction']
+           'calc_frc', 'calc_vn_entropy', 'calc_top_mode_fraction',
+           'calc_rms_error', 'calc_fidelity', 'calc_generalized_rms_error']
 
 
 def orthogonalize_probes(probes, density_matrix=None, keep_transform=False, normalize=False):
@@ -581,6 +582,7 @@ def calc_vn_entropy(matrix):
         entropy = -np.sum(special.xlogy(eig,eig))/np.sum(eig)
         return entropy
 
+    
 def calc_top_mode_fraction(matrix):
     """Calculates the fraction of total power in the top mode of a density matrix
     
@@ -610,3 +612,213 @@ def calc_top_mode_fraction(matrix):
         eig = np.linalg.eigh(matrix)[0]
         fraction = np.max(eig) / np.sum(eig)
         return fraction
+    
+
+def calc_rms_error(field_1, field_2, align_phases=True, normalize=False,
+                   dims=2):
+    """Calculates the root-mean-squared error between two complex wavefields
+
+    The formal definition of this function is:
+
+    output = norm * sqrt(mean(abs(field_1 - gamma * field_2)**2))
+    
+    Where norm is an optional normalization factor, and gamma is an
+    optional phase factor which is appropriate when the wavefields suffer
+    from a global phase degeneracy as is often the case in diffractive
+    imaging.
+
+    The normalization is defined as the square root of the total intensity
+    contained in field_1, which is appropriate when field_1 represents a
+    known ground truth:
+
+    norm = sqrt(mean(abs(field_1)**2))
+    
+    The phase offset is an analytic expression for the phase offset which
+    will minimize the RMS error between the two wavefields:
+
+    gamma = exp(1j * angle(sum(field_1 * conj(field_2))))
+    
+    This implementation is stable even in cases where field_1 and field_2
+    are completely orthogonal.
+
+    In the definitions above, the field_n are n-dimensional wavefields. The
+    dimensionality of the wavefields can be altered via the dims argument,
+    but the default is 2 for a 2D wavefield.
+    
+    Parameters
+    ----------
+    field_1 : array
+        The first complex-valued field
+    field_2 : array
+        The second complex-valued field
+    align_phases : bool
+        Default is True, whether to account for a global phase offset
+    normalize : bool
+        Default is False, whether to normalize to the intensity of field_1
+    dims : (int or tuple of python:ints)
+        Default is 2, the number of final dimensions to reduce over.
+
+    
+    Returns
+    -------
+    rms_error : float or t.Tensor
+        The RMS error, or tensor of RMS errors, depending on the dim argument
+
+    """
+
+    sumdims = tuple(d - dims for d in range(dims))
+        
+    if align_phases:
+        # Keepdim allows us to broadcast the result correctly when we
+        # multiply by the fields
+        gamma = t.exp(1j * t.angle(t.sum(field_1 * t.conj(field_2), dim=sumdims,
+                                         keepdim=True)))
+    else:
+        gamma = 1
+
+    if normalize:
+        norm = 1 / t.mean(t.abs(field_1)**2, dim=sumdims)
+    else:
+        norm = 1
+
+    difference = field_1 - gamma * field_2
+    
+    return t.sqrt(norm * t.mean(t.abs(difference)**2, dim=sumdims))
+
+
+def calc_fidelity(fields_1, fields_2, dims=2):
+    """Calculates the fidelity between two density matrices
+
+    The fidelity is a comparison metric between two density matrices
+    (i.e. mutual coherence functions) that extends the idea of the
+    overlap to incoherent light. As a reminder, the overlap between two
+    fields is:
+
+    overlap = abs(sum(field_1 * field_2))**2
+    
+    Whereas the fidelity is defined as:
+    
+    fidelity = trace(sqrt(sqrt(dm_1) <dot> dm_2 <dot> sqrt(dm_1)))**2
+
+    where dm_n refers to the density matrix encoded by fields_n such
+    that dm_n = fields_n <dot> fields_<n>.conjtranspose(), sqrt
+    refers to the matrix square root, and <dot> is the matrix product.
+    
+    This is not a practical implementation, however, as it is not feasible
+    to explicitly construct the matrices dm_1 and dm_2 in memory. Therefore,
+    we take advantage of the alternate definition based directly on the
+    fields_<n> parameter:
+
+    fidelity = sum(svdvals(fields_1 <dot> fields_2.conjtranspose()))**2
+    
+    In the definitions above, the fields_n are regarded as collections of
+    wavefields, where each wavefield is by default 2-dimensional. The
+    dimensionality of the wavefields can be altered via the dims argument,
+    but the fields_n arguments must always have at least one more dimension
+    than the dims argument. Any additional dimensions are treated as batch
+    dimensions.
+    
+    Parameters
+    ----------
+    fields_1 : array
+        The first set of complex-valued field modes
+    fields_2 : array
+        The second set of complex-valued field modes
+    dims : int
+        Default is 2, the number of final dimensions to reduce over.
+
+    
+    Returns
+    -------
+    fidelity : float or t.Tensor
+        The fidelity, or tensor of fidelities, depending on the dim argument
+
+    """
+
+    fields_1 = t.as_tensor(fields_1)
+    fields_2 = t.as_tensor(fields_2)
+    
+    mult = fields_1.unsqueeze(-dims-2) * fields_2.unsqueeze(-dims-1).conj()
+    sumdims = tuple(d - dims for d in range(dims))
+    mat = t.sum(mult,dim=sumdims)
+    
+    svdvals = t.linalg.svdvals(mat)
+    return t.sum(svdvals, dim=-1)**2
+
+
+def calc_generalized_rms_error(fields_1, fields_2, normalize=False, dims=2):
+    """Calculates a generalization of the root-mean-squared error between two complex wavefields
+
+    This function calculates an generalization of the RMS error which uses the
+    concept of fidelity to extend it to capture the error between
+    incoherent wavefields, defined as a mode decomposition. The extension has
+    several nice properties, in particular:
+
+    1) For coherent wavefields, it precisely matches the RMS error including
+       a correction for the global phase degeneracy (align_phases=True)
+    2) All mode decompositions of either field that correspond to the same
+       density matrix / mutual coherence function will produce the same 
+       output
+    3) The error will only be zero when comparing mode decompositions that
+       correspond to the same density matrix.
+    4) Due to (2), one need not worry about the ordering of the modes,
+       properly orthogonalizing the modes, and it is even possible to
+       compare mode decompositions with different numbers of modes.    
+    
+    The formal definition of this function is:
+
+    output = norm * sqrt(mean(abs(fields_1)**2)
+                         + mean(abs(fields_2)**2)
+                         - 2 * sqrt(fidelity(fields_1,fields_2)))
+    
+    Where norm is an optional normalization factor, and the fidelity is
+    defined based on the mean, rather than the sum, to match the convention
+    for the root *mean* squared error.
+
+    The normalization is defined as the square root of the total intensity
+    contained in fields_1, which is appropriate when fields_1 represents a
+    known ground truth:
+
+    norm = sqrt(mean(abs(fields_1)**2))
+
+    In the definitions above, the fields_n are regarded as collections of
+    wavefields, where each wavefield is by default 2-dimensional. The
+    dimensionality of the wavefields can be altered via the dims argument,
+    but the fields_n arguments must always have at least one more dimension
+    than the dims argument. Any additional dimensions are treated as batch
+    dimensions.
+    
+    Parameters
+    ----------
+    fields_1 : array
+        The first set of complex-valued field modes
+    fields_2 : array
+        The second set of complex-valued field modes
+    normalize : bool
+        Default is False, whether to normalize to the intensity of fields_1
+    dims : (int or tuple of python:ints)
+        Default is 2, the number of final dimensions to reduce over.
+
+    Returns
+    -------
+    rms_error : float or t.Tensor
+        The generalized RMS error, or tensor of generalized RMS errors, depending on the dim argument
+
+    """
+    fields_1 = t.as_tensor(fields_1)
+    fields_2 = t.as_tensor(fields_2)
+
+    npix = t.prod(t.as_tensor(fields_1.shape[-dims:],dtype=t.int32))
+    
+    sumdims = tuple(d - dims - 1 for d in range(dims+1))
+    fields_1_intensity = t.sum(t.abs(fields_1)**2,dim=sumdims) / npix
+    fields_2_intensity = t.sum(t.abs(fields_2)**2,dim=sumdims) / npix
+    fidelity = calc_fidelity(fields_1, fields_2, dims=dims) / npix**2
+
+    result = fields_1_intensity + fields_2_intensity - 2 * t.sqrt(fidelity)
+    
+    if normalize:
+        result /= fields_1_intensity
+
+    return t.sqrt(result)
+    

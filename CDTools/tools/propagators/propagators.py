@@ -382,6 +382,7 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     # Bandlimiting is not implemented in the generalized function, because it
     # has a less clear meaning in that setting, so we apply it here instead
     if bandlimit is not None:
+        # No need to multiply by 2pi
         ki = 2 * np.pi * t.fft.fftfreq(shape[0],spacing[0])
         kj = 2 * np.pi * t.fft.fftfreq(shape[1],spacing[1])
         Ki, Kj = t.meshgrid(ki,kj)
