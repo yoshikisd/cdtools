@@ -69,6 +69,7 @@ class PolarizedFancyPtycho(FancyPtycho):
         # tensor vs tensor.data
         return model
 
+    polarizers = [tools.polarization.generate_linear_polarizer(i * 45) for i in range(3)]
     
     # WHAT IS INDEX?
     def interaction(self, index, translations, polarizer, analyzer, test=False):
@@ -97,6 +98,8 @@ class PolarizedFancyPtycho(FancyPtycho):
         else:
             raise NotImplementedError('Unstable Modes not Implemented for polarized light')
             
+        polarizer = tools.polarization.generate_linear_polarizer(polarizer) 
+        analyzer = tools.polarization.generate_linear_polarizer(analyzer) 
         pol_probes = polarization.apply_linear_polarizer(prs, polarizer)
 
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
