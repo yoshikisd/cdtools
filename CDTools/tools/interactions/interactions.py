@@ -43,7 +43,7 @@ def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0.,0.,1.
     pixel_translations : torch.Tensor
         A Jx2 stack of translations in internal (i,j) pixel-space, or a single translation
     """
-    
+
     projection_1 = t.Tensor([[1,0,0],
                              [0,1,0],
                              [0,0,0]]).to(device=translations.device,dtype=translations.dtype)
@@ -433,16 +433,16 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
     integer_translations = t.floor(translations)
     subpixel_translations = translations - integer_translations
     integer_translations = integer_translations.to(dtype=t.int32)
-
-    selections = t.stack([obj[tr[0]:tr[0]+probe.shape[-2],
-                              tr[1]:tr[1]+probe.shape[-1]]
-                          for tr in integer_translations])
-    if polarized:
+    if not polarized:
+        selections = t.stack([obj[tr[0]:tr[0]+probe.shape[-2],
+                                  tr[1]:tr[1]+probe.shape[-1]]
+                              for tr in integer_translations])
+    else:
         selections = t.stack([obj[:, :,tr[0]:tr[0]+probe.shape[-2],
                           tr[1]:tr[1]+probe.shape[-1]]
                       for tr in integer_translations])
         # Nx2x2xMxL tensor
-    
+
     exit_waves = []
     if shift_probe:
         i = t.arange(probe.shape[-2],device=probe.device,dtype=t.float32) \
@@ -454,15 +454,11 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
         J = 2 * np.pi * J / probe.shape[-1]
         phase_masks = t.exp(1j*(-subpixel_translations[:,0,None,None]*I
                                 -subpixel_translations[:,1,None,None]*J))
-
         if polarized:
             phase_masks = phase_masks[..., None, :, :]
             # Nx2x1xMxL tensor
             # probe is (N)(P)x2xMxL tensor
-        
         fft_probe = t.fft.fftshift(t.fft.fft2(probe),dim=(-1,-2))
-
-
         if multiple_modes: # Multi-mode probe
             if polarized:
                 shifted_fft_probe = fft_probe * phase_masks[...,None,:,:,:]
@@ -470,11 +466,8 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
                 shifted_fft_probe = fft_probe * phase_masks[...,None,:,:]
         else:
             shifted_fft_probe = fft_probe * phase_masks
-
-
         shifted_probe = t.fft.ifft2(t.fft.ifftshift(shifted_fft_probe,
                                                     dim=(-1,-2)))
-
         if not polarized:
             if multiple_modes: # Multi-mode probe
                 output = shifted_probe * selections[...,None,:,:]
@@ -483,8 +476,7 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
         # selections: Nx2x2xMxL
         # probe: Nx(P)x2x1xMxL
         else:
-            # print('F', shift_probe)
-            output = polarization.apply_jones_matrix(shifted_probe, selections)
+            output = polarization.apply_jones_matrix(shifted_probe, selections, multiple_modes=multiple_modes)
 
     else:
         raise NotImplementedError('Object shift not yet implemented')

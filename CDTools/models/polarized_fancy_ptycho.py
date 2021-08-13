@@ -52,7 +52,7 @@ class PolarizedFancyPtycho(FancyPtycho):
     @classmethod
     def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um', left_polarized=True):
         
-        model = FancyPtycho.from_dataset(dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um', polarized=True)
+        model = FancyPtycho.from_dataset(dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um')
 
 
         # Mutate the class to its subclass 
@@ -97,13 +97,10 @@ class PolarizedFancyPtycho(FancyPtycho):
             prs = Ws[...,None,None,None,None] * basis_prs
         else:
             raise NotImplementedError('Unstable Modes not Implemented for polarized light')
-            
-        polarizer = tools.polarization.generate_linear_polarizer(polarizer) 
-        analyzer = tools.polarization.generate_linear_polarizer(analyzer) 
-        pol_probes = polarization.apply_linear_polarizer(prs, polarizer)
 
+        pol_probes = polarization.apply_linear_polarizer(prs, polarizer)
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
-            prs, self.obj_support * self.obj,pix_trans,
+            prs, self.obj, pix_trans,
             shift_probe=True, multiple_modes=True, polarized=True)
 
         analyzed_exit_waves = polarization.apply_linear_polarizer(exit_waves, analyzer)

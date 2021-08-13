@@ -22,15 +22,18 @@ __all__ = ['apply_linear_polarizer',
 def generate_linear_polarizer(pol_angle):
     single_angle = False
 
-    pol_angle = t.as_tensor(pol_angle)
+    pol_angle = t.as_tensor(pol_angle).to(dtype=t.float32)
     if pol_angle.dim() == 0:
         pol_angle = t.unsqueeze(pol_angle,0)
         single_angle = True
-
     pol_angle_rad = t.deg2rad(pol_angle)
-    jones_matrices = t.stack([t.tensor([[(t.cos(p)) ** 2, t.sin(p) * t.cos(p)],
-                                        [t.sin(p) * t.cos(p), (t.sin(p)) ** 2]])
-                              for p in pol_angle_rad])
+    a = t.cos(pol_angle_rad) ** 2
+    b = t.sin(pol_angle_rad) * t.cos(pol_angle_rad)
+    c = b
+    d = t.sin(pol_angle_rad) ** 2
+    ab = t.stack((a, b), dim=-1)
+    cd = t.stack((c, d), dim=-1)
+    jones_matrices = t.stack((ab, cd), dim=-2)
     if single_angle:
         return jones_matrices[0].to(dtype=t.cfloat) 
     else:
@@ -54,11 +57,15 @@ def apply_linear_polarizer(probe, polarizer, multiple_modes=True, transpose=True
     linearly polarized probe: t.Tensor
         (N)(P)x2x1xMxL 
     """
-    jones_matrices = generate_linear_polarizer(polarization)
+    jones_matrices = generate_linear_polarizer(polarizer)
     return apply_jones_matrix(probe, jones_matrices, transpose=transpose, multiple_modes=multiple_modes)
 
 
 def apply_jones_matrix(probe, jones_matrix, transpose=True, multiple_modes=True):
+    # print('probe', probe.shape, 'jones matrix', jones_matrix.shape)
+    # if jones_matrix.shape == t.Size([5, 2, 2, 2, 2]):
+    #     print('probe', probe.shape, 'jones', jones_matrix.shape)
+    #     print('JONES', jones_matrix)
     """
     Applies a given Jones matrix to the probe
 
@@ -87,6 +94,7 @@ def apply_jones_matrix(probe, jones_matrix, transpose=True, multiple_modes=True)
         # vice versa
         elif jones_matrix.dim() > probe.dim():
             probe = probe.unsqueeze(0)
+        # print('apply jonesmatrix: probe', probe.shape, 'matrix:', jones_matrix)
         jones_matrix = jones_matrix.transpose(-1, -3).transpose(-2, -4) 
         probe = probe.transpose(-1, -3).transpose(-2, -4)
         output = t.matmul(jones_matrix, probe).transpose(-2, -4).transpose(-1, -3).squeeze(-3)
@@ -97,7 +105,7 @@ def apply_jones_matrix(probe, jones_matrix, transpose=True, multiple_modes=True)
     return output
 
 
-def apply_phase_retardance(probe, phase_shift):
+def apply_phase_retardance(probe, phase_shift, multiple_modes=True):
     """
     Shifts the y-component of the field wrt the x-component by a given phase shift 
 
@@ -115,11 +123,11 @@ def apply_phase_retardance(probe, phase_shift):
     """
     probe = probe.to(dtype=t.cfloat)
     jones_matrix = t.tensor([[1, 0], [0, phase_shift]]).to(dtype=t.cfloat)
-    polarized = apply_jones_matrix(probe, jones_matrix)
+    polarized = apply_jones_matrix(probe, jones_matrix, multiple_modes=multiple_modes)
 
     return polarized
 
-def apply_circular_polarizer(probe, left_polarized=True):
+def apply_circular_polarizer(probe, left_polarized=True, multiple_modes=True):
     """
     Applies a circular polarizer to the probe
 
@@ -140,11 +148,10 @@ def apply_circular_polarizer(probe, left_polarized=True):
         jones_matrix = (1/2 * t.tensor([[1, -1j], [1j, 1]])).to(dtype=t.cfloat)
     else:
         jones_matrix = 1/2 * t.tensor([[1, 1j], [-1j, 1]]).to(dtype=t.cfloat)
-    polarized = apply_jones_matrix(probe, jones_matrix)
-
+    polarized = apply_jones_matrix(probe, jones_matrix, multiple_modes=multiple_modes)
     return polarized
 
-def apply_quarter_wave_plate(probe, fast_axis_angle):
+def apply_quarter_wave_plate(probe, fast_axis_angle, multiple_modes=True):
     """
     Parameters:
     ----------
@@ -162,11 +169,11 @@ def apply_quarter_wave_plate(probe, fast_axis_angle):
     theta = math.radians(fast_axis_angle)
     exponent = t.exp(-1j * math.pi / 4 * t.ones(2, 2))
     jones_matrix = exponent* t.tensor([[(cos(theta))**2 + 1j * (sin(theta))**2, (1 - 1j) * sin(theta) * cos(theta)], [(1 - 1j) * sin(theta) * cos(theta), (sin(theta))**2 + 1j * (cos(theta))**2]]).to(dtype=t.cfloat)
-    out = apply_jones_matrix(probe, jones_matrix)
+    out = apply_jones_matrix(probe, jones_matrix, multiple_modes=multiple_modes)
 
     return out 
 
-def apply_half_wave_plate(probe, fast_axis_angle):
+def apply_half_wave_plate(probe, fast_axis_angle, multiple_modes=True):
     """
     Parameters:
     ----------
@@ -184,7 +191,7 @@ def apply_half_wave_plate(probe, fast_axis_angle):
     theta = math.radians(fast_axis_angle)
     exponent = t.exp(-1j * math.pi / 2 * t.ones(2, 2))
     jones_matrix = exponent * t.tensor([[(cos(theta))**2 - (sin(theta))**2, 2 * sin(theta) * cos(theta)], [2 * sin(theta) * cos(theta), (sin(theta))**2 - (cos(theta))**2]]).to(dtype=t.cfloat)
-    out = apply_jones_matrix(probe, jones_matrix)
+    out = apply_jones_matrix(probe, jones_matrix, multiple_modes=multiple_modes)
 
     return out 
     
