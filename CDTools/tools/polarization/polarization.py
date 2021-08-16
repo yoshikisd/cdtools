@@ -13,7 +13,8 @@ __all__ = ['apply_linear_polarizer',
            'apply_quarter_wave_plate',
            'apply_circular_polarizer',
            'apply_jones_matrix',
-           'generate_linear_polarizer']
+           'generate_linear_polarizer',
+           'generate_phase_retarder']
 
 
 # Abe - split these into two functions
@@ -121,8 +122,10 @@ def apply_phase_retardance(probe, phase_shift, multiple_modes=True):
     probe: t.Tensor
         (...)x2x1xMxL 
     """
+    theta = t.as_tensor(phase_shift, dtype=t.float32)
+    theta = t.deg2rad(theta)
     probe = probe.to(dtype=t.cfloat)
-    jones_matrix = t.tensor([[1, 0], [0, phase_shift]]).to(dtype=t.cfloat)
+    jones_matrix = t.tensor([[1, 0], [0, t.exp(phase_shift)]]).to(dtype=t.cfloat)
     polarized = apply_jones_matrix(probe, jones_matrix, multiple_modes=multiple_modes)
 
     return polarized
@@ -195,3 +198,17 @@ def apply_half_wave_plate(probe, fast_axis_angle, multiple_modes=True):
 
     return out 
     
+def generate_phase_retarder(fast_axis=0, phase=0):
+    phase = t.as_tensor(phase).to(dtype=t.float32)
+    phase = t.deg2rad(phase)
+    def coord_rot(angle):
+        angle = t.as_tensor(angle, dtype=t.float32)
+        angle = t.deg2rad(angle)
+        a = t.stack((t.cos(angle), t.sin(angle)), dim=-1)
+        b = t.stack((-t.sin(angle), t.cos(angle)), dim=-1)
+        return t.stack((a, b), dim=-2).to(dtype=t.cfloat)
+
+    r1 = coord_rot(-fast_axis)
+    r2 = coord_rot(fast_axis)
+    p = t.as_tensor([[1, 0], [0, t.exp(phase*1j)]], dtype=t.cfloat)
+    return t.matmul(r1, t.matmul(p, r2))
