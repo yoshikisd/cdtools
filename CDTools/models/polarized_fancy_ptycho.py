@@ -78,12 +78,11 @@ class PolarizedFancyPtycho(FancyPtycho):
         # else:
         #     probe = tools.initializers.gaussian_probe(dataset, probe_basis, probe_shape, probe_size, propagation_distance=propagation_distance)
         probe = model.probe.detach()
-
-        probe = t.stack((probe, probe * x), dim=-3)
+        probe = t.cat((probe, probe * x), dim=-3)
         probe_max = t.max(t.abs(probe))
         probe_stack = [0.01 * probe_max * t.rand(probe.shape, dtype=probe.dtype) for i in range(n_modes - 1)]
         probe = t.stack([probe, ] + probe_stack)
-
+        print('probe', type(probe), probe.shape)
         model.probe.data = probe
         # obj = t.stack((model.obj.data, model.obj.data), dim=-3)
         # model.obj.data = t.stack((obj.data, obj.data), dim=-4)
@@ -91,6 +90,7 @@ class PolarizedFancyPtycho(FancyPtycho):
         obj = model.obj.detach()
         obj = t.stack((obj, obj), dim=-3)
         obj = t.stack((obj, obj), dim=-4)
+        print('object', type(obj), obj.shape)
         model.obj.data = obj
         # tensor vs tensor.data
         return model
