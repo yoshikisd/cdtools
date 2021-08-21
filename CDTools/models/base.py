@@ -451,6 +451,16 @@ class CDIModel(t.nn.Module):
 
         """
 
+        print('base models inspect: checking the object')
+        a = self.obj.detach()
+        def saveobj(a, filename):
+            a = np.abs(a)
+            plt.imshow(a)
+            plt.savefig('filename')
+        f = ['base_a.png', 'base_b.png', 'base_c.png', 'base_d.png']
+        comp = [a[i, j, :, :] for i, j in zip([0, 0, 1, 1], [0, 1, 0, 1])]
+        for i in range(4):
+            saveobj(comp[i], f[i])
         first_update = False
         if update and hasattr(self, 'figs') and self.figs:
             figs = self.figs
@@ -585,7 +595,7 @@ class CDIModel(t.nn.Module):
             if logarithmic:
                 sim_data =np.log(sim_data)/np.log(10)
                 meas_data = np.log(meas_data)/np.log(10)
-                
+
             if not updating:
                 axes[0].set_title('Simulated')
                 axes[1].set_title('Measured')

@@ -92,6 +92,13 @@ class PolarizedFancyPtycho(FancyPtycho):
         obj = t.stack((obj, obj), dim=-4)
         print('object', type(obj), obj.shape)
         model.obj.data = obj
+        print('polarized fancy ptycho from datset obj')
+        a = obj.detach()
+        plt.imshow(np.real(a[0, 0, :, :]))
+        plt.show()
+        plt.imshow(np.real(a[0, 1, :, :]))
+        plt.show()
+
         # tensor vs tensor.data
         return model
 
@@ -130,6 +137,7 @@ class PolarizedFancyPtycho(FancyPtycho):
             shift_probe=True, multiple_modes=True, polarized=True)
 
         analyzed_exit_waves = polarization.apply_linear_polarizer(exit_waves, analyzer)
+        # print('POLARIZED FANCY PTYCHO INTERACTION OBJ')
 
         return analyzed_exit_waves
 
