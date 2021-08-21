@@ -456,7 +456,7 @@ class CDIModel(t.nn.Module):
         def saveobj(a, filename):
             a = np.abs(a)
             plt.imshow(a)
-            plt.savefig('filename')
+            plt.savefig(filename)
         f = ['base_a.png', 'base_b.png', 'base_c.png', 'base_d.png']
         comp = [a[i, j, :, :] for i, j in zip([0, 0, 1, 1], [0, 1, 0, 1])]
         for i in range(4):
