@@ -374,11 +374,15 @@ class FancyPtycho(CDIModel):
     def corrected_translations(self, dataset):
         translations = dataset.translations.to(
             dtype=t.float32, device=self.probe.device)
-        t_offset = tools.interactions.pixel_to_translations(
-            self.probe_basis,
-            self.translation_offsets * self.translation_scale,
-            surface_normal=self.surface_normal)
-        return translations + t_offset
+        if (hasattr(self, 'translation_offsets') and
+            self.translation_offsets is not None):
+            t_offset = tools.interactions.pixel_to_translations(
+                self.probe_basis,
+                self.translation_offsets * self.translation_scale,
+                surface_normal=self.surface_normal)
+            return translations + t_offset
+        else:
+            return translations
 
 
     def get_rhos(self):
@@ -530,7 +534,10 @@ class FancyPtycho(CDIModel):
          lambda self, fig: plt.figure(fig.number) and plt.imshow(self.background.detach().cpu().numpy()**2))
     ]
 
-
+#    def plot_errors(self, dataset):
+        
+    
+    
     def save_results(self, dataset):
         basis = self.probe_basis.detach().cpu().numpy()
         translations = self.corrected_translations(dataset).detach().cpu().numpy()
