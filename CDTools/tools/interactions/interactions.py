@@ -17,14 +17,14 @@ __all__ = ['translations_to_pixel', 'pixel_to_translations',
 
 def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0.,0.,1.])):
     """Takes real space translations and outputs them in pixel space
-    
+
     This works for any 2D ptychography geometry. It takes in
     A set of translations in (x,y) space and outputs the same translations
-    in internal pixel units perpendicular to the detector. 
-    
+    in internal pixel units perpendicular to the detector.
+
     It uses information on the wavefield basis and, if defined, the
     sample normal, to perform the conversion.
-    
+
     The assumed geometry is incoming radiation with a wavevector parallel
     to the +z axis, [0,0,1]. The default sample orientation has a surface
     normal parallel to this direction
@@ -33,7 +33,7 @@ def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0.,0.,1.
     ----------
     basis : torch.Tensor
         The real space basis the wavefields are defined in
-    translations : torch.Tensor 
+    translations : torch.Tensor
         A Jx3 stack of real-space translations, or a single translation
     surface_normal : torch.Tensor
         Optional, the sample's surface normal
@@ -68,18 +68,18 @@ def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0.,0.,1.
         return pixel_translations[0]
     else:
         return pixel_translations
-    
+
 
 def pixel_to_translations(basis, pixel_translations, surface_normal=t.Tensor([0,0,1])):
     """Takes pixel-space translations and outputs them in real space
-    
+
     This works for any 2D ptychography geometry. It takes in
     A set of internal pixel unit translations in (i,j) space and
     outputs the same translations real (x,y) space
-    
+
     It uses information on the wavefield basis and, if defined, the
     sample normal, to perform the conversion.
-    
+
     The assumed geometry is incoming radiation with a wavevector parallel
     to the +z axis, [0,0,1]. The default sample orientation has a surface
     normal parallel to this direction. Because of this, the z direction
@@ -96,7 +96,7 @@ def pixel_to_translations(basis, pixel_translations, surface_normal=t.Tensor([0,
 
     Returns
     -------
-    real_translations : torch.Tensor 
+    real_translations : torch.Tensor
         A Jx3 stack of real-space translations, or a single translation
     """
     projection_1 = t.Tensor([[1,0,0],
@@ -129,7 +129,7 @@ def pixel_to_translations(basis, pixel_translations, surface_normal=t.Tensor([0,
 
 def project_translations_to_sample(sample_basis, translations):
     """Takes real space translations and outputs them in pixels in a sample basis
-    
+
     This projection function is designed for the Bragg2DPtycho class. More
     broadly, it works to take a set of translations in the lab frame and
     convert each one into two values. First, an (i,j) value in pixels
@@ -145,7 +145,7 @@ def project_translations_to_sample(sample_basis, translations):
     relative amount the probe needs to be propagated to reach any given
     location), a positive motion along the z-axis of the probe forming optics
     will lead to a negative propagation distance.
-    
+
     The assumed geometry is incoming radiation with a wavevector parallel
     to the +z axis, [0,0,1].
 
@@ -153,7 +153,7 @@ def project_translations_to_sample(sample_basis, translations):
     ----------
     sample_basis : torch.Tensor
         The real space basis the wavefields are defined in
-    translations : torch.Tensor 
+    translations : torch.Tensor
         A Jx3 stack of real-space translations, or a single translation
 
     Returns
@@ -171,7 +171,7 @@ def project_translations_to_sample(sample_basis, translations):
 
 
     # Then we calculate a matrix which can do the projection
-    
+
     propagation_dir = t.Tensor(np.array([0,0,1])).to(
         device=surface_normal.device,
         dtype=surface_normal.dtype)
@@ -179,13 +179,13 @@ def project_translations_to_sample(sample_basis, translations):
     I = t.eye(3).to(
         device=surface_normal.device,
         dtype=surface_normal.dtype)
-    
+
     # Here we're setting up a matrix-vector equation mat*answer=input
     # At some point ger will need to be replaced by outer, but for now
     # outer many places still don't have new enough versions of torch.
     mat = t.cat((I - t.ger(propagation_dir,propagation_dir),
                  surface_normal.unsqueeze(0)))
-    
+
     # And we invert the matrix to do the projection
     projector = t.pinverse(mat)[:,:3].to(device=translations.device,
                                          dtype=translations.dtype)
@@ -200,7 +200,7 @@ def project_translations_to_sample(sample_basis, translations):
         device=translations.device,
         dtype=translations.dtype)
 
-    
+
     sample_projection = t.mm(basis_vectors_inv, projector).t()
     prop_projection = t.mm(propagation_dir_inv, projector).t()
 
@@ -218,9 +218,9 @@ def project_translations_to_sample(sample_basis, translations):
         return pixel_translations[0], propagations[0]
     else:
         return pixel_translations, propagations
-    
 
-    
+
+
 
 def ptycho_2D_round(probe, obj, translations, multiple_modes=False, upsample_obj=False):
     """Returns a stack of exit waves without accounting for subpixel shifts
@@ -229,15 +229,15 @@ def ptycho_2D_round(probe, obj, translations, multiple_modes=False, upsample_obj
     dimension as the translation index and the final dimensions
     corresponding to the detector. The exit waves are calculated by
     shifting the probe by the rounded value of the translation
-    
+
     If multiple_modes is set to False, any additional dimensions in the
     ptycho_2D_round function will be assumed to correspond to the translation
     index. If multiple_modes is set to true, the (-4th) dimension of the probe
     will always be assumed to be defining a set of (P) incoherently mixing
     modes to be broadcast all translation indices. If any additional dimensions
     closer to the start exist, they will be assumed to be translation indices
-    
-    
+
+
     Parameters
     ----------
     probe : torch.Tensor
@@ -251,7 +251,7 @@ def ptycho_2D_round(probe, obj, translations, multiple_modes=False, upsample_obj
 
     Returns
     -------
-    exit_waves : torch.Tensor 
+    exit_waves : torch.Tensor
         An (N)x(P)xMxL tensor of the calculated exit waves
     """
 
@@ -260,9 +260,9 @@ def ptycho_2D_round(probe, obj, translations, multiple_modes=False, upsample_obj
         translations = translations[None,:]
         single_translation = True
 
-        
+
     integer_translations = t.round(translations).to(dtype=t.int32)
-    
+
     if upsample_obj:
         selections = t.stack([obj[tr[0]:tr[0]+probe.shape[-2]//2,
                                   tr[1]:tr[1]+probe.shape[-1]//2]
@@ -292,7 +292,7 @@ def ptycho_2D_round(probe, obj, translations, multiple_modes=False, upsample_obj
 
 def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
     """Returns a stack of exit waves accounting for subpixel shifts
- 
+
     This function returns a collection of exit waves, with the first
     dimension as the translation index and the final dimensions
     corresponding to the detector. The exit waves are calculated by
@@ -322,7 +322,7 @@ def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
     if translations.dim() == 1:
         translations = translations[None,:]
         single_translation = True
-        
+
     # Separate the translations into a part that chooses the window
     # And a part that defines the windowing function
     integer_translations = t.floor(translations)
@@ -342,15 +342,15 @@ def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
             sel01 = t.cat((probe[:,-1:],probe[:,:-1]),dim=1)
             sel10 = t.cat((probe[-1:,:],probe[:-1,:]),dim=0)
             sel11 = t.cat((sel01[-1:,:],sel01[:-1,:]),dim=0)
-            
+
             selection = sel00 * (1-sp[0])*(1-sp[1]) + \
                 sel10 * sp[0]*(1-sp[1]) + \
                 sel01 * (1-sp[0])*sp[1] + \
                 sel11 * sp[0]*sp[1]
-            
+
             obj_slice = obj[tr[0]:tr[0]+probe.shape[0],
                             tr[1]:tr[1]+probe.shape[1]]
-            
+
             exit_waves.append(selection * obj_slice)
     else:
         for tr, sp in zip(integer_translations,
@@ -359,16 +359,16 @@ def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
             # Here we subpixel shift the object by (-i,-j) after
             # slicing out the correct translation of the probe
             #
-            
+
             sel00 = obj[tr[0]:tr[0]+probe.shape[0],
                         tr[1]:tr[1]+probe.shape[1]]
-            
+
             sel01 = obj[tr[0]:tr[0]+probe.shape[0],
                         tr[1]+1:tr[1]+1+probe.shape[1]]
-            
+
             sel10 = obj[tr[0]+1:tr[0]+1+probe.shape[0],
                         tr[1]:tr[1]+probe.shape[1]]
-            
+
             sel11 = obj[tr[0]+1:tr[0]+1+probe.shape[0],
                         tr[1]+1:tr[1]+1+probe.shape[1]]
 
@@ -387,7 +387,7 @@ def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
 
 def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multiple_modes=True, polarized=False, polarizer=None, analyzer=None):
     """Returns a stack of exit waves accounting for subpixel shifts
- 
+
     This function returns a collection of exit waves, with the first
     dimension as the translation index and the final dimensions
     corresponding to the detector. The exit waves are calculated by
@@ -427,7 +427,7 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
     if translations.dim() == 1:
         translations = translations[None,:]
         single_translation = True
-        
+
     # Separate the translations into a part that chooses the window
     # And a part that defines the windowing function
     integer_translations = t.floor(translations)
@@ -480,7 +480,7 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
 
     else:
         raise NotImplementedError('Object shift not yet implemented')
-
+    print('ptyvho 2d sinc', output.shape)
     if single_translation:
         return output[0]
     else:
@@ -489,7 +489,7 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
 
 def ptycho_2D_sinc_s_matrix(probe, s_matrix, translations, shift_probe=True, padding=10):
     """Returns a stack of exit waves accounting for subpixel shifts
- 
+
     This function returns a collection of exit waves, with the first
     dimension as the translation index and the final dimensions
     corresponding to the detector. The exit waves are calculated by
@@ -505,7 +505,7 @@ def ptycho_2D_sinc_s_matrix(probe, s_matrix, translations, shift_probe=True, pad
     on the input wavefield, and the first two indexes index differences from
     that pixel. It is easier to interpret the resulting matrix though if the
     latter two indices index locations in the output plane. NOTE: I believe
-    this change has now been made 
+    this change has now been made
 
     Parameters
     ----------
@@ -529,17 +529,17 @@ def ptycho_2D_sinc_s_matrix(probe, s_matrix, translations, shift_probe=True, pad
     if translations.dim() == 1:
         translations = translations[None,:]
         single_translation = True
-        
+
     # Separate the translations into a part that chooses the window
     # And a part that defines the windowing function
     integer_translations = t.floor(translations)
     subpixel_translations = translations - integer_translations
     integer_translations = integer_translations.to(dtype=t.int32)
-    
+
     exit_waves = []
 
     B = s_matrix.shape[0]//2
-    
+
     if shift_probe:
         i = t.arange(probe.shape[-2]) - probe.shape[-2]//2
         j = t.arange(probe.shape[-1]) - probe.shape[-1]//2
@@ -548,14 +548,14 @@ def ptycho_2D_sinc_s_matrix(probe, s_matrix, translations, shift_probe=True, pad
         J = 2 * np.pi * J.to(t.float32) / probe.shape[-1]
         I = I.to(dtype=probe.dtype,device=probe.device)
         J = J.to(dtype=probe.dtype,device=probe.device)
-        
+
         for tr, sp in zip(integer_translations,
                           subpixel_translations):
             fft_probe = t.fft.fftshift(t.fft.fft2(probe), dim=(-1,-2))
             shifted_fft_probe = fft_probe * t.exp(1j*(-sp[0]*I - sp[1]*J))
             shifted_probe = t.fft.ifft2(t.fft.ifftshift(shifted_fft_probe,
                                                          dim=(-1,-2)))
-            
+
             s_matrix_slice = s_matrix[:,:,tr[0]:tr[0]+probe.shape[-2]+2*B,
                                       tr[1]:tr[1]+probe.shape[-1]+2*B]
 
@@ -564,14 +564,14 @@ def ptycho_2D_sinc_s_matrix(probe, s_matrix, translations, shift_probe=True, pad
                                   device=s_matrix_slice.device,
                                   dtype=s_matrix_slice.dtype)
 
-            
+
             for i in range(s_matrix.shape[0]):
                 for j in range(s_matrix.shape[1]):
                     output [i:i+probe.shape[-2],j:j+probe.shape[-1]] += \
                         shifted_probe * s_matrix_slice[i,j,i:i+probe.shape[-2],j:j+probe.shape[-1]]
 
             exit_waves.append(output)
-        
+
     else:
         raise NotImplementedError('Object shift not yet implemented')
 
@@ -579,11 +579,11 @@ def ptycho_2D_sinc_s_matrix(probe, s_matrix, translations, shift_probe=True, pad
         return exit_waves[0]
     else:
         return t.stack(exit_waves)
-    
+
 
 def RPI_interaction(probe, obj):
     """Returns an exit wave from a high-res probe and a low-res obj
- 
+
     In this interaction, the probe and object arrays are assumed to cover
     the same physical region of space, but with the probe array sampling that
     region of space more finely. Thus, to do the interaction, the object
@@ -593,7 +593,7 @@ def RPI_interaction(probe, obj):
     method and is not commonly used elsewhere.
 
     This also works with object functions that have an extra first dimension
-    for an incoherently mixing model. 
+    for an incoherently mixing model.
 
 
     Parameters
@@ -610,7 +610,7 @@ def RPI_interaction(probe, obj):
     """
 
     # TODO: The upsampling only works for arrays of even dimension!
-    
+
     # The far-field propagator is just a 2D FFT but with an fftshift
     fftobj = propagators.far_field(obj)
     # We calculate the padding that we need to do the upsampling
@@ -618,7 +618,7 @@ def RPI_interaction(probe, obj):
     pad0r = probe.shape[-2] - obj.shape[-2] - pad0l
     pad1l = (probe.shape[-1] - obj.shape[-1])//2
     pad1r = probe.shape[-1] - obj.shape[-1] - pad1l
-        
+
     if obj.dim() == 2:
         fftobj = t.nn.functional.pad(fftobj, (pad1l, pad1r, pad0l, pad0r))
     elif obj.dim() == 3:
@@ -626,7 +626,7 @@ def RPI_interaction(probe, obj):
             fftobj, (pad1l, pad1r, pad0l, pad0r, 0,0))
     else:
         raise NotImplementedError('RPI interaction with obj of dimension higher than 4 (including complex dimension) is not supported.')
-        
+
     # Again, just an inverse FFT but with an fftshift
     upsampled_obj = propagators.inverse_far_field(fftobj)
 

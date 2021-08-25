@@ -11,7 +11,7 @@ simulate_to_dataset
     Creates a CDataset from the simulation defined in the model
 save_results
     Saves out a dictionary with the recovered parameters
-    
+
 
 Simulation
 ----------
@@ -56,7 +56,7 @@ class CDIModel(t.nn.Module):
     def __init__(self):
         super(CDIModel,self).__init__()
         self.iteration_count = 0
-        
+
     def from_dataset(self, dataset):
         raise NotImplementedError()
 
@@ -79,11 +79,11 @@ class CDIModel(t.nn.Module):
 
     def forward(self, *args):
         """The complete forward model
-        
+
         This model relies on composing the interaction, forward propagator,
         and measurement functions which are required to be defined by all
         subclasses. It therefore should not be redefined by the subclasses.
-        
+
         The arguments to this function, for any given subclass, will be
         the same as the arguments to the interaction function.
         """
@@ -99,7 +99,7 @@ class CDIModel(t.nn.Module):
 
     def simulate_to_dataset(self, args_list):
         raise NotImplementedError()
-    
+
     def save_results(self):
         raise NotImplementedError()
 
@@ -107,10 +107,10 @@ class CDIModel(t.nn.Module):
                     scheduler=None, regularization_factor=None, thread=True,
                     calculation_width=10):
         """Runs a round of reconstruction using the provided optimizer
-        
+
         This is the basic automatic differentiation reconstruction tool
         which all the other, algorithm-specific tools, use.
-        
+
         Like all the other optimization routines, it is defined as a
         generator function which yields the average loss each epoch.
 
@@ -135,7 +135,7 @@ class CDIModel(t.nn.Module):
         normalization = 0
         for inputs, patterns in data_loader:
             normalization += t.sum(patterns).cpu().numpy()
-            
+
         def run_iteration(stop_event=None):
             loss = 0
             N = 0
@@ -144,7 +144,7 @@ class CDIModel(t.nn.Module):
                 N += 1
                 def closure():
                     optimizer.zero_grad()
-                    
+
                     input_chunks = [[inp[i:i + calculation_width]
                                      for inp in inputs]
                                     for i in range(0, len(inputs[0]),
@@ -152,7 +152,7 @@ class CDIModel(t.nn.Module):
                     pattern_chunks = [patterns[i:i + calculation_width]
                                       for i in range(0, len(inputs[0]),
                                                      calculation_width)]
-                    
+
                     total_loss = 0
                     for inp, pats in zip(input_chunks, pattern_chunks):
                         # This is just used to allow graceful exit when
@@ -168,7 +168,7 @@ class CDIModel(t.nn.Module):
                             loss = self.loss(pats,sim_patterns)
 
                         loss.backward()
-                    
+
                         total_loss += loss.detach()
 
                     if regularization_factor is not None \
@@ -178,7 +178,7 @@ class CDIModel(t.nn.Module):
                     return total_loss
 
                 loss += optimizer.step(closure).detach().cpu().numpy()
-                
+
             loss /= normalization
             if scheduler is not None:
                 scheduler.step(loss)
@@ -198,7 +198,7 @@ class CDIModel(t.nn.Module):
                     # If something bad happens, put the exception into the
                     # result queue
                     result_queue.put(e)
-                    
+
         for it in range(iterations):
             if thread:
                 calc = threading.Thread(target=target, name='calculator', daemon=True)
@@ -206,10 +206,10 @@ class CDIModel(t.nn.Module):
                     calc.start()
                     while calc.is_alive():
                         if hasattr(self, 'figs'):
-                            self.figs[0].canvas.start_event_loop(0.01) 
+                            self.figs[0].canvas.start_event_loop(0.01)
                         else:
                             calc.join()
-                            
+
                 except KeyboardInterrupt as e:
                     stop_event.set()
                     print('\nAsking execution thread to stop cleanly - please be patient.')
@@ -233,7 +233,7 @@ class CDIModel(t.nn.Module):
                       regularization_factor=None, thread=True,
                       calculation_width=10):
         """Runs a round of reconstruction using the Adam optimizer
-        
+
         This is generally accepted to be the most robust algorithm for use
         with ptychography. Like all the other optimization routines,
         it is defined as a generator function, which yields the average
@@ -267,7 +267,7 @@ class CDIModel(t.nn.Module):
             if type(subset) == type(1):
                 subset = [subset]
             dataset = torchdata.Subset(dataset, subset)
-            
+
         # Make a dataloader
         data_loader = torchdata.DataLoader(dataset, batch_size=batch_size,
                                            shuffle=True)
@@ -290,17 +290,17 @@ class CDIModel(t.nn.Module):
                                 calculation_width=calculation_width)
 
 
-    def LBFGS_optimize(self, iterations, dataset, 
+    def LBFGS_optimize(self, iterations, dataset,
                        lr=0.1,history_size=2, subset=None,
                        regularization_factor=None, thread=True,
                        calculation_width=10):
         """Runs a round of reconstruction using the L-BFGS optimizer
-        
+
         This algorithm is often less stable that Adam, however in certain
         situations or geometries it can be shockingly efficient. Like all
         the other optimization routines, it is defined as a generator
         function which yields the average loss each epoch.
-        
+
         Note: There is no batch size, because it is a usually a bad idea to use
         LBFGS on anything but all the data at onece
 
@@ -320,14 +320,14 @@ class CDIModel(t.nn.Module):
             Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
         thread : bool
             Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
-        
+
         """
         if subset is not None:
             # if just one pattern, turn into a list for convenience
             if type(subset) == type(1):
                 subset = [subset]
             dataset = torchdata.Subset(dataset, subset)
-        
+
         # Make a dataloader. This basically does nothing but load all the
         # data at once
         data_loader = torchdata.DataLoader(dataset, batch_size=len(dataset))
@@ -338,7 +338,7 @@ class CDIModel(t.nn.Module):
                                   lr = lr, history_size=history_size)
         #optimizer = MyLBFGS(self.parameters(),
         #                    lr = lr, history_size=history_size)
-        
+
         return self.AD_optimize(iterations, data_loader, optimizer,
                                 regularization_factor=regularization_factor,
                                 thread=thread,
@@ -350,7 +350,7 @@ class CDIModel(t.nn.Module):
                      nesterov=False, subset=None, regularization_factor=None,
                      thread=True, calculation_width=10):
         """Runs a round of reconstruction using the SGDoptimizer
-        
+
         This algorithm is often less stable that Adam, but it is simpler
         and is the basic workhorse of gradience descent.
 
@@ -382,7 +382,7 @@ class CDIModel(t.nn.Module):
             if type(subset) == type(1):
                 subset = [subset]
             dataset = torchdata.Subset(dataset, subset)
-            
+
         # Make a dataloader
         if batch_size is not None:
             data_loader = torchdata.DataLoader(dataset, batch_size=batch_size,
@@ -418,28 +418,28 @@ class CDIModel(t.nn.Module):
                   self.latest_iteration_time + str(self.latest_loss)
         else:
             return 'No reconstruction iterations performed yet!'
-        
+
     # By default, the plot_list is empty
     plot_list = []
-    
-    
+
+
     def inspect(self, dataset=None, update=True):
         """Plots all the plots defined in the model's plot_list attribute
-  
+
         If update is set to True, it will update any previously plotted set
         of plots, if one exists, and then redraw them. Otherwise, it will
         plot a new set, and any subsequent updates will update the new set
-        
+
         Optionally, a dataset can be passed, which then will plot any
         registered plots which need to incorporate some information from
         the dataset (such as geometry or a comparison with measured data).
-        
+
         Plots can be registered in any subclass by defining the plot_list
         attribute. This should be a list of tuples in the following format:
-        ( 'Plot Title', function_to_generate_plot(self), 
+        ( 'Plot Title', function_to_generate_plot(self),
         function_to_determine_whether_to_plot(self))
 
-        Where the third element in the tuple (a function that returns 
+        Where the third element in the tuple (a function that returns
         True if the plot is relevant) is not required.
 
         Parameters
@@ -448,9 +448,19 @@ class CDIModel(t.nn.Module):
             Optional, a dataset matched to the model type
         update : bool
             Default True, whether to update existing plots or plot new ones
-        
+
         """
-                
+
+        print('base models inspect: checking the object')
+        a = self.obj.detach()
+        def saveobj(a, filename):
+            a = np.abs(a)
+            plt.imshow(a)
+            plt.savefig(filename)
+        f = ['base_a.png', 'base_b.png', 'base_c.png', 'base_d.png']
+        comp = [a[i, j, :, :] for i, j in zip([0, 0, 1, 1], [0, 1, 0, 1])]
+        for i in range(4):
+            saveobj(comp[i], f[i])
         first_update = False
         if update and hasattr(self, 'figs') and self.figs:
             figs = self.figs
@@ -476,7 +486,7 @@ class CDIModel(t.nn.Module):
             plotter = plots[1]
 
             if figs is None:
-                fig = plt.figure()                
+                fig = plt.figure()
                 self.figs.append(fig)
             else:
                 fig = figs[idx]
@@ -484,13 +494,13 @@ class CDIModel(t.nn.Module):
             try:
                 plotter(self,fig)
                 plt.title(name)
-                            
+
             except TypeError as e:
                 if dataset is not None:
                     try:
                         plotter(self, fig, dataset)
                         plt.title(name)
-                        
+
                     except (IndexError, KeyError, AttributeError, np.linalg.LinAlgError) as e:
                         pass
 
@@ -498,15 +508,15 @@ class CDIModel(t.nn.Module):
                 pass
 
             idx += 1
-            
+
             if update:
                 plt.draw()
                 fig.canvas.start_event_loop(0.001)
-                
+
         if first_update:
             plt.pause(0.05 * len(self.figs))
 
-            
+
     def save_figures(self, prefix='', extension='.eps'):
         """Saves all currently open inspection figures.
 
@@ -520,7 +530,7 @@ class CDIModel(t.nn.Module):
         By default, the files will be named by the figure titles as defined
         in the plot_list. Files can be saved with any extension suported by
         matplotlib.pyplot.savefig.
-        
+
         Parameters
         ----------
         prefix : str
@@ -528,7 +538,7 @@ class CDIModel(t.nn.Module):
         extention : strategy
             Default is .eps, the file extension to save with.
         """
-        
+
         if hasattr(self, 'figs') and self.figs:
             figs = self.figs
         else:
@@ -538,21 +548,21 @@ class CDIModel(t.nn.Module):
             fig.savefig(prefix + fig.axes[0].get_title() + extension,
                         bbox_inches = 'tight')
 
-            
-    def compare(self, dataset):
+
+    def compare(self, dataset, logarithmic=False):
         """Opens a tool for comparing simulated and measured diffraction patterns
-        
+
         Parameters
         ----------
         dataset : CDataset
             A dataset containing the simulated diffraction patterns to compare against
         """
-        
+
         fig, axes = plt.subplots(1,3,figsize=(12,5.3))
         fig.tight_layout(rect=[0.02, 0.09, 0.98, 0.96])
         axslider = plt.axes([0.15,0.06,0.75,0.03])
-        
-        
+
+
         def update_colorbar(im):
             # If the update brought the colorbar out of whack
             # (say, from clicking back in the navbar)
@@ -564,7 +574,7 @@ class CDIModel(t.nn.Module):
             if hasattr(im, 'norecurse') and im.norecurse:
                 im.norecurse=False
                 return
-            
+
             im.norecurse=True
             im.set_clim(vmin=np.min(im.get_array()),vmax=np.max(im.get_array()))
 
@@ -572,7 +582,7 @@ class CDIModel(t.nn.Module):
             idx = int(idx) % len(dataset)
             fig.pattern_idx = idx
             updating = True if len(axes[0].images) >= 1 else False
-            
+
             inputs, output = dataset[idx]
             sim_data = self.forward(*inputs).detach().cpu().numpy()
             sim_data = sim_data
@@ -581,7 +591,11 @@ class CDIModel(t.nn.Module):
                 mask = self.mask.detach().cpu().numpy()
             else:
                 mask = 1
-                
+
+            if logarithmic:
+                sim_data =np.log(sim_data)/np.log(10)
+                meas_data = np.log(meas_data)/np.log(10)
+
             if not updating:
                 axes[0].set_title('Simulated')
                 axes[1].set_title('Measured')
@@ -600,7 +614,7 @@ class CDIModel(t.nn.Module):
                 cb3 = plt.colorbar(diff, ax=axes[2], orientation='horizontal',format='%.2e',ticks=ticker.LinearLocator(numticks=5),pad=0.1,fraction=0.1)
                 cb3.ax.tick_params(labelrotation=20)
                 cb3.ax.callbacks.connect('xlim_changed', lambda ax: update_colorbar(diff))
-                
+
             else:
 
                 sim = axes[0].images[-1]
@@ -614,8 +628,8 @@ class CDIModel(t.nn.Module):
                 diff = axes[2].images[-1]
                 diff.set_data((sim_data-meas_data) * mask)
                 update_colorbar(diff)
-                
-                
+
+
         # This is dumb but the slider doesn't work unless a reference to it is
         # kept somewhere...
         self.slider = Slider(axslider, 'Pattern #', 0, len(dataset)-1, valstep=1, valfmt="%d")
@@ -626,7 +640,7 @@ class CDIModel(t.nn.Module):
                 event.button = None
             if not hasattr(event, 'key'):
                 event.key = None
-                
+
             if event.key == 'up' or event.button == 'up':
                 update(fig.pattern_idx - 1)
             elif event.key == 'down' or event.button == 'down':
@@ -637,5 +651,3 @@ class CDIModel(t.nn.Module):
         fig.canvas.mpl_connect('key_press_event',on_action)
         fig.canvas.mpl_connect('scroll_event',on_action)
         update(0)
-        
-

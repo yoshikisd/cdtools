@@ -14,7 +14,7 @@ __all__ = ['apply_linear_polarizer',
            'apply_circular_polarizer',
            'apply_jones_matrix',
            'generate_linear_polarizer',
-           'generate_phase_retarder']
+           'generate_birefringent_obj']
 
 
 # Abe - split these into two functions
@@ -36,10 +36,10 @@ def generate_linear_polarizer(pol_angle):
     cd = t.stack((c, d), dim=-1)
     jones_matrices = t.stack((ab, cd), dim=-2)
     if single_angle:
-        return jones_matrices[0].to(dtype=t.cfloat) 
+        return jones_matrices[0].to(dtype=t.cfloat)
     else:
         return jones_matrices.to(dtype=t.cfloat)
-    
+
 
 def apply_linear_polarizer(probe, polarizer, multiple_modes=True, transpose=True):
     """
@@ -56,7 +56,7 @@ def apply_linear_polarizer(probe, polarizer, multiple_modes=True, transpose=True
     Returns:
     --------
     linearly polarized probe: t.Tensor
-        (N)(P)x2x1xMxL 
+        (N)(P)x2x1xMxL
     """
     jones_matrices = generate_linear_polarizer(polarizer)
     return apply_jones_matrix(probe, jones_matrices, transpose=transpose, multiple_modes=multiple_modes)
@@ -75,19 +75,19 @@ def apply_jones_matrix(probe, jones_matrix, transpose=True, multiple_modes=True)
     probe: t.Tensor
         A (N)(P)x2xMxL tensor representing the probe
     jones_matrix: t.tensor
-        (N)x2x2x(M)x(L) 
+        (N)x2x2x(M)x(L)
 
     Returns:
     --------
     a probe with the jones matrix applied: t.Tensor
-        (N)(P)x2xMxL 
+        (N)(P)x2xMxL
 
     """
     if transpose:
         if jones_matrix.dim() < 4:
             jones_matrix = jones_matrix[..., None, None]
         if multiple_modes:
-            jones_matrix = jones_matrix.unsqueeze(-5)          
+            jones_matrix = jones_matrix.unsqueeze(-5)
         probe = probe[..., None, :, :]
         # if jones matrices do not differ from pattern to pattern
         if probe.dim() > jones_matrix.dim():
@@ -96,19 +96,19 @@ def apply_jones_matrix(probe, jones_matrix, transpose=True, multiple_modes=True)
         elif jones_matrix.dim() > probe.dim():
             probe = probe.unsqueeze(0)
         # print('apply jonesmatrix: probe', probe.shape, 'matrix:', jones_matrix)
-        jones_matrix = jones_matrix.transpose(-1, -3).transpose(-2, -4) 
+        jones_matrix = jones_matrix.transpose(-1, -3).transpose(-2, -4)
         probe = probe.transpose(-1, -3).transpose(-2, -4)
         output = t.matmul(jones_matrix, probe).transpose(-2, -4).transpose(-1, -3).squeeze(-3)
-        
+
     else:
         raise NotImplementedError
-    
+
     return output
 
 
 def apply_phase_retardance(probe, phase_shift, multiple_modes=True):
     """
-    Shifts the y-component of the field wrt the x-component by a given phase shift 
+    Shifts the y-component of the field wrt the x-component by a given phase shift
 
     Parameters:
     ----------
@@ -120,7 +120,7 @@ def apply_phase_retardance(probe, phase_shift, multiple_modes=True):
     Returns:
     --------
     probe: t.Tensor
-        (...)x2x1xMxL 
+        (...)x2x1xMxL
     """
     theta = t.as_tensor(phase_shift, dtype=t.float32)
     theta = t.deg2rad(theta)
@@ -140,11 +140,11 @@ def apply_circular_polarizer(probe, left_polarized=True, multiple_modes=True):
         A (...)x2xMxL tensor representing the probe
     left_polarizd: bool
         True for the left-polarization, False for the right
-    
+
     Returns:
     --------
     circularly polarized probe: t.Tensor
-        (...)x2xMxL 
+        (...)x2xMxL
     """
     probe = probe.to(dtype=t.cfloat)
     if left_polarized:
@@ -166,7 +166,7 @@ def apply_quarter_wave_plate(probe, fast_axis_angle, multiple_modes=True):
     Returns:
     --------
     polarized probe: t.Tensor
-        (...)x2x1xMxL 
+        (...)x2x1xMxL
     """
     probe = probe.to(dtype=t.cfloat)
     theta = math.radians(fast_axis_angle)
@@ -174,7 +174,7 @@ def apply_quarter_wave_plate(probe, fast_axis_angle, multiple_modes=True):
     jones_matrix = exponent* t.tensor([[(cos(theta))**2 + 1j * (sin(theta))**2, (1 - 1j) * sin(theta) * cos(theta)], [(1 - 1j) * sin(theta) * cos(theta), (sin(theta))**2 + 1j * (cos(theta))**2]]).to(dtype=t.cfloat)
     out = apply_jones_matrix(probe, jones_matrix, multiple_modes=multiple_modes)
 
-    return out 
+    return out
 
 def apply_half_wave_plate(probe, fast_axis_angle, multiple_modes=True):
     """
@@ -188,7 +188,7 @@ def apply_half_wave_plate(probe, fast_axis_angle, multiple_modes=True):
     Returns:
     --------
     polarized probe: t.Tensor
-        (...)x2x1xMxL 
+        (...)x2x1xMxL
     """
     probe = probe.to(dtype=t.cfloat)
     theta = math.radians(fast_axis_angle)
@@ -196,19 +196,24 @@ def apply_half_wave_plate(probe, fast_axis_angle, multiple_modes=True):
     jones_matrix = exponent * t.tensor([[(cos(theta))**2 - (sin(theta))**2, 2 * sin(theta) * cos(theta)], [2 * sin(theta) * cos(theta), (sin(theta))**2 - (cos(theta))**2]]).to(dtype=t.cfloat)
     out = apply_jones_matrix(probe, jones_matrix, multiple_modes=multiple_modes)
 
-    return out 
-    
-def generate_phase_retarder(fast_axis=0, phase=0):
-    phase = t.as_tensor(phase).to(dtype=t.float32)
-    phase = t.deg2rad(phase)
-    def coord_rot(angle):
+    return out
+
+def generate_birefringent_obj(fast_axis=90, phase_ret=10, atten_fast=1, atten_ret=1, global_phase=0):
+    def to_rad(angle):
         angle = t.as_tensor(angle, dtype=t.float32)
         angle = t.deg2rad(angle)
+        return angle
+
+    fast_axis = to_rad(fast_axis)
+    phase_ret = to_rad(phase_ret)
+    global_phase = to_rad(global_phase)
+
+    def coord_rot(angle):
         a = t.stack((t.cos(angle), t.sin(angle)), dim=-1)
         b = t.stack((-t.sin(angle), t.cos(angle)), dim=-1)
         return t.stack((a, b), dim=-2).to(dtype=t.cfloat)
 
     r1 = coord_rot(-fast_axis)
     r2 = coord_rot(fast_axis)
-    p = t.as_tensor([[1, 0], [0, t.exp(phase*1j)]], dtype=t.cfloat)
+    p = t.exp(global_phase * 1j) * t.as_tensor([[atten_fast, 0], [0, atten_ret * t.exp(phase_ret*1j)]], dtype=t.cfloat)
     return t.matmul(r1, t.matmul(p, r2))
