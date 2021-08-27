@@ -26,18 +26,18 @@ class PolarizedFancyPtycho(FancyPtycho):
                  polarizer_offsets=None, analyzer_offsets=None,
                  polarizer_scale=1, analyzer_scale=1,  mask=None,
                  weights = None, translation_scale = 1, saturation=None,
-                 probe_support = None, obj_support=None, oversampling=1,
+                 probe_support = None, oversampling=1,
                  loss='amplitude mse',units='um'):
 
-        super(FancyPtycho, self).__init__(wavelength, detector_geometry,
+        super(PolarizedFancyPtycho, self).__init__(wavelength, detector_geometry,
                  probe_basis,
                  probe_guess, obj_guess,
                  detector_slice=None,
                  surface_normal=np.array([0.,0.,1.]),
                  min_translation = t.Tensor([0,0]),
                  background = None, translation_offsets=None, mask=None,
-                 weights = None, translation_scale = 1, saturation=None,
-                 probe_support = None, obj_support=None, oversampling=1,
+                 weights = weights, translation_scale = 1, saturation=None,
+                 probe_support = None, oversampling=1,
                  loss='amplitude mse',units='um')
 
         if polarizer_offsets is None:
@@ -49,7 +49,7 @@ class PolarizedFancyPtycho(FancyPtycho):
             self.analyzer_offsets = None
         else:
             self.analyzer_offsets = t.nn.Parameter(t.tensor(analyzer_offsets).to(dtype=t.float32)) / analyzer_scale
-
+        
         self.polarizer = polarizer
         self.analyzer = analyzer
         probe_guess = t.tensor(probe_guess, dtype=t.complex64)
@@ -63,7 +63,8 @@ class PolarizedFancyPtycho(FancyPtycho):
     @classmethod
     def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um', left_polarized=True):
 
-        model = FancyPtycho.from_dataset(dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um', left_polarized=True)
+        # When using this method, remember to pass through the inputs
+        model = FancyPtycho.from_dataset(dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um')
 
 
         # Mutate the class to its subclass
@@ -81,10 +82,13 @@ class PolarizedFancyPtycho(FancyPtycho):
         probe = t.stack([probe, ] + probe_stack)
         print('probe', type(probe), probe.shape)
         model.probe.data = probe
+        print(model.probe.shape)
         # obj = t.stack((model.obj.data, model.obj.data), dim=-3)
         # model.obj.data = t.stack((obj.data, obj.data), dim=-4)
         # obj = t.exp(1j * randomize_ang * (t.rand(obj_size)-0.5))
         obj = model.obj.detach()
+        # Abe - Probably something identity matrix-like would be a better
+        # initialization (e.g. ((obj,0*obj),(0*obj,obj))
         obj = t.stack((obj, obj), dim=-3)
         obj = t.stack((obj, obj), dim=-4)
         print('object', type(obj), obj.shape)
@@ -275,12 +279,12 @@ class PolarizedFancyPtycho(FancyPtycho):
             raise NotImplementedError('Unstable Modes not Implemented for polarized light')
 
         pol_probes = polarization.apply_linear_polarizer(prs, polarizer)
+        
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
-            prs, self.obj, pix_trans,
+            pol_probes, self.obj, pix_trans,
             shift_probe=True, multiple_modes=True, polarized=True)
 
         analyzed_exit_waves = polarization.apply_linear_polarizer(exit_waves, analyzer)
-
         return analyzed_exit_waves
 
 

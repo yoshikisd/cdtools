@@ -423,9 +423,10 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
     exit_waves : torch.Tensor
         An (N)x(P)xMxL tensor of the calculated exit waves
     """
+    
     single_translation = False
     if translations.dim() == 1:
-        translations = translations[None,:]
+        translations = translations[None, :]
         single_translation = True
 
     # Separate the translations into a part that chooses the window
@@ -438,8 +439,8 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
                                   tr[1]:tr[1]+probe.shape[-1]]
                               for tr in integer_translations])
     else:
-        selections = t.stack([obj[:, :,tr[0]:tr[0]+probe.shape[-2],
-                          tr[1]:tr[1]+probe.shape[-1]]
+        selections = t.stack([obj[:, :, tr[0]:tr[0]+probe.shape[-2],
+                                  tr[1]:tr[1]+probe.shape[-1]]
                       for tr in integer_translations])
         # Nx2x2xMxL tensor
 
@@ -480,7 +481,6 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
 
     else:
         raise NotImplementedError('Object shift not yet implemented')
-    print('ptyvho 2d sinc', output.shape)
     if single_translation:
         return output[0]
     else:

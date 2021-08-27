@@ -27,6 +27,7 @@ def generate_linear_polarizer(pol_angle):
     if pol_angle.dim() == 0:
         pol_angle = t.unsqueeze(pol_angle,0)
         single_angle = True
+        
     pol_angle_rad = t.deg2rad(pol_angle)
     a = t.cos(pol_angle_rad) ** 2
     b = t.sin(pol_angle_rad) * t.cos(pol_angle_rad)
