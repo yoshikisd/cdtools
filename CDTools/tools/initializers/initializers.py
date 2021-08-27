@@ -633,7 +633,7 @@ def generate_subdominant_modes(dominant_mode, n_modes, circular=True):
     dominant_fft = far_field(dominant_mode)
 
     shape = dominant_mode.shape
-    center = ((shape[-2]-1)//2, (shape[-1]-1)//2)
+    center = ((shape[-2])//2, (shape[-1])//2)
         
     i, j = np.mgrid[:shape[-2], :shape[-1]]
     i = t.tensor(i - center[0]).to(dtype=dominant_fft.dtype,
