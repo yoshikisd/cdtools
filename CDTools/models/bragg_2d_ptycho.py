@@ -54,6 +54,16 @@ __all__ = ['Bragg2DPtycho']
 
 class Bragg2DPtycho(CDIModel):
 
+    # Needed to do the real/complex split
+    #@property
+    #def obj(self):
+    #    return t.complex(self.obj_real, self.obj_imag)
+
+    #@property
+    #def probe(self):
+    #    return t.complex(self.probe_real, self.probe_imag)
+
+
     def __init__(self, wavelength, detector_geometry,
                  probe_basis, probe_guess, obj_guess,
                  detector_slice=None,
@@ -124,7 +134,13 @@ class Bragg2DPtycho(CDIModel):
             # you look at the phase map
             probe_guess[probe_guess == 0] = 0
         else:
-            self.probe_support = t.ones(self.probe[0].shape, dtype=t.bool)
+            self.probe_support = t.ones(probe_guess[0].shape, dtype=t.bool)
+
+        #self.probe_real = t.nn.Parameter(probe_guess.real / self.probe_norm)
+        #self.probe_imag = t.nn.Parameter(probe_guess.imag / self.probe_norm)
+
+        #self.obj_real = t.nn.Parameter(obj_guess.real )
+        #self.obj_imag = t.nn.Parameter(obj_guess.imag)
 
         self.probe = t.nn.Parameter(probe_guess / self.probe_norm)
         self.obj = t.nn.Parameter(obj_guess)
@@ -164,7 +180,7 @@ class Bragg2DPtycho(CDIModel):
             # recall that here we always want the shape of the detector
             # before it's cut down by the detector slice to match the
             # physical detector region
-            probe_shape = self.probe[0]
+            probe_shape = self.probe[0].shape
             
             self.k_map, self.intensity_map = \
                 tools.propagators.generate_high_NA_k_intensity_map(
@@ -192,7 +208,7 @@ class Bragg2DPtycho(CDIModel):
 
 
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, propagate_probe=True,correct_tilt=True, lens=False, opt_for_fft=False):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, propagate_probe=True, correct_tilt=True, lens=False, opt_for_fft=False):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -309,12 +325,16 @@ class Bragg2DPtycho(CDIModel):
 
         if probe_support_radius is not None:
             probe_support = t.zeros(probe[0].shape, dtype=t.bool)
-            p_cent = np.array(probe[0].shape).astype(int) // 2
-            psr = int(probe_support_radius)
-            probe_support[p_cent[0]-psr:p_cent[0]+psr,
-                          p_cent[1]-psr:p_cent[1]+psr] = 1
+            xs, ys = np.mgrid[:probe.shape[-2], :probe.shape[-1]]
+            xs = xs - np.mean(xs)
+            ys = ys - np.mean(ys)
+            Rs = np.sqrt(xs**2 + ys**2)
+
+            probe_support[Rs < probe_support_radius] = 1
+            probe = probe * probe_support[None, :, :]
+
         else:
-            probe_support = None;
+            probe_support = None
 
         # Here we need to implement a simple condition to choose whether
         # to propagate the probe or not
@@ -352,7 +372,7 @@ class Bragg2DPtycho(CDIModel):
             pix_trans += self.translation_scale * self.translation_offsets[index]
 
         Ws = self.weights[index]
-        prs = Ws[...,None,None,None] * self.probe
+        prs = Ws[...,None,None,None] * self.probe * self.probe_support[...,:,:]
         # Now we need to propagate each of the probes
 
         
@@ -504,8 +524,10 @@ class Bragg2DPtycho(CDIModel):
         obj = self.obj.detach().cpu().numpy()
         background = self.background.detach().cpu().numpy()**2
         weights = self.weights.detach().cpu().numpy()
+        losses = np.array(self.loss_train)
         
         return {'basis':basis, 'translation':translations,
                 'probe':probe,'obj':obj,
                 'background':background,
-                'weights':weights}
+                'weights':weights,
+                'losses':losses}

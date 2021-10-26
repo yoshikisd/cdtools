@@ -55,7 +55,7 @@ class CDIModel(t.nn.Module):
 
     def __init__(self):
         super(CDIModel,self).__init__()
-        self.iteration_count = 0
+        self.loss_train = []
         
     def from_dataset(self, dataset):
         raise NotImplementedError()
@@ -183,9 +183,8 @@ class CDIModel(t.nn.Module):
             if scheduler is not None:
                 scheduler.step(loss)
 
-            self.latest_loss = loss
+            self.loss_train.append(loss)
             self.latest_iteration_time = time.time() - t0
-            self.iteration_count += 1
             return loss
 
         if thread:
@@ -412,10 +411,10 @@ class CDIModel(t.nn.Module):
         report : str
             A string with basic info on the latest iteration
         """
-        if hasattr(self, 'latest_loss'):
-            return 'Iteration ' + str(self.iteration_count) + \
+        if hasattr(self, 'latest_iteration_time'):
+            return 'Iteration ' + str(len(self.loss_train)) + \
                   ' completed in %0.2f s with loss ' %\
-                  self.latest_iteration_time + str(self.latest_loss)
+                  self.latest_iteration_time + str(self.loss_train[-1])
         else:
             return 'No reconstruction iterations performed yet!'
         

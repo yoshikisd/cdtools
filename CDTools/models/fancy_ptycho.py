@@ -17,14 +17,23 @@ class FancyPtycho(CDIModel):
 
     def __init__(self, wavelength, detector_geometry,
                  probe_basis,
-                 probe_guess, obj_guess,
+                 probe_guess,
+                 obj_guess,
                  detector_slice=None,
                  surface_normal=t.tensor([0., 0., 1.], dtype=t.float32),
                  min_translation=t.tensor([0, 0], dtype=t.float32),
-                 background=None, translation_offsets=None, mask=None,
-                 weights=None, translation_scale=1, saturation=None,
-                 probe_support=None, oversampling=1,
-                 loss='amplitude mse', units='um'):
+                 background=None,
+                 translation_offsets=None,
+                 mask=None,
+                 weights=None,
+                 translation_scale=1,
+                 saturation=None,
+                 probe_support=None,
+                 oversampling=1,
+                 fourier_probe=False,
+                 loss='amplitude mse',
+                 units='um',
+                 ):
 
         super(FancyPtycho, self).__init__()
         self.wavelength = t.tensor(wavelength)
@@ -45,12 +54,13 @@ class FancyPtycho(CDIModel):
 
         self.saturation = saturation
         self.units = units
+        self.fourier_probe = fourier_probe
 
         if mask is None:
             self.mask = mask
         else:
             self.mask = t.tensor(mask, dtype=t.bool)
-
+        
         probe_guess = t.tensor(probe_guess, dtype=t.complex64)
         obj_guess = t.tensor(obj_guess, dtype=t.complex64)
 
@@ -60,7 +70,7 @@ class FancyPtycho(CDIModel):
             self.probe_norm = 1 * t.max(t.abs(probe_guess[0]))
         else:
             self.probe_norm = 1 * t.max(t.abs(probe_guess))        
-
+        
         self.probe = t.nn.Parameter(probe_guess / self.probe_norm)
         self.obj = t.nn.Parameter(obj_guess)
 
@@ -117,7 +127,25 @@ class FancyPtycho(CDIModel):
 
 
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale=1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um'):
+    def from_dataset(cls,
+                     dataset,
+                     probe_size=None,
+                     randomize_ang=0,
+                     padding=0,
+                     n_modes=1,
+                     dm_rank=None,
+                     translation_scale=1,
+                     saturation=None,
+                     probe_support_radius=None,
+                     propagation_distance=None,
+                     scattering_mode=None,
+                     oversampling=1,
+                     auto_center=False,
+                     opt_for_fft=False,
+                     fourier_probe=False,
+                     loss='amplitude mse',
+                     units='um'
+                     ):
 
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -188,8 +216,12 @@ class FancyPtycho(CDIModel):
         # Now we initialize all the subdominant probe modes
         probe_max = t.max(t.abs(probe))
         probe_stack = [0.01 * probe_max * t.rand(probe.shape, dtype=probe.dtype) for i in range(n_modes - 1)]
+
+        # For a Fourier space probe
+        if fourier_probe:
+            probe = tools.propagators.far_field(probe)
+
         probe = t.stack([probe, ] + probe_stack)
-        # probe = t.stack([tools.propagators.far_field(probe),] + probe_stack)
 
         obj = t.exp(1j * randomize_ang * (t.rand(obj_size)-0.5))
 
@@ -243,6 +275,7 @@ class FancyPtycho(CDIModel):
                    translation_scale=translation_scale,
                    saturation=saturation,
                    probe_support=probe_support,
+                   fourier_probe=fourier_probe,
                    oversampling=oversampling,
                    loss=loss, units=units)
 
@@ -266,6 +299,10 @@ class FancyPtycho(CDIModel):
 
         # This restricts the basis probes to stay within the probe support
         basis_prs = self.probe * self.probe_support[..., :, :]
+
+        # For a Fourier-space probe, we take an IFT
+        if self.fourier_probe:
+            basis_prs = tools.propagators.inverse_far_field(basis_prs)
 
         # Now we construct the probes for each shot from the basis probes
         Ws = self.weights[index]
@@ -510,10 +547,14 @@ class FancyPtycho(CDIModel):
         ('',
          lambda self, fig, dataset: self.plot_wavefront_variation(dataset, fig=fig, mode='phase', image_title='Probe Phases (scroll to view modes)', image_colorbar_title='Probe Phase'),
          lambda self: len(self.weights.shape) >= 2),
-        ('Basis Probe Amplitudes (scroll to view modes)',
-         lambda self, fig: p.plot_amplitude(self.probe, fig=fig, basis=self.probe_basis, units=self.units)),
-        ('Basis Probe Phases (scroll to view modes)',
-         lambda self, fig: p.plot_phase(self.probe, fig=fig, basis=self.probe_basis, units=self.units)),
+        ('Basis Probe Fourier Space Amplitudes',
+         lambda self, fig: p.plot_amplitude(self.probe if self.fourier_probe else tools.propagators.inverse_far_field(self.probe), fig=fig)),
+        ('Basis Probe Fourier Space Phases',
+         lambda self, fig: p.plot_phase(self.probe if self.fourier_probe else tools.propagators.inverse_far_field(self.probe), fig=fig)),
+        ('Basis Probe Real Space Amplitudes',
+         lambda self, fig: p.plot_amplitude(self.probe if not self.fourier_probe else tools.propagators.inverse_far_field(self.probe), fig=fig, basis=self.probe_basis, units=self.units)),
+        ('Basis Probe Real Space Phases',
+         lambda self, fig: p.plot_phase(self.probe if not self.fourier_probe else tools.propagators.inverse_far_field(self.probe), fig=fig, basis=self.probe_basis, units=self.units)),
         ('Average Density Matrix Amplitudes',
          lambda self, fig: p.plot_amplitude(np.nanmean(np.abs(self.get_rhos()), axis=0), fig=fig),
          lambda self: len(self.weights.shape) >= 2),

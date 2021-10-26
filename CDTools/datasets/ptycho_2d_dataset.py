@@ -188,7 +188,7 @@ class Ptycho2DDataset(CDataset):
         cdtdata.add_ptycho_translations(cxi_file, self.translations)
 
 
-    def inspect(self, logarithmic=True, units='um'):
+    def inspect(self, logarithmic=True, units='um', log_offset=1):
         """Launches an interactive plot for perusing the data
 
         This launches an interactive plotting tool in matplotlib that
@@ -208,7 +208,7 @@ class Ptycho2DDataset(CDataset):
                 mask = 1
                 
             if logarithmic:
-                return np.log(meas_data) / np.log(10) * mask
+                return np.log(meas_data + log_offset) / np.log(10) * mask
             else:
                 return meas_data * mask
 
@@ -229,9 +229,10 @@ class Ptycho2DDataset(CDataset):
         # nanomap_values = (self.mask * self.patterns).sum(dim=(1,2)).detach().cpu().numpy()
     
         if logarithmic:
-            cbar_title='Log Base 10 of Diffraction Intensity'
+            cbar_title = ('Log Base 10 of Diffraction Intensity + %0.2f'
+                          % log_offset)
         else:
-            cbar_title='Diffraction Intensity'
+            cbar_title = 'Diffraction Intensity'
         
         plotting.plot_nanomap_with_images(self.translations.detach().cpu(), get_images, values=nanomap_values, nanomap_units=units, image_title='Diffraction Pattern', image_colorbar_title=cbar_title)
 

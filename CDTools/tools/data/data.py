@@ -66,9 +66,9 @@ def get_entry_info(cxi_file):
                       'program_name']
     metadata = {attr: str(e1[attr][()].decode()) for attr in metadata_attrs
                 if attr in e1}
-    datetime_attrs = ['start_time',
-                      'end_time']
-    for attr in datetime_attrs:
+    
+
+    for attr in metadata_attrs:
         if attr in e1:
             try:
                 metadata[attr] = dateutil.parser.parse(str(e1[attr][()].decode()))

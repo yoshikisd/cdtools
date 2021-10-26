@@ -627,13 +627,7 @@ def RPI_interaction(probe, obj):
     pad1l = (probe.shape[-1] - obj.shape[-1])//2
     pad1r = probe.shape[-1] - obj.shape[-1] - pad1l
         
-    if obj.dim() == 2:
-        fftobj = t.nn.functional.pad(fftobj, (pad1l, pad1r, pad0l, pad0r))
-    elif obj.dim() == 3:
-        fftobj = t.nn.functional.pad(
-            fftobj, (pad1l, pad1r, pad0l, pad0r, 0,0))
-    else:
-        raise NotImplementedError('RPI interaction with obj of dimension higher than 4 (including complex dimension) is not supported.')
+    fftobj = t.nn.functional.pad(fftobj, (pad1l, pad1r, pad0l, pad0r))
         
     # Again, just an inverse FFT but with an fftshift
     upsampled_obj = propagators.inverse_far_field(fftobj)

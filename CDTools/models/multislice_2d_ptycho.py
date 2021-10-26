@@ -567,7 +567,7 @@ class Multislice2DPtycho(CDIModel):
         
 
     # Needs to be updated to allow for plotting to an existing figure
-    plot_list = [
+    plot_list = [ 
         ('Probe Fourier Space Amplitude',
          lambda self, fig: p.plot_amplitude(self.probe if self.fourier_probe else tools.propagators.inverse_far_field(self.probe), fig=fig)),
         ('Probe Fourier Space Phase',

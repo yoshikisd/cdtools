@@ -82,7 +82,7 @@ def get_units_factor(units):
     return factor
 
 
-def plot_image(im, plot_func=lambda x: x, fig=None, basis=None, units='$\\mu$m', cmap='viridis', cmap_label=None, **kwargs):
+def plot_image(im, plot_func=lambda x: x, fig=None, basis=None, units='$\\mu$m', cmap='viridis', cmap_label=None, interpolation=None, **kwargs):
     """Plots an image with a colorbar and on an appropriate spatial grid
     
     If a figure is given explicitly, it will clear that existing figure and
@@ -112,6 +112,8 @@ def plot_image(im, plot_func=lambda x: x, fig=None, basis=None, units='$\\mu$m',
         Default is 'viridis', the colormap to plot with
     cmap_label : str
         What to label the colorbar when plotting
+    interpolation : str
+        What interpolation to use for imshow
     \\**kwargs
         All other args are passed to fig.add_subplot(111, \\**kwargs)
 
@@ -169,7 +171,7 @@ def plot_image(im, plot_func=lambda x: x, fig=None, basis=None, units='$\\mu$m',
         else:
             extent=None
 
-        plt.imshow(to_plot, cmap = cmap, extent = extent)
+        plt.imshow(to_plot, cmap = cmap, extent = extent, interpolation=interpolation)
         cbar = plt.colorbar()
         if cmap_label is not None:
             cbar.set_label(cmap_label)
