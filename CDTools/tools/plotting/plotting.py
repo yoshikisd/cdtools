@@ -17,11 +17,7 @@ from matplotlib import ticker, patheffects
 __all__ = ['colorize', 'plot_amplitude', 'plot_phase',
            'plot_colorized', 'plot_translations', 'get_units_factor',
            'plot_nanomap', 'plot_real', 'plot_imag',
-           'plot_nanomap_with_images']#,
-           #'polarized_plot_component_amplitudes',
-           #'polarized_plot_phase_ret',
-           #'polarized_plot_global_phases',
-           #'polarized_plot_ellipses']
+           'plot_nanomap_with_images']
 
 
 def colorize(z):

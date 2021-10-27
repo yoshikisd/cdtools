@@ -3,6 +3,7 @@ from CDTools.models import CDIModel, FancyPtycho
 from CDTools.datasets import Ptycho2DDataset
 from CDTools import tools
 from CDTools.tools import plotting as p
+# from CDTools.tools import polarized_plotting as pp
 from CDTools.tools import analysis
 from matplotlib import pyplot as plt
 from datetime import datetime
@@ -510,30 +511,30 @@ class PolarizedFancyPtycho(FancyPtycho):
 
     plot_list = [
         ('',
-         lambda self, fig, dataset: self.plot_wavefront_variation(dataset,fig=fig,mode='root_sum_intensity',image_title='Root Summed Probe Intensities',image_colorbar_title='Square Root of Intensity'),
+         lambda self, fig, dataset: self.plot_wavefront_variation(dataset, fig=fig, mode='root_sum_intensity', image_title='Root Summed Probe Intensities', image_colorbar_title='Square Root of Intensity'),
          lambda self: len(self.weights.shape) >= 2),
         ('',
-         lambda self, fig, dataset: self.plot_wavefront_variation(dataset,fig=fig,mode='amplitude',image_title='Probe Amplitudes (scroll to view modes)',image_colorbar_title='Probe Amplitude'),
+         lambda self, fig, dataset: self.plot_wavefront_variation(dataset, fig=fig, mode='amplitude', image_title='Probe Amplitudes (scroll to view modes)', image_colorbar_title='Probe Amplitude'),
          lambda self: len(self.weights.shape) >= 2),
         ('',
-         lambda self, fig, dataset: self.plot_wavefront_variation(dataset,fig=fig,mode='phase',image_title='Probe Phases (scroll to view modes)',image_colorbar_title='Probe Phase'),
+         lambda self, fig, dataset: self.plot_wavefront_variation(dataset, fig=fig, mode='phase', image_title='Probe Phases (scroll to view modes)', image_colorbar_title='Probe Phase'),
          lambda self: len(self.weights.shape) >= 2),
         ('Basis Probe Amplitudes (scroll to view modes)',
-         lambda self, fig: p.plot_amplitude(self.probe, fig=fig, basis=self.probe_basis,units=self.units)),
+         lambda self, fig: p.plot_amplitude(self.probe, fig=fig, basis=self.probe_basis, units=self.units)),
         ('Basis Probe Phases (scroll to view modes)',
-         lambda self, fig: p.plot_phase(self.probe, fig=fig, basis=self.probe_basis,units=self.units)),
+         lambda self, fig: p.plot_phase(self.probe, fig=fig, basis=self.probe_basis, units=self.units)),
         ('Average Density Matrix Amplitudes',
-         lambda self, fig: p.plot_amplitude(np.nanmean(np.abs(self.get_rhos()),axis=0), fig=fig),
-         lambda self: len(self.weights.shape) >=2),
+         lambda self, fig: p.plot_amplitude(np.nanmean(np.abs(self.get_rhos()), axis=0), fig=fig),
+         lambda self: len(self.weights.shape) >= 2),
         ('% Power in Top Mode (only accurate after tidy_probes)',
-         lambda self, fig, dataset: p.plot_nanomap(self.corrected_translations(dataset), analysis.calc_top_mode_fraction(self.get_rhos()), fig=fig,units=self.units),
-         lambda self: len(self.weights.shape) >=2),
+         lambda self, fig, dataset: p.plot_nanomap(self.corrected_translations(dataset), analysis.calc_top_mode_fraction(self.get_rhos()), fig=fig, units=self.units),
+         lambda self: len(self.weights.shape) >= 2),
         ('Object Amplitude',
-         lambda self, fig: p.plot_amplitude(self.obj, fig=fig, basis=self.probe_basis,units=self.units)),
+         lambda self, fig: p.plot_amplitude(self.obj, fig=fig, basis=self.probe_basis, units=self.units)),
         ('Object Phase',
-         lambda self, fig: p.plot_phase(self.obj, fig=fig, basis=self.probe_basis,units=self.units)),
+         lambda self, fig: p.plot_phase(self.obj, fig=fig, basis=self.probe_basis, units=self.units)),
         ('Corrected Translations',
-         lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig,units=self.units)),
+         lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig, units=self.units)),
         ('Background',
          lambda self, fig: plt.figure(fig.number) and plt.imshow(self.background.detach().cpu().numpy()**2))
     ]
