@@ -63,7 +63,23 @@ class PolarizedFancyPtycho(FancyPtycho):
     def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um', left_polarized=True):
 
         # When using this method, remember to pass through the inputs
-        model = FancyPtycho.from_dataset(dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um')
+        model = FancyPtycho.from_dataset(
+            dataset,
+            probe_size=probe_size,
+            randomize_ang=randomize_ang,
+            padding=padding,
+            n_modes=n_modes,
+            dm_rank=dm_rank,
+            translation_scale=translation_scale,
+            saturation=saturation,
+            probe_support_radius=probe_support_radius,
+            propagation_distance=propagation_distance,
+            scattering_mode=scattering_mode,
+            oversampling=oversampling,
+            auto_center=auto_center,
+            opt_for_fft=opt_for_fft,
+            loss=loss,
+            units=units)
 
 
         # Mutate the class to its subclass
@@ -79,9 +95,9 @@ class PolarizedFancyPtycho(FancyPtycho):
         probe_max = t.max(t.abs(probe))
         probe_stack = [0.01 * probe_max * t.rand(probe.shape, dtype=probe.dtype) for i in range(n_modes - 1)]
         probe = t.stack([probe, ] + probe_stack)
-        print('probe', type(probe), probe.shape)
+        #print('probe', type(probe), probe.shape)
         model.probe.data = probe
-        print(model.probe.shape)
+        #print(model.probe.shape)
         # obj = t.stack((model.obj.data, model.obj.data), dim=-3)
         # model.obj.data = t.stack((obj.data, obj.data), dim=-4)
         # obj = t.exp(1j * randomize_ang * (t.rand(obj_size)-0.5))
@@ -90,14 +106,14 @@ class PolarizedFancyPtycho(FancyPtycho):
         # initialization (e.g. ((obj,0*obj),(0*obj,obj))
         obj = t.stack((obj, obj), dim=-3)
         obj = t.stack((obj, obj), dim=-4)
-        print('object', type(obj), obj.shape)
+        #print('object', type(obj), obj.shape)
         model.obj.data = obj
-        print('polarized fancy ptycho from datset obj')
+        #print('polarized fancy ptycho from datset obj')
         a = obj.detach()
-        plt.imshow(np.real(a[0, 0, :, :]))
-        plt.show()
-        plt.imshow(np.real(a[0, 1, :, :]))
-        plt.show()
+        #plt.imshow(np.real(a[0, 0, :, :]))
+        #plt.figure()
+        #plt.imshow(np.real(a[0, 1, :, :]))
+        #plt.show()
 
         # tensor vs tensor.data
         return model
