@@ -24,18 +24,19 @@ class FancyPtycho(CDIModel):
                  background=None, translation_offsets=None, mask=None,
                  weights=None, translation_scale=1, saturation=None,
                  probe_support=None, oversampling=1,
-                 loss='amplitude mse', units='um'):
+                 loss='amplitude mse', units='um',
+                 simulate_probe_translation=False):
 
         super(FancyPtycho, self).__init__()
         self.wavelength = t.tensor(wavelength)
         self.detector_geometry = copy(detector_geometry)
         det_geo = self.detector_geometry
-        if hasattr(det_geo, 'distance'):
-            det_geo['distance'] = t.tensor(det_geo['distance'])
-        if hasattr(det_geo, 'basis'):
-            det_geo['basis'] = t.tensor(det_geo['basis'])
-        if hasattr(det_geo, 'corner'):
-            det_geo['corner'] = t.tensor(det_geo['corner'])
+        if 'distance' in det_geo:
+            det_geo['distance'] = t.tensor(det_geo['distance'], dtype=t.float32)
+        if 'basis' in det_geo:
+            det_geo['basis'] = t.tensor(det_geo['basis'], dtype=t.float32)
+        if 'corner' in det_geo:
+            det_geo['corner'] = t.tensor(det_geo['corner'], dtype=t.float32)
 
         self.min_translation = t.tensor(min_translation)
 
@@ -105,6 +106,14 @@ class FancyPtycho(CDIModel):
 
         self.oversampling = oversampling
 
+        self.simulate_probe_translation = simulate_probe_translation
+        if simulate_probe_translation:
+            Is = t.arange(self.probe.shape[-2], dtype=t.float32)
+            Js = t.arange(self.probe.shape[-1], dtype=t.float32)
+            Is, Js = t.meshgrid(Is/t.max(Is), Js/t.max(Js))
+            self.I_phase = 2 * np.pi* Is
+            self.J_phase = 2 * np.pi* Js
+            
         # Here we set the appropriate loss function
         if (loss.lower().strip() == 'amplitude mse'
                 or loss.lower().strip() == 'amplitude_mse'):
@@ -117,7 +126,7 @@ class FancyPtycho(CDIModel):
 
 
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale=1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um'):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale=1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um', simulate_probe_translation=False):
 
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -244,7 +253,8 @@ class FancyPtycho(CDIModel):
                    saturation=saturation,
                    probe_support=probe_support,
                    oversampling=oversampling,
-                   loss=loss, units=units)
+                   loss=loss, units=units,
+                   simulate_probe_translation=simulate_probe_translation)
 
 
     def interaction(self, index, translations, *args):
@@ -280,12 +290,29 @@ class FancyPtycho(CDIModel):
             # Maybe this can be done with a matmul now?
             prs = t.sum(Ws[..., None, None] * basis_prs, axis=-3)
 
+        if self.simulate_probe_translation:
+            #det_pix_trans = t.tensordot(
+            #    translations,
+            #    t.as_tensor(self.detector_geometry['basis'],
+            #                dtype=t.float32),
+            #    dims=1)
+            det_pix_trans = tools.interactions.translations_to_pixel(
+                    self.detector_geometry['basis'],
+                    translations,
+                    surface_normal=self.surface_normal)
+            
+            probe_masks = t.exp(1j* (det_pix_trans[:,0,None,None] *
+                                     self.I_phase[None,...] +
+                                     det_pix_trans[:,1,None,None] *
+                                     self.J_phase[None,...]))
+            prs = prs * probe_masks[...,None,:,:]
+
+
         # Now we actually do the interaction, using the sinc subpixel
         # translation model as per usual
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
             prs, self.obj, pix_trans,
             shift_probe=True, multiple_modes=True)
-
         return exit_waves
 
 
@@ -315,15 +342,19 @@ class FancyPtycho(CDIModel):
         self.wavelength = self.wavelength.to(*args, **kwargs)
         # move the detector geometry too
         det_geo = self.detector_geometry
-        if hasattr(det_geo, 'distance'):
+        if 'distance' in det_geo:
             det_geo['distance'] = det_geo['distance'].to(*args, **kwargs)
-        if hasattr(det_geo, 'basis'):
+        if 'basis' in det_geo:
             det_geo['basis'] = det_geo['basis'].to(*args, **kwargs)
-        if hasattr(det_geo, 'corner'):
+        if 'corner' in det_geo:
             det_geo['corner'] = det_geo['corner'].to(*args, **kwargs)
 
         if self.mask is not None:
             self.mask = self.mask.to(*args, **kwargs)
+
+        if self.simulate_probe_translation:
+            self.I_phase = self.I_phase.to(*args, **kwargs)
+            self.J_phase = self.J_phase.to(*args, **kwargs)
 
         self.min_translation = self.min_translation.to(*args, **kwargs)
         self.probe_basis = self.probe_basis.to(*args, **kwargs)
@@ -359,7 +390,7 @@ class FancyPtycho(CDIModel):
         indices, translations = args_list
 
         # Then we simulate the results
-        data = self.forward(indices, translations)
+        data = self.forward(indices, translations).detach()
 
         # And finally, we make the dataset
         return Ptycho2DDataset(
