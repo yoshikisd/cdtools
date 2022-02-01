@@ -457,7 +457,7 @@ def calc_deconvolved_cross_correlation(im1, im2, im_slice=None):
     return cor
 
 
-def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
+def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1., limit='side'):
     """Calculates a Fourier ring correlation between two images
 
     This function requires an input of a basis to allow for FRC calculations
@@ -480,6 +480,8 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
         Number of bins to break the FRC up into
     snr : float
         The signal to noise ratio (for the combined information in both images) to return a threshold curve for.
+    limit : str
+        Default is 'side'. What is the highest frequency to calculate the FRC to? If 'side', it chooses the side of the Fourier transform, if 'corner' it goes fully to the corner.
 
     Returns
     -------
@@ -508,14 +510,14 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
                           (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
 
     if nbins is None:
-        nbins = np.max(im1[im_slice].shape) // 4
+        nbins = np.max(im1[im_slice].shape) // 8
 
+    f1 = t.fft.fftshift(t.fft.fft2(im1[im_slice]),dim=(-1,-2))
+    f2 = t.fft.fftshift(t.fft.fft2(im2[im_slice]),dim=(-1,-2))
+    cor_fft = f1 * t.conj(f2)
 
-    cor_fft = t.fft.fftshift(t.fft.fft2(im1[im_slice]),dim=(-1,-2)) * \
-        t.fft.fftshift(t.conj(t.fft.fft2(im2[im_slice])),dim=(-1,-2))
-
-    F1 = t.abs(t.fft.fftshift(t.fft.fft2(im1[im_slice]),dim=(-1,-2)))**2
-    F2 = t.abs(t.fft.fftshift(t.fft.fft2(im2[im_slice]),dim=(-1,-2)))**2
+    F1 = t.abs(f1)**2
+    F2 = t.abs(f2)**2
 
 
     di = np.linalg.norm(basis[:,0])
@@ -527,21 +529,42 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
     Js,Is = np.meshgrid(j_freqs,i_freqs)
     Rs = np.sqrt(Is**2+Js**2)
 
+    if limit.lower().strip() == 'side':
+        max_i = np.max(i_freqs)
+        max_j = np.max(j_freqs)
+        frc_range = [0, max(max_i,max_j)]
+    elif limit.lower().strip() == 'corner':
+        frc_range = [0, np.max(Rs)]
+    else:
+        raise ValueError('Invalid FRC limit: choose "side" or "corner"')
+
+    numerator, bins = np.histogram(Rs, bins=nbins, range=frc_range,
+                                   weights=cor_fft.numpy())
+    denominator_F1, bins = np.histogram(Rs, bins=nbins, range=frc_range,
+                                        weights=F1.detach().cpu().numpy())
+    denominator_F2, bins = np.histogram(Rs, bins=nbins, range=frc_range,
+                                        weights=F2.detach().cpu().numpy())
+    n_pix, bins = np.histogram(Rs, bins=nbins, range=frc_range)
 
 
-    numerator, bins = np.histogram(Rs,bins=nbins,weights=cor_fft.numpy())
-    denominator_F1, bins = np.histogram(Rs,bins=nbins,weights=F1.detach().cpu().numpy())
-    denominator_F2, bins = np.histogram(Rs,bins=nbins,weights=F2.detach().cpu().numpy())
-    n_pix, bins = np.histogram(Rs,bins=nbins)
-
-    frc = np.abs(numerator / np.sqrt(denominator_F1*denominator_F2))
+    n_pix = n_pix / 4 # This is for an apodized image, apodized with a hann window
+    
+    frc = np.abs(numerator) / np.sqrt(denominator_F1*denominator_F2)
 
     # This moves from combined-image SNR to single-image SNR
     snr /= 2
 
-    threshold = (snr + (2 * snr + 1) / np.sqrt(n_pix)) / \
+    # NOTE: I should update this  to produce lots of different threshold curves
+    # sigma, 2sigma, 3sigma, traditional FRC 1-bit, my better one, n_pix, etc.
+    
+    threshold = (snr + (2 * np.sqrt(snr) + 1) / np.sqrt(n_pix)) / \
         (1 + snr + (2 * np.sqrt(snr)) / np.sqrt(n_pix))
 
+    my_threshold = np.sqrt(snr**2 + (2*snr**2 + 2*snr + 1)/n_pix) / \
+        np.sqrt(snr**2 + 2 * snr + 1 + 2*snr**2 / n_pix)
+
+    twosigma_threshold = 2/ np.sqrt(n_pix)
+    
     if not im_np:
         bins = t.tensor(bins)
         frc = t.tensor(frc)
@@ -741,7 +764,14 @@ def calc_fidelity(fields_1, fields_2, dims=2):
     mult = fields_1.unsqueeze(-dims-2) * fields_2.unsqueeze(-dims-1).conj()
     sumdims = tuple(d - dims for d in range(dims))
     mat = t.sum(mult,dim=sumdims)
+
+    # Because I think this is the nuclear norm squared, I would like to swap
+    # Out the definition for this, but I need to test it before swapping.
+    # It also probably makes sense to implement sqrt_fidelity separately
+    # because that's more important
+    #return t.linalg.matrix_norm(mat, ord='nuc')**2
     
+    # I think this is just the nuclear norm.
     svdvals = t.linalg.svdvals(mat)
     return t.sum(svdvals, dim=-1)**2
 
@@ -822,3 +852,109 @@ def calc_generalized_rms_error(fields_1, fields_2, normalize=False, dims=2):
 
     return t.sqrt(result)
     
+
+def calc_generalized_frc(fields_1, fields_2, basis, im_slice=None, nbins=None, snr=1.):
+    """Calculates a Fourier ring correlation between two images
+
+    This function requires an input of a basis to allow for FRC calculations
+    to be related to physical units.
+
+    Like other analysis functions, this can take input in numpy or pytorch,
+    and will return output in the respective format.
+
+    Parameters
+    ----------
+    im1 : array
+        The first image, a complex or real valued array
+    im2 : array
+        The first image, a complex or real valued array
+    basis : array
+        The basis for the images, defined as is standard for datasets
+    im_slice : slice
+        Default is from 3/8 to 5/8 across the image, a slice to use in the processing.
+    nbins : int
+        Number of bins to break the FRC up into
+    snr : float
+        The signal to noise ratio (for the combined information in both images) to return a threshold curve for.
+
+    Returns
+    -------
+    freqs : array
+        The frequencies associated with each FRC value
+    FRC : array
+        The FRC values
+    threshold : array
+        The threshold curve for comparison
+
+    """
+
+    im_np = False
+    if isinstance(fields_1, np.ndarray):
+        fields_1 = t.as_tensor(fields_)
+        im_np = True
+    if isinstance(fields_2, np.ndarray):
+        fields_2 = t.as_tensor(fields_2)
+        im_np = True
+
+    if isinstance(basis, np.ndarray):
+        basis = t.tensor(basis)
+
+    if im_slice is None:
+        im_slice = np.s_[(im1.shape[0]//8)*3:(im1.shape[0]//8)*5,
+                          (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
+
+    if nbins is None:
+        nbins = np.max(fields_1[...,im_slice].shape[-2:]) // 4
+
+
+    f1 = t.fft.fftshift(t.fft.fft2(im1[im_slice]),dim=(-1,-2))
+    f2 = t.fft.fftshift(t.fft.fft2(im2[im_slice]),dim=(-1,-2))
+    cor_fft = f1 * t.conj(f2)
+        
+
+    F1 = t.abs(f1)**2
+    F2 = t.abs(f2)**2
+
+
+    di = np.linalg.norm(basis[:,0])
+    dj = np.linalg.norm(basis[:,1])
+
+    i_freqs = fftpack.fftshift(fftpack.fftfreq(cor_fft.shape[0],d=di))
+    j_freqs = fftpack.fftshift(fftpack.fftfreq(cor_fft.shape[1],d=dj))
+
+    Js,Is = np.meshgrid(j_freqs,i_freqs)
+    Rs = np.sqrt(Is**2+Js**2)
+
+    # This line is used to get a set of bins that matches the logic
+    # used by np.histogram, so that this function will match the choices
+    # of bin edges that comes from the non-generalized version. This also
+    # gets us the count on the number of pixels per bin so we can calculate
+    # the threshold curve
+    n_pix, bins = np.histogram(Rs,bins=nbins)
+
+    frc = []
+    for i in range(len(bins)-1):
+        mask = t.logical_and(Rs<bins[i+1], Rs>=bins[i])
+        masked_f1 = f1 * mask[...,:,:]
+        masked_f2 = f2 * mask[...,:,:]
+        numerator = t.sqrt(calc_fidelity(masked_f1, masked_f2))
+        denominator_f1 = t.sqrt(calc_fidelity(masked_f1, masked_f1))
+        denominator_f2 = t.sqrt(calc_fidelity(masked_f2, masked_f2))
+        frc.append(numerator / t.sqrt((denominator_f1 * denominator_f2)))
+
+    frc = np.array(frc)
+
+    # This moves from combined-image SNR to single-image SNR
+    snr /= 2
+
+    threshold = (snr + (2 * snr + 1) / np.sqrt(n_pix)) / \
+        (1 + snr + (2 * np.sqrt(snr)) / np.sqrt(n_pix))
+
+    if not im_np:
+        bins = t.tensor(bins)
+        frc = t.tensor(frc)
+        threshold = t.tensor(threshold)
+
+    return bins[:-1], frc, threshold
+
+

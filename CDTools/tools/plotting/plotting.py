@@ -416,7 +416,7 @@ def plot_colorized(im, fig=None, basis=None, units='$\\mu$m', **kwargs):
                       units=units, **kwargs)
 
 
-def plot_translations(translations, fig=None, units='$\\mu$m', lines=True, **kwargs):
+def plot_translations(translations, fig=None, units='$\\mu$m', lines=True, invert_xaxis=True, **kwargs):
     """Plots a set of probe translations in a nicely formatted way
 
     Parameters
@@ -429,6 +429,8 @@ def plot_translations(translations, fig=None, units='$\\mu$m', lines=True, **kwa
         Default is um, units to report in (assuming input in m)
     lines : bool
         Whether to plot lines indicating the path taken
+    invert_xaxis : bool
+        Default is True. This flips the x axis to match the convention from .cxi files of viewing the image from the beam's perspective
     \\**kwargs
         All other args are passed to fig.add_subplot(111, \\**kwargs)
 
@@ -453,6 +455,9 @@ def plot_translations(translations, fig=None, units='$\\mu$m', lines=True, **kwa
 
     translations = translations * factor
     plt.plot(translations[:,0], translations[:,1],'k.')
+    if invert_xaxis:
+        plt.gca().invert_xaxis()
+        
     if lines:
         plt.plot(translations[:,0], translations[:,1],'b-', linewidth=0.5)
     plt.xlabel('X (' + units + ')')
@@ -461,7 +466,7 @@ def plot_translations(translations, fig=None, units='$\\mu$m', lines=True, **kwa
     return fig
 
 
-def plot_nanomap(translations, values, fig=None, units='$\\mu$m', convention='probe'):
+def plot_nanomap(translations, values, fig=None, units='$\\mu$m', convention='probe', invert_xaxis=True):
     """Plots a set of nanomap data in a flexible way
 
     Parameters
@@ -476,6 +481,8 @@ def plot_nanomap(translations, values, fig=None, units='$\\mu$m', convention='pr
         Default is um, units to report in (assuming input in m)
     convention : str
         Default is 'probe', alternative is 'obj'. Whether the translations refer to the probe or object.
+    invert_xaxis : bool
+        Default is True. This flips the x axis to match the convention from .cxi files of viewing the image from the beam's perspective
 
     Returns
     -------
@@ -509,7 +516,9 @@ def plot_nanomap(translations, values, fig=None, units='$\\mu$m', convention='pr
     s /= 4 # A rough value to make the size work out
 
     plt.scatter(factor * trans[:,0],factor * trans[:,1],s=s,c=values)
-
+    if invert_xaxis:
+        plt.gca().invert_xaxis()
+    
     plt.gca().set_facecolor('k')
     plt.xlabel('Translation x (' + units + ')')
     plt.ylabel('Translation y (' + units + ')')
@@ -767,3 +776,5 @@ def plot_nanomap_with_images(translations, get_image_func, values=None, mask=Non
     # (like the nanomap dot sizes) that otherwise would change on the
     # first update
     update(0)
+
+    return fig

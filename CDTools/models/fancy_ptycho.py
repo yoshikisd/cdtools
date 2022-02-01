@@ -278,8 +278,15 @@ class FancyPtycho(CDIModel):
         basis_prs = self.probe * self.probe_support[..., :, :]
 
         # Now we construct the probes for each shot from the basis probes
-        Ws = self.weights[index]
-        if len(self.weights[0].shape) == 0:
+        if self.weights is not None:
+            Ws = self.weights[index]
+        else:
+            try:
+                Ws = t.ones(len(index)) # I'm positive this introduced a bug
+            except:
+                Ws = 1
+
+        if self.weights is None or len(self.weights[0].shape) == 0:
             # If a purely stable coherent illumination is defined
             prs = Ws[..., None, None, None] * basis_prs
         else:
@@ -291,11 +298,6 @@ class FancyPtycho(CDIModel):
             prs = t.sum(Ws[..., None, None] * basis_prs, axis=-3)
 
         if self.simulate_probe_translation:
-            #det_pix_trans = t.tensordot(
-            #    translations,
-            #    t.as_tensor(self.detector_geometry['basis'],
-            #                dtype=t.float32),
-            #    dims=1)
             det_pix_trans = tools.interactions.translations_to_pixel(
                     self.detector_geometry['basis'],
                     translations,
@@ -363,7 +365,7 @@ class FancyPtycho(CDIModel):
         self.surface_normal = self.surface_normal.to(*args, **kwargs)
 
 
-    def sim_to_dataset(self, args_list):
+    def sim_to_dataset(self, args_list, calculation_width=None):
         # In the future, potentially add more control
         # over what metadata is saved (names, etc.)
 
@@ -389,9 +391,23 @@ class FancyPtycho(CDIModel):
         wavelength = self.wavelength
         indices, translations = args_list
 
+        data = []
+        len(indices)
+        if calculation_width is None:
+            calculation_width = len(indices)
+        index_chunks = [indices[i:i + calculation_width]
+                        for i in range(0, len(indices),
+                                       calculation_width)]
+        translation_chunks = [translations[i:i + calculation_width]
+                              for i in range(0, len(indices),
+                                             calculation_width)]
+        
+            
         # Then we simulate the results
-        data = self.forward(indices, translations).detach()
+        data = [self.forward(idx, trans).detach()
+                for idx, trans in zip(index_chunks, translation_chunks)]
 
+        data = t.cat(data, dim=0)
         # And finally, we make the dataset
         return Ptycho2DDataset(
             translations, data,

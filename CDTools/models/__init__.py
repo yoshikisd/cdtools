@@ -31,6 +31,7 @@ from CDTools.models.polarized_fancy_ptycho import PolarizedFancyPtycho
 from CDTools.models.bragg_2d_ptycho import Bragg2DPtycho
 from CDTools.models.multislice_2d_ptycho import Multislice2DPtycho
 from CDTools.models.rpi import RPI
+from CDTools.models.multimode_rpi import MultimodeRPI
 
 # Still needs to be updated for the new complex numbers
 #from CDTools.models.s_matrix_ptycho import SMatrixPtycho
