@@ -586,7 +586,6 @@ class CDIModel(t.nn.Module):
 
             inputs, output = dataset[idx]
             sim_data = self.forward(*inputs).detach().cpu().numpy()
-            sim_data = sim_data
             meas_data = output.detach().cpu().numpy()
             if hasattr(self, 'mask') and self.mask is not None:
                 mask = self.mask.detach().cpu().numpy()

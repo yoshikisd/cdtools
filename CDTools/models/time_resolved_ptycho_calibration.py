@@ -10,24 +10,35 @@ import numpy as np
 from scipy import linalg as sla
 from copy import copy
 
-__all__ = ['FancyPtycho']
+#
+# Basic points:
+# Just one probe mode, no need to overcomplicate things.
+# Weights is only a list of numbers, no matrices or anything like that
+# Mandatory probe support in Fourier space
+#
+# When loading from a dataset, we need information on the zone plate geometry
+#
+
+__all__ = ['TimeResolvedPtychoCalibration']
 
 
-class FancyPtycho(CDIModel):
+class TimeResolvedPtychoCalibration(CDIModel):
 
     def __init__(self, wavelength, detector_geometry,
                  probe_basis,
                  probe_guess, obj_guess,
+                 fourier_times, probe_fourier_support,
+                 times, time_dependence, frame_delays,
                  detector_slice=None,
                  surface_normal=t.tensor([0., 0., 1.], dtype=t.float32),
                  min_translation=t.tensor([0, 0], dtype=t.float32),
                  background=None, translation_offsets=None, mask=None,
                  weights=None, translation_scale=1, saturation=None,
-                 probe_support=None, oversampling=1,
+                 oversampling=1,
                  loss='amplitude mse', units='um',
                  simulate_probe_translation=False):
 
-        super(FancyPtycho, self).__init__()
+        super(TimeResolvedPtychoCalibration, self).__init__()
         self.wavelength = t.tensor(wavelength)
         self.detector_geometry = copy(detector_geometry)
         det_geo = self.detector_geometry
@@ -55,39 +66,27 @@ class FancyPtycho(CDIModel):
         probe_guess = t.tensor(probe_guess, dtype=t.complex64)
         obj_guess = t.tensor(obj_guess, dtype=t.complex64)
 
-        # We rescale the probe here so it learns at the same rate as the
-        # object
-        if probe_guess.dim() > 2:
-            self.probe_norm = 1 * t.max(t.abs(probe_guess[0]))
-        else:
-            self.probe_norm = 1 * t.max(t.abs(probe_guess))        
+        self.probe_norm = 1 * t.max(t.abs(probe_guess))        
 
         self.probe = t.nn.Parameter(probe_guess / self.probe_norm)
         self.obj = t.nn.Parameter(obj_guess)
 
         if background is None:
             if detector_slice is not None:
-                shape = self.probe[0][self.detector_slice].shape
+                background = 1e-6 * t.ones(
+                    self.probe[self.detector_slice].shape,
+                    dtype=t.float32)
             else:
-                shape = self.probe[0].shape
-            background = 1e-6 * t.ones([s//oversampling for s in shape],
-                                       dtype=t.float32)
+                background = 1e-6 * t.ones(self.probe[0].shape,
+                                           dtype=t.float32)
 
         self.background = t.nn.Parameter(background)
 
         if weights is None:
             self.weights = None
         else:
-            # We now need to distinguish between real-valued per-image
-            # weights and complex-valued per-mode weight matrices
-            if len(weights.shape) == 1:
-                # This is if it's just a list of numbers
-                self.weights = t.nn.Parameter(t.tensor(weights,
-                                                       dtype=t.float32))
-            else:
-                # Now this is a matrix of weights, so it needs to be complex
-                self.weights = t.nn.Parameter(t.tensor(weights,
-                                                       dtype=t.complex64))
+            self.weights = t.nn.Parameter(t.tensor(weights,
+                                                   dtype=t.float32))
 
         if translation_offsets is None:
             self.translation_offsets = None
@@ -98,10 +97,11 @@ class FancyPtycho(CDIModel):
 
         self.translation_scale = translation_scale
 
-        if probe_support is not None:
-            self.probe_support = probe_support
-        else:
-            self.probe_support = t.ones_like(self.probe[0], dtype=t.bool)
+        self.probe_fourier_support = probe_fourier_support
+        self.fourier_times = fourier_times
+        self.times = times
+        self.time_dependence = t.nn.Parameter(time_dependence)
+        self.frame_delays = frame_delays
 
         self.oversampling = oversampling
 
@@ -125,7 +125,7 @@ class FancyPtycho(CDIModel):
 
 
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale=1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um', simulate_probe_translation=False):
+    def from_dataset(cls, dataset, zp_geometry, time_window, n_times, n_frames, randomize_ang=0, padding=0, translation_scale=1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um', simulate_probe_translation=False):
 
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -188,61 +188,67 @@ class FancyPtycho(CDIModel):
             background = None
 
         # Finally, initialize the probe and  object using this information
-        if probe_size is None:
-            probe = tools.initializers.SHARP_style_probe(dataset, probe_shape, det_slice, propagation_distance=propagation_distance, oversampling=oversampling)
-        else:
-            probe = tools.initializers.gaussian_probe(dataset, probe_basis, probe_shape, probe_size, propagation_distance=propagation_distance)
+        probe = tools.initializers.SHARP_style_probe(dataset, probe_shape, det_slice, propagation_distance=propagation_distance, oversampling=oversampling)
 
-        # Now we initialize all the subdominant probe modes
-        probe_max = t.max(t.abs(probe))
-        probe_stack = [0.01 * probe_max * t.rand(probe.shape, dtype=probe.dtype) for i in range(n_modes - 1)]
-        probe = t.stack([probe, ] + probe_stack)
-        # probe = t.stack([tools.propagators.far_field(probe),] + probe_stack)
-
+        probe = tools.propagators.far_field(probe)
+        
         obj = t.exp(1j * randomize_ang * (t.rand(obj_size)-0.5))
 
         det_geo = dataset.detector_geometry
 
         translation_offsets = 0 * (t.rand((len(dataset), 2)) - 0.5)
-
-        if dm_rank is not None and dm_rank != 0:
-            if dm_rank > n_modes:
-                raise KeyError('Density matrix rank cannot be greater than the number of modes. Use dm_rank = -1 to use a full rank matrix.')
-            elif dm_rank == -1:
-                # dm_rank == -1 is defined to mean full-rank
-                dm_rank = n_modes
-
-            Ws = t.zeros(len(dataset), dm_rank, n_modes, dtype=t.complex64)
-            # Start with as close to the identity matrix as possible,
-            # cutting of when we hit the specified maximum rank
-            for i in range(0, dm_rank):
-                Ws[:, i, i] = 1
-        else:
-            # dm_rank == None or dm_rank = 0 triggers a special case where
-            # a standard incoherent multi-mode model is used. This is the
-            # default, because it is so common.
-            # In this case, we define a set of weights which only has one index
-            Ws = t.ones(len(dataset))
+        # we define a set of weights which only has one index
+        Ws = t.ones(len(dataset))
 
         if hasattr(dataset, 'mask') and dataset.mask is not None:
             mask = dataset.mask.to(t.bool)
         else:
             mask = None
 
-        if probe_support_radius is not None:
-            probe_support = t.zeros(probe[0].shape, dtype=t.bool)
-            xs, ys = np.mgrid[:probe.shape[-2], :probe.shape[-1]]
-            xs = xs - np.mean(xs)
-            ys = ys - np.mean(ys)
-            Rs = np.sqrt(xs**2 + ys**2)
+        # What do we know about the zp?
+        # delta_r, N, and beamstop ratio. It's probably best, though,
+        # to just read diameter, beamstop_diameter and focal_length directly
+        # because that is the most general even if the optic isn't truly
+        # a zone plate.
+        zp_distance = zp_geometry['focal_length']
+        probe_size = probe_basis * t.as_tensor(probe_shape, dtype=t.float32)
+        pinv_basis = t.tensor(np.linalg.pinv(probe_size).transpose()).to(t.float32)
+        zone_plate_basis = pinv_basis * wavelength * zp_distance
+        zone_plate_steps = t.sum(zone_plate_basis,axis=1)
+        # This may very well mix up x & y and fail on non-square detectors
+        probe_fourier_support = t.zeros(probe.shape, dtype=t.bool)
+        xs, ys = np.mgrid[:probe.shape[-2], :probe.shape[-1]]
+        xs = zone_plate_steps[1] * (xs - np.mean(xs))
+        ys = zone_plate_steps[0] * (ys - np.mean(ys))
+        Rs = np.sqrt(xs**2 + ys**2)
 
-            probe_support[Rs < probe_support_radius] = 1
-            probe = probe * probe_support[None, :, :]
+        distances = np.sqrt(zp_distance**2 + xs**2 + ys**2)
+        times = (distances - t.min(distances)) / 2.99792e8
 
-        else:
-            probe_support = None
+        # This sets the support of the probe and also restricts the
+        # timing matrix so it only considers times that are actually
+        # in the window defined by the probe fourier support
+        probe_fourier_support[Rs < zp_geometry['diameter']/2] = 1
+        times[Rs > zp_geometry['diameter']/2] = 0
+        times[Rs > zp_geometry['diameter']/2] = t.max(times)        
+        
+        probe_fourier_support[Rs < zp_geometry['beamstop_diameter']/2] = 0
+        times[Rs < zp_geometry['beamstop_diameter']/2] = t.max(times)
+        times[Rs < zp_geometry['beamstop_diameter']/2] = t.min(times)
 
+        fourier_times = times - t.min(times)
+        probe = probe * probe_fourier_support
+
+        # This is now the time axis for the probe's envelope
+        times = t.linspace(0, time_window, n_times+1)
+        time_dependence = t.ones(n_times, dtype=t.complex64)
+        frame_delays = t.linspace(0, t.max(fourier_times) + time_window, n_frames+2)
+        frame_delays -= time_window
+        frame_delays = frame_delays[1:-1]
+        
         return cls(wavelength, det_geo, probe_basis, probe, obj,
+                   fourier_times, probe_fourier_support,
+                   times, time_dependence, frame_delays,
                    detector_slice=det_slice,
                    surface_normal=surface_normal,
                    min_translation=min_translation,
@@ -250,14 +256,12 @@ class FancyPtycho(CDIModel):
                    weights=Ws, mask=mask, background=background,
                    translation_scale=translation_scale,
                    saturation=saturation,
-                   probe_support=probe_support,
                    oversampling=oversampling,
                    loss=loss, units=units,
                    simulate_probe_translation=simulate_probe_translation)
 
 
     def interaction(self, index, translations, *args):
-
         # The *args is included so that this can work even when given, say,
         # a polarized ptycho dataset that might spit out more inputs.
 
@@ -273,28 +277,13 @@ class FancyPtycho(CDIModel):
             pix_trans += (self.translation_scale *
                           self.translation_offsets[index])
 
-        # This restricts the basis probes to stay within the probe support
-        basis_prs = self.probe * self.probe_support[..., :, :]
+        probes = self.get_probes(space='real')        
+        Ws = self.weights[index]
 
-        # Now we construct the probes for each shot from the basis probes
-        if self.weights is not None:
-            Ws = self.weights[index]
-        else:
-            try:
-                Ws = t.ones(len(index)) # I'm positive this introduced a bug
-            except:
-                Ws = 1
-
-        if self.weights is None or len(self.weights[0].shape) == 0:
-            # If a purely stable coherent illumination is defined
-            prs = Ws[..., None, None, None] * basis_prs
-        else:
-            # If a frame-by-frame weight matrix is defined
-            # This takes the dot product of all the weight matrices with
-            # the probes. The output has dimensions of translation, then
-            # coherent mode index, then x,y, and then complex index
-            # Maybe this can be done with a matmul now?
-            prs = t.sum(Ws[..., None, None] * basis_prs, axis=-3)
+        # This might not work well
+        prs = Ws[...,None,None,None] * probes
+        #prs = t.sum(Ws[..., None, None, None] * probes, axis=-3)
+        #print(prs.shape)
 
         if self.simulate_probe_translation:
             det_pix_trans = tools.interactions.translations_to_pixel(
@@ -339,7 +328,7 @@ class FancyPtycho(CDIModel):
     # dynamically during object creation in __init__
 
     def to(self, *args, **kwargs):
-        super(FancyPtycho, self).to(*args, **kwargs)
+        super(TimeResolvedPtychoCalibration, self).to(*args, **kwargs)
         self.wavelength = self.wavelength.to(*args, **kwargs)
         # move the detector geometry too
         det_geo = self.detector_geometry
@@ -360,7 +349,10 @@ class FancyPtycho(CDIModel):
         self.min_translation = self.min_translation.to(*args, **kwargs)
         self.probe_basis = self.probe_basis.to(*args, **kwargs)
         self.probe_norm = self.probe_norm.to(*args, **kwargs)
-        self.probe_support = self.probe_support.to(*args, **kwargs)
+        self.probe_fourier_support = self.probe_fourier_support.to(*args,
+                                                                   **kwargs)
+        self.fourier_times = self.fourier_times.to(*args, **kwargs)
+        self.times = self.times.to(*args, **kwargs)
         self.surface_normal = self.surface_normal.to(*args, **kwargs)
 
 
@@ -431,138 +423,41 @@ class FancyPtycho(CDIModel):
             return translations
 
 
-    def get_rhos(self):
-        # If this is the general unified mode model
-        if self.weights.dim() >= 2:
-            Ws = self.weights.detach().cpu().numpy()
-            rhos_out = np.matmul(np.swapaxes(Ws, 1, 2), Ws.conj())
-            return rhos_out
-        # This is the purely incoherent case
-        else:
-            return np.array([np.eye(self.probe.shape[0])]*self.weights.shape[0],
-                            dtype=np.complex64)
+    def get_probes(self, space='real'):
+        # This is the part where I need to create the probe modes using the
+        # time-dependent stuff
 
-    def tidy_probes(self, normalization=1, normalize=False):
-        """Tidies up the probes
-        
-        What we want to do here is use all the information on all the probes
-        to calculate a natural basis for the experiment, and update all the
-        density matrices to operate in that updated basis
-        """
+        # This restricts the basis probes to stay within the probe support
+        optic_mask = self.probe * self.probe_fourier_support
 
-        # First we treat the purely incoherent case
+        probes = t.zeros([len(self.frame_delays)] + list(self.probe.shape),
+                         dtype=self.probe.dtype, device=self.probe.device)
+        for i, delay in enumerate(self.frame_delays):
+            indices = t.bucketize(self.fourier_times, self.times + delay)
+            clamped_indices = t.clamp(indices-1, max=len(self.time_dependence)-1)
+            illumination = t.take(self.time_dependence, clamped_indices)
+            illumination[indices==0] = 0
+            illumination[indices==len(self.time_dependence)+1] = 0
+            probes[i] = illumination * optic_mask
 
-        # I don't love this pattern of using an if statement with a return
-        # to catch this case, but because it's so much simpler than the
-        # unified mode case I think it's appropriate
-        if self.weights.dim() == 1:
-            probe = self.probe.detach().cpu().numpy()
-            ortho_probes = analysis.orthogonalize_probes(probe)
-            self.probe.data = t.as_tensor(
-                ortho_probes,
-                device=self.probe.device,
-                dtype=self.probe.dtype)
-            return
-
-        # This is for the unified mode case
-
-        # Note to future: We could probably do this more cleanly with an
-        # SVD directly on the Ws matrix, instead of an eigendecomposition
-        # of the rho matrix.
-
-        rhos = self.get_rhos()
-        overall_rho = np.mean(rhos, axis=0)
-        probe = self.probe.detach().cpu().numpy()
-        ortho_probes, A = analysis.orthogonalize_probes(
-            probe, density_matrix=overall_rho,
-            keep_transform=True, normalize=normalize)
-        Aconj = A.conj()
-        Atrans = np.transpose(A)
-        new_rhos = np.matmul(Atrans, np.matmul(rhos, Aconj))
-
-        new_rhos /= normalization
-        ortho_probes *= np.sqrt(normalization)
-
-        dm_rank = self.weights.shape[1]
-
-        new_Ws = []
-        for rho in new_rhos:
-            # These are returned from smallest to largest - we want to keep
-            # the largest ones
-            w, v = sla.eigh(rho)
-            w = w[::-1][:dm_rank]
-            v = v[:, ::-1][:, :dm_rank]
-            # For situations where the rank of the density matrix is not
-            # full in reality, but we keep more modes around than needed,
-            # some ws can go negative due to numerical error! This is
-            # extremely rare, but comon enough to cause crashes occasionally
-            # when there are thousands of individual matrices to transform
-            # every time this is called.
-            w = np.maximum(w, 0)
-
-            new_Ws.append(np.dot(np.diag(np.sqrt(w)), v.transpose()))
-
-        new_Ws = np.array(new_Ws)
-
-        self.weights.data = t.as_tensor(
-            new_Ws, dtype=self.weights.dtype, device=self.weights.device)
-
-        self.probe.data = t.as_tensor(
-            ortho_probes, device=self.probe.device, dtype=self.probe.dtype)
-
-
-    def plot_wavefront_variation(self, dataset, fig=None, mode='amplitude', **kwargs):
-        def get_probes(idx):
-            basis_prs = self.probe * self.probe_support[..., :, :]
-            prs = t.sum(self.weights[idx, :, :, None, None] * basis_prs,
-                        axis=-4)
-            ortho_probes = analysis.orthogonalize_probes(prs)
-
-            if mode.lower() == 'amplitude':
-                return np.abs(ortho_probes.detach().cpu().numpy())
-            if mode.lower() == 'root_sum_intensity':
-                return np.sum(np.abs(ortho_probes.detach().cpu().numpy())**2,
-                              axis=0)
-            if mode.lower() == 'phase':
-                return np.angle(ortho_probes.detach().cpu().numpy())
-
-        probe_matrix = np.zeros([self.probe.shape[0]]*2,
-                                dtype=np.complex64)
-        np_probes = self.probe.detach().cpu().numpy()
-        for i in range(probe_matrix.shape[0]):
-            for j in range(probe_matrix.shape[0]):
-                probe_matrix[i,j] = np.sum(np_probes[i]*np_probes[j].conj())
-
-        weights = self.weights.detach().cpu().numpy()
-
-        probe_intensities = np.sum(np.tensordot(weights, probe_matrix, axes=1)
-                                   * weights.conj(), axis=2)
-
-        # Imaginary part is already essentially zero up to rounding error
-        probe_intensities = np.real(probe_intensities)
-
-        values = np.sum(probe_intensities, axis=1)
-        if mode.lower() == 'amplitude' or mode.lower() == 'root_sum_intensity':
-            cmap = 'viridis'
-        else:
-            cmap = 'twilight'
-
-        p.plot_nanomap_with_images(self.corrected_translations(dataset), get_probes, values=values, fig=fig, units=self.units, basis=self.probe_basis, nanomap_colorbar_title='Total Probe Intensity', cmap=cmap, **kwargs),
+        if space.lower()=='real':
+            return tools.propagators.inverse_far_field(probes)
+        elif space.lower()=='fourier' or space.lower()=='reciprocal':
+            return probes
 
         
     plot_list = [
-        ('',
-         lambda self, fig, dataset: self.plot_wavefront_variation(dataset, fig=fig, mode='root_sum_intensity', image_title='Root Summed Probe Intensities', image_colorbar_title='Square Root of Intensity'),
-         lambda self: len(self.weights.shape) >= 2),
-        ('',
-         lambda self, fig, dataset: self.plot_wavefront_variation(dataset, fig=fig, mode='amplitude', image_title='Probe Amplitudes (scroll to view modes)', image_colorbar_title='Probe Amplitude'),
-         lambda self: len(self.weights.shape) >= 2),
-        ('',
-         lambda self, fig, dataset: self.plot_wavefront_variation(dataset, fig=fig, mode='phase', image_title='Probe Phases (scroll to view modes)', image_colorbar_title='Probe Phase'),
-         lambda self: len(self.weights.shape) >= 2),
-        ('Basis Probe Amplitudes (scroll to view modes)',
+        ('Probe Amplitudes (scroll to view modes)',
+         lambda self, fig: p.plot_amplitude(self.get_probes(space='real'), fig=fig, basis=self.probe_basis, units=self.units)),
+        ('Probe Phases (scroll to view modes)',
+         lambda self, fig: p.plot_phase(self.get_probes(space='real'), fig=fig, basis=self.probe_basis, units=self.units)),
+        ('Fourier Probe Amplitudes (scroll to view modes)',
+         lambda self, fig: p.plot_amplitude(self.get_probes(space='fourier'), fig=fig, basis=self.probe_basis, units=self.units)),
+        ('Fourier Probe Phases (scroll to view modes)',
+         lambda self, fig: p.plot_phase(self.get_probes(space='fourier'), fig=fig, basis=self.probe_basis, units=self.units)),
+        ('Optic Amplitude',
          lambda self, fig: p.plot_amplitude(self.probe, fig=fig, basis=self.probe_basis, units=self.units)),
-        ('Basis Probe Phases (scroll to view modes)',
+        ('Optic Phase',
          lambda self, fig: p.plot_phase(self.probe, fig=fig, basis=self.probe_basis, units=self.units)),
         ('Average Density Matrix Amplitudes',
          lambda self, fig: p.plot_amplitude(np.nanmean(np.abs(self.get_rhos()), axis=0), fig=fig),
@@ -577,7 +472,9 @@ class FancyPtycho(CDIModel):
         ('Corrected Translations',
          lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig, units=self.units)),
         ('Background',
-         lambda self, fig: plt.figure(fig.number) and plt.imshow(self.background.detach().cpu().numpy()**2))
+         lambda self, fig: plt.figure(fig.number) and plt.imshow(self.background.detach().cpu().numpy()**2)),
+        ('Time Structure',
+         lambda self, fig: (plt.figure(fig.number) and (plt.clf() or True) and plt.plot(self.time_dependence.real.detach().cpu().numpy()) and plt.plot(self.time_dependence.imag.detach().cpu().numpy())))
     ]
 
 #    def plot_errors(self, dataset):
@@ -587,13 +484,21 @@ class FancyPtycho(CDIModel):
     def save_results(self, dataset):
         basis = self.probe_basis.detach().cpu().numpy()
         translations = self.corrected_translations(dataset).detach().cpu().numpy()
-        probe = self.probe.detach().cpu().numpy()
-        probe = probe * self.probe_norm.detach().cpu().numpy()
+        optic = self.probe.detach().cpu().numpy()
+        optic = optic * self.probe_norm.detach().cpu().numpy()
+        time_dependence = self.time_dependence.detach().cpu().numpy()
+        times = self.times.detach().cpu().numpy()
+        fourier_times = self.fourier_times.detach().cpu().numpy()
+        probes = self.get_probes().detach().cpu().numpy()
         obj = self.obj.detach().cpu().numpy()
         background = self.background.detach().cpu().numpy()**2
         weights = self.weights.detach().cpu().numpy()
 
         return {'basis': basis, 'translation': translations,
-                'probe': probe, 'obj': obj,
+                'probes': probes, 'optic': optic,
+                'times': times, 'time_dependence': time_dependence,
+                'fourier_times': fourier_times,
+                'obj': obj,
                 'background': background,
-                'weights': weights}
+                'weights': weights,
+                }

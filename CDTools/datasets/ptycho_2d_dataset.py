@@ -118,7 +118,7 @@ class Ptycho2DDataset(CDataset):
     # It sucks that I can't reuse the base factory method here,
     # perhaps there is a way but I couldn't figure it out.
     @classmethod
-    def from_cxi(cls, cxi_file):
+    def from_cxi(cls, cxi_file, cut_zeros=True):
         """Generates a new Ptycho2DDataset from a .cxi file directly
 
         This generates a new Ptycho2DDataset from a .cxi file storing
@@ -128,6 +128,8 @@ class Ptycho2DDataset(CDataset):
         ----------
         file : str, pathlib.Path, or h5py.File
             The .cxi file to load from
+        cut_zeros : bool
+            Default True, whether to set all negative data to zero
 
         Returns
         -------
@@ -145,11 +147,10 @@ class Ptycho2DDataset(CDataset):
         dataset.__class__ = cls
 
         # Load the data that is only relevant for this class
-        patterns, axes = cdtdata.get_data(cxi_file)
+        patterns, axes = cdtdata.get_data(cxi_file, cut_zeros=cut_zeros)
         translations = cdtdata.get_ptycho_translations(cxi_file)
         # And now re-do the stuff from __init__
         dataset.translations = t.tensor(translations, dtype=t.float32)
-
         dataset.patterns = t.as_tensor(patterns)
         if dataset.patterns.dtype == t.float64:
             raise NotImplementedError('64-bit floats are not supported and precision will not be retained in reconstructions! Please explicitly convert your data to 32-bit or submit a pull request')

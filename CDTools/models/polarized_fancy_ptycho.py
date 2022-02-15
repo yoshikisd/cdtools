@@ -294,6 +294,7 @@ class PolarizedFancyPtycho(FancyPtycho):
         else:
             raise NotImplementedError('Unstable Modes not Implemented for polarized light')
 
+        
         pol_probes = polarization.apply_linear_polarizer(prs, polarizer)
         
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
