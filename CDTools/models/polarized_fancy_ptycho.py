@@ -294,13 +294,13 @@ class PolarizedFancyPtycho(FancyPtycho):
         else:
             raise NotImplementedError('Unstable Modes not Implemented for polarized light')
 
-        
         pol_probes = polarization.apply_linear_polarizer(prs, polarizer)
-        
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
             pol_probes, self.obj, pix_trans,
             shift_probe=True, multiple_modes=True, polarized=True)
-
+        # We're losing some efficiency here, because we only need to keep
+        # around the scalar wavefield after analyzing the waves.
+        # But I think it's not a huge issue - Abe
         analyzed_exit_waves = polarization.apply_linear_polarizer(exit_waves, analyzer)
         return analyzed_exit_waves
 

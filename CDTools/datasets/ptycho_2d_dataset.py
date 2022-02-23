@@ -19,7 +19,8 @@ class Ptycho2DDataset(CDataset):
     It should save and load files compatible with most reconstruction
     programs, although it is only tested against SHARP.
     """
-    def __init__(self, translations, patterns, axes=None, *args, **kwargs):
+    def __init__(self, translations, patterns, intensities=None,
+                 axes=None, *args, **kwargs):
         """The __init__ function allows construction from python objects.
 
         The detector_geometry dictionary is defined to have the
@@ -52,23 +53,27 @@ class Ptycho2DDataset(CDataset):
         background : array
             An initial guess for the not-previously-subtracted
             detector background
+        intensities : array
+            A list of measured shot-to-shot intensities
         """
-
+        
 
         super(Ptycho2DDataset,self).__init__(*args, **kwargs)
         self.axes = copy(axes)
         self.translations = t.tensor(translations, dtype=t.float32)
         
         self.patterns = t.as_tensor(patterns, dtype=t.float32)
-        if self.patterns.dtype == t.float64:
-            raise NotImplementedError('64-bit floats are not supported and precision will not be retained in reconstructions! Please explicitly convert your data to 32-bit or submit a pull request')
 
         if self.mask is None:
             self.mask = t.ones(self.patterns.shape[-2:]).to(dtype=t.bool)
         self.mask.masked_fill_(t.isnan(t.sum(self.patterns,dim=(0,))),0)
         self.patterns.masked_fill_(t.isnan(self.patterns),0)
 
-
+        if intensities is not None:
+            self.intensities = t.as_tensor(intensities, dtype=t.float32)
+        else:
+            self.intensities = None
+            
     def __len__(self):
         return self.patterns.shape[0]
 
@@ -159,6 +164,12 @@ class Ptycho2DDataset(CDataset):
         if dataset.mask is None:
             dataset.mask = t.ones(dataset.patterns.shape[-2:]).to(dtype=t.bool)
 
+        try:
+            intensities = cdtdata.get_shot_to_shot_info('intensities')
+            dataset.intensities = t.as_tensor(intensities, dtype=t.float32)
+        except KeyError:
+            dataset.intensities = None
+            
         return dataset
 
 
@@ -187,6 +198,9 @@ class Ptycho2DDataset(CDataset):
         else:
             cdtdata.add_data(cxi_file, self.patterns)
         cdtdata.add_ptycho_translations(cxi_file, self.translations)
+
+        if hasattr(self, 'intensities') and self.intensities is not None:
+            cdtdata.add_shot_to_shot_info(cxi_file, self.intensities, 'intensities')
 
 
     def inspect(self, logarithmic=True, units='um'):

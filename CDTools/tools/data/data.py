@@ -93,7 +93,7 @@ def get_sample_info(cxi_file):
     """
     if 'entry_1/sample_1' not in cxi_file:
         return None
-
+    
     s1 = cxi_file['entry_1/sample_1']
     metadata_attrs = ['name','description','unit_cell_group']
 
