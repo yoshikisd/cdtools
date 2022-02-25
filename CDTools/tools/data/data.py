@@ -643,7 +643,8 @@ def add_dark(cxi_file, dark):
     d1.create_dataset('data_dark',data=dark)
 
 
-def add_data(cxi_file, data, axes=None):
+def add_data(cxi_file, data, axes=None, compression='lzp',
+             chunks=True):
     """Adds the specified data to the cxi file
 
     It will add the data unchanged to the file, placing it in two spots:
@@ -674,7 +675,8 @@ def add_data(cxi_file, data, axes=None):
     if isinstance(data, t.Tensor):
         data = data.detach().cpu().numpy()
 
-    det1.create_dataset('data', data=data)
+    det1.create_dataset('data', data=data, compression=compression,
+                        chunks=chunks)
     data1['data'] = h5py.SoftLink('/entry_1/instrument_1/detector_1/data')
 
     if axes is not None:
