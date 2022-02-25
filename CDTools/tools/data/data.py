@@ -643,7 +643,7 @@ def add_dark(cxi_file, dark):
     d1.create_dataset('data_dark',data=dark)
 
 
-def add_data(cxi_file, data, axes=None, compression='lzf',
+def add_data(cxi_file, data, axes=None, compression='gzip',
              chunks=True):
     """Adds the specified data to the cxi file
 
