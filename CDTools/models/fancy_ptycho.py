@@ -35,7 +35,7 @@ class FancyPtycho(CDIModel):
             det_geo['distance'] = t.tensor(det_geo['distance'], dtype=t.float32)
         if 'basis' in det_geo:
             det_geo['basis'] = t.tensor(det_geo['basis'], dtype=t.float32)
-        if 'corner' in det_geo:
+        if 'corner' in det_geo and det_geo['corner'] is not None:
             det_geo['corner'] = t.tensor(det_geo['corner'], dtype=t.float32)
 
         self.min_translation = t.tensor(min_translation)
@@ -347,7 +347,7 @@ class FancyPtycho(CDIModel):
             det_geo['distance'] = det_geo['distance'].to(*args, **kwargs)
         if 'basis' in det_geo:
             det_geo['basis'] = det_geo['basis'].to(*args, **kwargs)
-        if 'corner' in det_geo:
+        if 'corner' in det_geo and det_geo['corner'] is not None:
             det_geo['corner'] = det_geo['corner'].to(*args, **kwargs)
 
         if self.mask is not None:

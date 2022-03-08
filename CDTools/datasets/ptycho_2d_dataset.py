@@ -165,7 +165,7 @@ class Ptycho2DDataset(CDataset):
             dataset.mask = t.ones(dataset.patterns.shape[-2:]).to(dtype=t.bool)
 
         try:
-            intensities = cdtdata.get_shot_to_shot_info('intensities')
+            intensities = cdtdata.get_shot_to_shot_info(cxi_file, 'intensities')
             dataset.intensities = t.as_tensor(intensities, dtype=t.float32)
         except KeyError:
             dataset.intensities = None
