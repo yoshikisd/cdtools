@@ -60,9 +60,9 @@ class Ptycho2DDataset(CDataset):
 
         super(Ptycho2DDataset,self).__init__(*args, **kwargs)
         self.axes = copy(axes)
-        self.translations = t.tensor(translations, dtype=t.float32)
+        self.translations = t.tensor(translations)
         
-        self.patterns = t.as_tensor(patterns, dtype=t.float32)
+        self.patterns = t.as_tensor(patterns)
 
         if self.mask is None:
             self.mask = t.ones(self.patterns.shape[-2:]).to(dtype=t.bool)

@@ -293,7 +293,7 @@ class CDIModel(t.nn.Module):
     def LBFGS_optimize(self, iterations, dataset,
                        lr=0.1,history_size=2, subset=None,
                        regularization_factor=None, thread=True,
-                       calculation_width=10):
+                       calculation_width=10, line_search_fn=None):
         """Runs a round of reconstruction using the L-BFGS optimizer
 
         This algorithm is often less stable that Adam, however in certain
@@ -335,7 +335,8 @@ class CDIModel(t.nn.Module):
 
         # Define the optimizer
         optimizer = t.optim.LBFGS(self.parameters(),
-                                  lr = lr, history_size=history_size)
+                                  lr = lr, history_size=history_size,
+                                  line_search_fn=line_search_fn)
         #optimizer = MyLBFGS(self.parameters(),
         #                    lr = lr, history_size=history_size)
 
