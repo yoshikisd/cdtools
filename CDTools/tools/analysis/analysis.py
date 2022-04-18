@@ -15,7 +15,8 @@ from scipy import special
 
 __all__ = ['orthogonalize_probes', 'standardize', 'synthesize_reconstructions',
            'calc_consistency_prtf', 'calc_deconvolved_cross_correlation',
-           'calc_frc', 'calc_vn_entropy', 'calc_top_mode_fraction']
+           'calc_frc', 'calc_vn_entropy', 'calc_top_mode_fraction',
+           'calc_rms_error', 'calc_fidelity', 'calc_generalized_rms_error']
 
 
 def orthogonalize_probes(probes, density_matrix=None, keep_transform=False, normalize=False):
@@ -456,7 +457,7 @@ def calc_deconvolved_cross_correlation(im1, im2, im_slice=None):
     return cor
 
 
-def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
+def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1., limit='side'):
     """Calculates a Fourier ring correlation between two images
 
     This function requires an input of a basis to allow for FRC calculations
@@ -479,6 +480,8 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
         Number of bins to break the FRC up into
     snr : float
         The signal to noise ratio (for the combined information in both images) to return a threshold curve for.
+    limit : str
+        Default is 'side'. What is the highest frequency to calculate the FRC to? If 'side', it chooses the side of the Fourier transform, if 'corner' it goes fully to the corner.
 
     Returns
     -------
@@ -507,14 +510,14 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
                           (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
 
     if nbins is None:
-        nbins = np.max(im1[im_slice].shape) // 4
+        nbins = np.max(im1[im_slice].shape) // 8
 
+    f1 = t.fft.fftshift(t.fft.fft2(im1[im_slice]),dim=(-1,-2))
+    f2 = t.fft.fftshift(t.fft.fft2(im2[im_slice]),dim=(-1,-2))
+    cor_fft = f1 * t.conj(f2)
 
-    cor_fft = t.fft.fftshift(t.fft.fft2(im1[im_slice]),dim=(-1,-2)) * \
-        t.fft.fftshift(t.conj(t.fft.fft2(im2[im_slice])),dim=(-1,-2))
-
-    F1 = t.abs(t.fft.fftshift(t.fft.fft2(im1[im_slice]),dim=(-1,-2)))**2
-    F2 = t.abs(t.fft.fftshift(t.fft.fft2(im2[im_slice]),dim=(-1,-2)))**2
+    F1 = t.abs(f1)**2
+    F2 = t.abs(f2)**2
 
 
     di = np.linalg.norm(basis[:,0])
@@ -526,21 +529,41 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1.):
     Js,Is = np.meshgrid(j_freqs,i_freqs)
     Rs = np.sqrt(Is**2+Js**2)
 
+    if limit.lower().strip() == 'side':
+        max_i = np.max(i_freqs)
+        max_j = np.max(j_freqs)
+        frc_range = [0, max(max_i,max_j)]
+    elif limit.lower().strip() == 'corner':
+        frc_range = [0, np.max(Rs)]
+    else:
+        raise ValueError('Invalid FRC limit: choose "side" or "corner"')
 
+    numerator, bins = np.histogram(Rs, bins=nbins, range=frc_range,
+                                   weights=cor_fft.numpy())
+    denominator_F1, bins = np.histogram(Rs, bins=nbins, range=frc_range,
+                                        weights=F1.detach().cpu().numpy())
+    denominator_F2, bins = np.histogram(Rs, bins=nbins, range=frc_range,
+                                        weights=F2.detach().cpu().numpy())
+    n_pix, bins = np.histogram(Rs, bins=nbins, range=frc_range)
 
-    numerator, bins = np.histogram(Rs,bins=nbins,weights=cor_fft.numpy())
-    denominator_F1, bins = np.histogram(Rs,bins=nbins,weights=F1.detach().cpu().numpy())
-    denominator_F2, bins = np.histogram(Rs,bins=nbins,weights=F2.detach().cpu().numpy())
-    n_pix, bins = np.histogram(Rs,bins=nbins)
-
-    frc = np.abs(numerator / np.sqrt(denominator_F1*denominator_F2))
+    n_pix = n_pix / 4 # This is for an apodized image, apodized with a hann window
+    
+    frc = np.abs(numerator) / np.sqrt(denominator_F1*denominator_F2)
 
     # This moves from combined-image SNR to single-image SNR
     snr /= 2
 
-    threshold = (snr + (2 * snr + 1) / np.sqrt(n_pix)) / \
+    # NOTE: I should update this  to produce lots of different threshold curves
+    # sigma, 2sigma, 3sigma, traditional FRC 1-bit, my better one, n_pix, etc.
+    
+    threshold = (snr + (2 * np.sqrt(snr) + 1) / np.sqrt(n_pix)) / \
         (1 + snr + (2 * np.sqrt(snr)) / np.sqrt(n_pix))
 
+    my_threshold = np.sqrt(snr**2 + (2*snr**2 + 2*snr + 1)/n_pix) / \
+        np.sqrt(snr**2 + 2 * snr + 1 + 2*snr**2 / n_pix)
+
+    twosigma_threshold = 2/ np.sqrt(n_pix)
+    
     if not im_np:
         bins = t.tensor(bins)
         frc = t.tensor(frc)
@@ -581,6 +604,7 @@ def calc_vn_entropy(matrix):
         entropy = -np.sum(special.xlogy(eig,eig))/np.sum(eig)
         return entropy
 
+    
 def calc_top_mode_fraction(matrix):
     """Calculates the fraction of total power in the top mode of a density matrix
     
@@ -610,3 +634,326 @@ def calc_top_mode_fraction(matrix):
         eig = np.linalg.eigh(matrix)[0]
         fraction = np.max(eig) / np.sum(eig)
         return fraction
+    
+
+def calc_rms_error(field_1, field_2, align_phases=True, normalize=False,
+                   dims=2):
+    """Calculates the root-mean-squared error between two complex wavefields
+
+    The formal definition of this function is:
+
+    output = norm * sqrt(mean(abs(field_1 - gamma * field_2)**2))
+    
+    Where norm is an optional normalization factor, and gamma is an
+    optional phase factor which is appropriate when the wavefields suffer
+    from a global phase degeneracy as is often the case in diffractive
+    imaging.
+
+    The normalization is defined as the square root of the total intensity
+    contained in field_1, which is appropriate when field_1 represents a
+    known ground truth:
+
+    norm = sqrt(mean(abs(field_1)**2))
+    
+    The phase offset is an analytic expression for the phase offset which
+    will minimize the RMS error between the two wavefields:
+
+    gamma = exp(1j * angle(sum(field_1 * conj(field_2))))
+    
+    This implementation is stable even in cases where field_1 and field_2
+    are completely orthogonal.
+
+    In the definitions above, the field_n are n-dimensional wavefields. The
+    dimensionality of the wavefields can be altered via the dims argument,
+    but the default is 2 for a 2D wavefield.
+    
+    Parameters
+    ----------
+    field_1 : array
+        The first complex-valued field
+    field_2 : array
+        The second complex-valued field
+    align_phases : bool
+        Default is True, whether to account for a global phase offset
+    normalize : bool
+        Default is False, whether to normalize to the intensity of field_1
+    dims : (int or tuple of python:ints)
+        Default is 2, the number of final dimensions to reduce over.
+
+    
+    Returns
+    -------
+    rms_error : float or t.Tensor
+        The RMS error, or tensor of RMS errors, depending on the dim argument
+
+    """
+
+    sumdims = tuple(d - dims for d in range(dims))
+        
+    if align_phases:
+        # Keepdim allows us to broadcast the result correctly when we
+        # multiply by the fields
+        gamma = t.exp(1j * t.angle(t.sum(field_1 * t.conj(field_2), dim=sumdims,
+                                         keepdim=True)))
+    else:
+        gamma = 1
+
+    if normalize:
+        norm = 1 / t.mean(t.abs(field_1)**2, dim=sumdims)
+    else:
+        norm = 1
+
+    difference = field_1 - gamma * field_2
+    
+    return t.sqrt(norm * t.mean(t.abs(difference)**2, dim=sumdims))
+
+
+def calc_fidelity(fields_1, fields_2, dims=2):
+    """Calculates the fidelity between two density matrices
+
+    The fidelity is a comparison metric between two density matrices
+    (i.e. mutual coherence functions) that extends the idea of the
+    overlap to incoherent light. As a reminder, the overlap between two
+    fields is:
+
+    overlap = abs(sum(field_1 * field_2))**2
+    
+    Whereas the fidelity is defined as:
+    
+    fidelity = trace(sqrt(sqrt(dm_1) <dot> dm_2 <dot> sqrt(dm_1)))**2
+
+    where dm_n refers to the density matrix encoded by fields_n such
+    that dm_n = fields_n <dot> fields_<n>.conjtranspose(), sqrt
+    refers to the matrix square root, and <dot> is the matrix product.
+    
+    This is not a practical implementation, however, as it is not feasible
+    to explicitly construct the matrices dm_1 and dm_2 in memory. Therefore,
+    we take advantage of the alternate definition based directly on the
+    fields_<n> parameter:
+
+    fidelity = sum(svdvals(fields_1 <dot> fields_2.conjtranspose()))**2
+    
+    In the definitions above, the fields_n are regarded as collections of
+    wavefields, where each wavefield is by default 2-dimensional. The
+    dimensionality of the wavefields can be altered via the dims argument,
+    but the fields_n arguments must always have at least one more dimension
+    than the dims argument. Any additional dimensions are treated as batch
+    dimensions.
+    
+    Parameters
+    ----------
+    fields_1 : array
+        The first set of complex-valued field modes
+    fields_2 : array
+        The second set of complex-valued field modes
+    dims : int
+        Default is 2, the number of final dimensions to reduce over.
+
+    
+    Returns
+    -------
+    fidelity : float or t.Tensor
+        The fidelity, or tensor of fidelities, depending on the dim argument
+
+    """
+
+    fields_1 = t.as_tensor(fields_1)
+    fields_2 = t.as_tensor(fields_2)
+    
+    mult = fields_1.unsqueeze(-dims-2) * fields_2.unsqueeze(-dims-1).conj()
+    sumdims = tuple(d - dims for d in range(dims))
+    mat = t.sum(mult,dim=sumdims)
+
+    # Because I think this is the nuclear norm squared, I would like to swap
+    # Out the definition for this, but I need to test it before swapping.
+    # It also probably makes sense to implement sqrt_fidelity separately
+    # because that's more important
+    #return t.linalg.matrix_norm(mat, ord='nuc')**2
+    
+    # I think this is just the nuclear norm.
+    svdvals = t.linalg.svdvals(mat)
+    return t.sum(svdvals, dim=-1)**2
+
+
+def calc_generalized_rms_error(fields_1, fields_2, normalize=False, dims=2):
+    """Calculates a generalization of the root-mean-squared error between two complex wavefields
+
+    This function calculates an generalization of the RMS error which uses the
+    concept of fidelity to extend it to capture the error between
+    incoherent wavefields, defined as a mode decomposition. The extension has
+    several nice properties, in particular:
+
+    1) For coherent wavefields, it precisely matches the RMS error including
+       a correction for the global phase degeneracy (align_phases=True)
+    2) All mode decompositions of either field that correspond to the same
+       density matrix / mutual coherence function will produce the same 
+       output
+    3) The error will only be zero when comparing mode decompositions that
+       correspond to the same density matrix.
+    4) Due to (2), one need not worry about the ordering of the modes,
+       properly orthogonalizing the modes, and it is even possible to
+       compare mode decompositions with different numbers of modes.    
+    
+    The formal definition of this function is:
+
+    output = norm * sqrt(mean(abs(fields_1)**2)
+                         + mean(abs(fields_2)**2)
+                         - 2 * sqrt(fidelity(fields_1,fields_2)))
+    
+    Where norm is an optional normalization factor, and the fidelity is
+    defined based on the mean, rather than the sum, to match the convention
+    for the root *mean* squared error.
+
+    The normalization is defined as the square root of the total intensity
+    contained in fields_1, which is appropriate when fields_1 represents a
+    known ground truth:
+
+    norm = sqrt(mean(abs(fields_1)**2))
+
+    In the definitions above, the fields_n are regarded as collections of
+    wavefields, where each wavefield is by default 2-dimensional. The
+    dimensionality of the wavefields can be altered via the dims argument,
+    but the fields_n arguments must always have at least one more dimension
+    than the dims argument. Any additional dimensions are treated as batch
+    dimensions.
+    
+    Parameters
+    ----------
+    fields_1 : array
+        The first set of complex-valued field modes
+    fields_2 : array
+        The second set of complex-valued field modes
+    normalize : bool
+        Default is False, whether to normalize to the intensity of fields_1
+    dims : (int or tuple of python:ints)
+        Default is 2, the number of final dimensions to reduce over.
+
+    Returns
+    -------
+    rms_error : float or t.Tensor
+        The generalized RMS error, or tensor of generalized RMS errors, depending on the dim argument
+
+    """
+    fields_1 = t.as_tensor(fields_1)
+    fields_2 = t.as_tensor(fields_2)
+
+    npix = t.prod(t.as_tensor(fields_1.shape[-dims:],dtype=t.int32))
+    
+    sumdims = tuple(d - dims - 1 for d in range(dims+1))
+    fields_1_intensity = t.sum(t.abs(fields_1)**2,dim=sumdims) / npix
+    fields_2_intensity = t.sum(t.abs(fields_2)**2,dim=sumdims) / npix
+    fidelity = calc_fidelity(fields_1, fields_2, dims=dims) / npix**2
+
+    result = fields_1_intensity + fields_2_intensity - 2 * t.sqrt(fidelity)
+    
+    if normalize:
+        result /= fields_1_intensity
+
+    return t.sqrt(result)
+    
+
+def calc_generalized_frc(fields_1, fields_2, basis, im_slice=None, nbins=None, snr=1.):
+    """Calculates a Fourier ring correlation between two images
+
+    This function requires an input of a basis to allow for FRC calculations
+    to be related to physical units.
+
+    Like other analysis functions, this can take input in numpy or pytorch,
+    and will return output in the respective format.
+
+    Parameters
+    ----------
+    im1 : array
+        The first image, a complex or real valued array
+    im2 : array
+        The first image, a complex or real valued array
+    basis : array
+        The basis for the images, defined as is standard for datasets
+    im_slice : slice
+        Default is from 3/8 to 5/8 across the image, a slice to use in the processing.
+    nbins : int
+        Number of bins to break the FRC up into
+    snr : float
+        The signal to noise ratio (for the combined information in both images) to return a threshold curve for.
+
+    Returns
+    -------
+    freqs : array
+        The frequencies associated with each FRC value
+    FRC : array
+        The FRC values
+    threshold : array
+        The threshold curve for comparison
+
+    """
+
+    im_np = False
+    if isinstance(fields_1, np.ndarray):
+        fields_1 = t.as_tensor(fields_)
+        im_np = True
+    if isinstance(fields_2, np.ndarray):
+        fields_2 = t.as_tensor(fields_2)
+        im_np = True
+
+    if isinstance(basis, np.ndarray):
+        basis = t.tensor(basis)
+
+    if im_slice is None:
+        im_slice = np.s_[(im1.shape[0]//8)*3:(im1.shape[0]//8)*5,
+                          (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
+
+    if nbins is None:
+        nbins = np.max(fields_1[...,im_slice].shape[-2:]) // 4
+
+
+    f1 = t.fft.fftshift(t.fft.fft2(im1[im_slice]),dim=(-1,-2))
+    f2 = t.fft.fftshift(t.fft.fft2(im2[im_slice]),dim=(-1,-2))
+    cor_fft = f1 * t.conj(f2)
+        
+
+    F1 = t.abs(f1)**2
+    F2 = t.abs(f2)**2
+
+
+    di = np.linalg.norm(basis[:,0])
+    dj = np.linalg.norm(basis[:,1])
+
+    i_freqs = fftpack.fftshift(fftpack.fftfreq(cor_fft.shape[0],d=di))
+    j_freqs = fftpack.fftshift(fftpack.fftfreq(cor_fft.shape[1],d=dj))
+
+    Js,Is = np.meshgrid(j_freqs,i_freqs)
+    Rs = np.sqrt(Is**2+Js**2)
+
+    # This line is used to get a set of bins that matches the logic
+    # used by np.histogram, so that this function will match the choices
+    # of bin edges that comes from the non-generalized version. This also
+    # gets us the count on the number of pixels per bin so we can calculate
+    # the threshold curve
+    n_pix, bins = np.histogram(Rs,bins=nbins)
+
+    frc = []
+    for i in range(len(bins)-1):
+        mask = t.logical_and(Rs<bins[i+1], Rs>=bins[i])
+        masked_f1 = f1 * mask[...,:,:]
+        masked_f2 = f2 * mask[...,:,:]
+        numerator = t.sqrt(calc_fidelity(masked_f1, masked_f2))
+        denominator_f1 = t.sqrt(calc_fidelity(masked_f1, masked_f1))
+        denominator_f2 = t.sqrt(calc_fidelity(masked_f2, masked_f2))
+        frc.append(numerator / t.sqrt((denominator_f1 * denominator_f2)))
+
+    frc = np.array(frc)
+
+    # This moves from combined-image SNR to single-image SNR
+    snr /= 2
+
+    threshold = (snr + (2 * snr + 1) / np.sqrt(n_pix)) / \
+        (1 + snr + (2 * np.sqrt(snr)) / np.sqrt(n_pix))
+
+    if not im_np:
+        bins = t.tensor(bins)
+        frc = t.tensor(frc)
+        threshold = t.tensor(threshold)
+
+    return bins[:-1], frc, threshold
+
+

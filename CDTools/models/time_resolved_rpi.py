@@ -8,64 +8,28 @@ from scipy.ndimage.morphology import binary_dilation
 import numpy as np
 from copy import copy
 
-__all__ = ['RPI']
+__all__ = ['MultimodeRPI']
 
-#
-# This model has to work a bit differently from a ptychography model
-# because a typical RPI dataset will have lots of images, each of which
-# can be reconstructed on it's own. I can see a few ways to approach this:
-#
-# 1) Enfore 1 image per dataset as a restriction for internal consistency
-# of the "model" idea
-#
-# 2) Override some of the base functions of the CDIModel to accept optional
-# parameters that make it work on larger datasets
-#
-# I think #1 is basically untenable, because it would require creating
-# a new dataset and model for each reconstruction - which means instantiating
-# tons of stuff and storing all sorts of excess information for each frame,
-# when that could easily be reused for other frames. As a result, I think I
-# will try the following pattern:
-#
-# 1) A model will contain a single object "guess" at all times
-# 2) Constructing a model from a data will automatically instantiate the object guess from the first diffraction pattern in the dataset
-# 3) All the optimization functions will get an additional argument for the index of the diffraction pattern to reconstruct. This could either be handled by editing the CDIModel base class to pass through some kwargs, or by overriding all the optimization functions explicitly.
-# 4) A few convenience functions can be written to re-initialize the object array from any image / index in the dataset
-# 5) A new function can be written to reconstruct the entire dataset by running through each pattern one at a time.
-#
-# The advantage of this approach is that I can start by writing a class that
-# will only reconstruct the first diffraction pattern from a dataset and then
-# extend it.
-#
-# Final note: It is worth seeing whether it is possible to include the
-# probe propagation explicitly as a parameter which can be reconstructed
-# via gradient descent.
-#
-#
+
 
 __all__ = ['RPI']
 
-class RPI(CDIModel):
+class TimeResolvedRPI(CDIModel):
 
     @property
     def obj(self):
         return t.complex(self.obj_real, self.obj_imag)
 
-    @property
-    def weights(self):
-        ws = t.complex(self.weights_real, self.weights_imag) 
-        return ws / 10# / self.obj_real.size().numel()
-
-
     
     def __init__(self, wavelength, detector_geometry, probe_basis,
-                 probe, obj_guess, detector_slice=None,
+                 probe, obj_guess, framerate, detector_slice=None,
                  background=None, mask=None, saturation=None,
-                 obj_support=None, oversampling=1, weight_matrix=False):
+                 obj_support=None, oversampling=1):
 
-        super(RPI, self).__init__()
+        super(TimeResolvedRPI, self).__init__()
 
         self.wavelength = t.tensor(wavelength)
+        self.framerate = framerate
         self.detector_geometry = copy(detector_geometry)
         
         det_geo = self.detector_geometry
@@ -95,21 +59,11 @@ class RPI(CDIModel):
 
             
         self.probe = t.tensor(probe, dtype=t.complex64)
-        
-        if obj_guess.dim() == 2:
-            obj_guess = obj_guess[None, :, :]
 
         obj_guess = t.tensor(obj_guess, dtype=t.complex64)
         
         self.obj_real = t.nn.Parameter(obj_guess.real)
         self.obj_imag = t.nn.Parameter(obj_guess.imag)
-        
-        self.weights_real = t.nn.Parameter(t.eye(probe.shape[0])* 10)# * self.obj_real.size().numel())
-        self.weights_imag = t.nn.Parameter(t.zeros(probe.shape[0]))
-
-        if not weight_matrix:
-            self.weights_real.requires_grad=False
-            self.weights_imag.requires_grad=False
         
         # Wait for LBFGS to be updated for complex-valued parameters
         # self.obj = t.nn.Parameter(obj_guess.to(t.float32))
@@ -135,7 +89,7 @@ class RPI(CDIModel):
 
 
     @classmethod
-    def from_dataset(cls, dataset, probe, obj_size=None, background=None, mask=None, padding=0, n_modes=1, saturation=None, scattering_mode=None, oversampling=1, auto_center=False, initialization='random', opt_for_fft=False, weight_matrix=False, probe_threshold=0):
+    def from_dataset(cls, dataset, probe, framerate, obj_size=None, background=None, mask=None, padding=0, saturation=None, scattering_mode=None, oversampling=1, auto_center=False, initialization='random', opt_for_fft=False, probe_threshold=0):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -169,26 +123,6 @@ class RPI(CDIModel):
         if not isinstance(probe,t.Tensor):
             probe = t.as_tensor(probe)
         
-        # Potentially need all of this orientation stuff later
-        
-        #if hasattr(dataset, 'sample_info') and \
-        #   dataset.sample_info is not None and \
-        #   'orientation' in dataset.sample_info:
-        #    surface_normal = dataset.sample_info['orientation'][2]
-        #else:
-        #    surface_normal = np.array([0.,0.,1.])
-
-        # If this information is supplied when the function is called,
-        # then we override the information in the .cxi file
-        #if scattering_mode in {'t', 'transmission'}:
-        #    surface_normal = np.array([0.,0.,1.])
-        #elif scattering_mode in {'r', 'reflection'}:
-        #    outgoing_dir = np.cross(det_basis[:,0], det_basis[:,1])
-        #    outgoing_dir /= np.linalg.norm(outgoing_dir)
-        #    surface_normal = outgoing_dir + np.array([0.,0.,1.])
-        #    surface_normal /= np.linalg.norm(surface_normal)
-
-
         if background is None and hasattr(dataset, 'background') \
            and dataset.background is not None:
             background = t.sqrt(dataset.background)
@@ -205,27 +139,16 @@ class RPI(CDIModel):
         # Now we initialize the object
         if obj_size is None:
             # This is a standard size for a well-matched probe and detector
-            obj_size = (np.array(probe_shape) // 2).astype(int)
+            obj_size = list((np.array(probe_shape) // 2).astype(int))
 
-        if initialization.lower().strip() == 'random':
-            # I think something to do with the fact that the object is defined
-            # on a coarser grid needs to be accounted for here that is not
-            # accounted for yet
-            scale = t.sum(patterns[0]) / t.sum(t.abs(probe)**2)
-            obj_guess = scale * t.exp(2j * np.pi * t.rand([n_modes,]+obj_size))
-        elif initialization.lower().strip() == 'spectral':
-            if background is not None:
-                obj_guess = initializers.RPI_spectral_init(
-                    patterns[0], probe, obj_size, mask=mask,
-                    background=background**2, n_modes=n_modes)
-            else:
-                obj_guess = initializers.RPI_spectral_init(
-                    patterns[0], probe, obj_size, mask=mask,
-                    n_modes=n_modes)
-                
-        else:
-            raise KeyError('Initialization "' + str(initialization) + \
-                           '" invalid - use "spectral" or "random"')
+        # I think something to do with the fact that the object is defined
+        # on a coarser grid needs to be accounted for here that is not
+        # accounted for yet
+        scale = t.sum(patterns[0]) / t.sum(t.abs(probe)**2)
+        n_modes = (probe.shape[0] - 1) // framerate + 1
+
+        obj_guess = scale * t.exp(2j * np.pi * t.rand([n_modes,]+obj_size))
+        
 
         probe_intensity = t.sqrt(t.sum(t.abs(probe)**2,axis=0))
         probe_fft = tools.propagators.far_field(probe_intensity)
@@ -240,10 +163,9 @@ class RPI(CDIModel):
         obj_support = t.as_tensor(binary_dilation(obj_support))
 
         return cls(wavelength, det_geo, probe_basis,
-                   probe, obj_guess, detector_slice=det_slice,
+                   probe, obj_guess, framerate, detector_slice=det_slice,
                    background=background, mask=mask, saturation=saturation,
-                   obj_support=obj_support, oversampling=oversampling,
-                   weight_matrix=weight_matrix)
+                   obj_support=obj_support, oversampling=oversampling)
 
 
     def random_init(self, pattern):
@@ -252,17 +174,6 @@ class RPI(CDIModel):
             2j * np.pi * t.rand(self.obj.shape)).to(
                 dtype=self.obj.dtype, device=self.obj.device)
         
-    def spectral_init(self, pattern):
-        if self.background is not None:
-            self.obj.data = initializers.RPI_spectral_init(
-                pattern, self.probe, self.obj.shape[-3:-1], mask=self.mask,
-                background=self.background**2, n_modes=self.obj.shape[0]).to(
-                    dtype=self.obj.dtype, device=self.obj.device)
-        else:
-            self.obj.data = initializers.RPI_spectral_init(
-                pattern, self.probe, self.obj.shape[-3:-1], mask=self.mask,
-                n_modes=self.obj.shape[0]).to(
-                    dtype=self.obj.dtype, device=self.obj.device)
     
     # Needs work
     def interaction(self, index, *args):
@@ -276,21 +187,20 @@ class RPI(CDIModel):
         all_exit_waves = []
 
         # Mix the probes with the weight matrix
-        prs = t.sum(self.weights[..., None, None] * self.probe, axis=-3)
+        prs = self.probe
         
         for i in range(self.probe.shape[0]):
+            obj_frame = i // self.framerate
             pr = prs[i]
-            # Here we have a 3D probe (one single mode)
-            # and a 4D object (multiple modes mixing incoherently)
             exit_waves = RPI_interaction(pr,
-                                         self.obj_support * self.obj)
-                
-            all_exit_waves.append(exit_waves)
+                                         self.obj_support * self.obj[obj_frame])
+            all_exit_waves.append(exit_waves.unsqueeze(0))
 
         # This creates a bunch of modes generated from all possible combos
         # of the probe and object modes all strung out along the first index
+
         output = t.cat(all_exit_waves)
-        
+
         # If we have multiple indexes input, we unsqueeze and repeat the stack
         # of wavefields enough times to simulate each requested index. This
         # seems silly, but it enables (for example) one to do a reconstruction
@@ -329,14 +239,11 @@ class RPI(CDIModel):
         #return tools.losses.poisson_nll(real_data, sim_data, mask=mask)
 
     def regularizer(self, factors):
-        if self.obj.shape[0] == 1:
-            return factors[0] * t.sum(t.abs(self.obj[0,:,:])**2)
-        else:
-            return factors[0] * t.sum(t.abs(self.obj[0,:,:])**2) \
-                + factors[1] * t.sum(t.abs(self.obj[1:,:,:])**2)
+        return factors[0] * t.sum(t.abs(self.obj[0,:,:])**2) \
+            + factors[1] * t.sum(t.abs(self.obj[1:,:,:])**2)
         
     def to(self, *args, **kwargs):
-        super(RPI, self).to(*args, **kwargs)
+        super(TimeResolvedRPI, self).to(*args, **kwargs)
         self.wavelength = self.wavelength.to(*args,**kwargs)
         # move the detector geometry too
         det_geo = self.detector_geometry
@@ -363,24 +270,14 @@ class RPI(CDIModel):
         raise NotImplementedError('No sim to dataset yet, sorry!')
 
     plot_list = [
-        ('Root Sum Squared Amplitude of all Probes',
-         lambda self, fig: p.plot_amplitude(
-             np.sqrt(np.sum((t.abs(t.sum(self.weights[..., None, None].detach() * self.probe, axis=-3))**2).cpu().numpy(),axis=0)),
-             fig=fig, basis=self.probe_basis)),
-        ('Dominant Object Amplitude', 
-         lambda self, fig: p.plot_amplitude(self.obj[0], fig=fig,
+        ('Probe Amplitudes',
+         lambda self, fig: p.plot_amplitude(self.probe, fig=fig, basis=self.probe_basis)),
+        ('Object Amplitudes', 
+         lambda self, fig: p.plot_amplitude(self.obj, fig=fig,
                                             basis=self.obj_basis)),
-        ('Dominant Object Phase',
-         lambda self, fig: p.plot_phase(self.obj[0], fig=fig,
-                                        basis=self.obj_basis)),
-        ('Subdominant Object Amplitude',
-         lambda self, fig: p.plot_amplitude(self.obj[1], fig=fig,
-                                            basis=self.obj_basis),
-         lambda self: len(self.obj) >=2),
-        ('Subdominant Object Phase',
-         lambda self, fig: p.plot_phase(self.obj[1], fig=fig,
-                                        basis=self.obj_basis),
-         lambda self: len(self.obj) >=2)
+        ('Object Phases',
+         lambda self, fig: p.plot_phase(self.obj, fig=fig,
+                                        basis=self.obj_basis))
     ]
 
 

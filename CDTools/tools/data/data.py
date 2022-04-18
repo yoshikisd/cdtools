@@ -93,7 +93,7 @@ def get_sample_info(cxi_file):
     """
     if 'entry_1/sample_1' not in cxi_file:
         return None
-
+    
     s1 = cxi_file['entry_1/sample_1']
     metadata_attrs = ['name','description','unit_cell_group']
 
@@ -317,7 +317,7 @@ def get_dark(cxi_file):
     return darks
 
 
-def get_data(cxi_file, cut_zeroes = True):
+def get_data(cxi_file, cut_zeros = True):
     """Returns an array with the full stack of detector data defined in the cxi file object
 
     This function will make sure to check all the various places that it's
@@ -333,6 +333,8 @@ def get_data(cxi_file, cut_zeroes = True):
     ----------
     cxi_file : h5py.File
         A file object to be read
+    cut_zeros : bool
+            Default True, whether to set all negative data to zero
 
     Returns
     -------
@@ -351,9 +353,8 @@ def get_data(cxi_file, cut_zeroes = True):
         raise KeyError('Data is not defined within cxi file')
 
     data = cxi_file[pull_from][:]
-    
     # Use maximum in-place to avoid allocating any more memory than is needed
-    if cut_zeroes:
+    if cut_zeros:
         np.maximum(data,0,data)
 
     if 'axes' in cxi_file[pull_from].attrs:
@@ -642,7 +643,8 @@ def add_dark(cxi_file, dark):
     d1.create_dataset('data_dark',data=dark)
 
 
-def add_data(cxi_file, data, axes=None):
+def add_data(cxi_file, data, axes=None, compression='gzip',
+             chunks=True):
     """Adds the specified data to the cxi file
 
     It will add the data unchanged to the file, placing it in two spots:
@@ -673,7 +675,8 @@ def add_data(cxi_file, data, axes=None):
     if isinstance(data, t.Tensor):
         data = data.detach().cpu().numpy()
 
-    det1.create_dataset('data', data=data)
+    det1.create_dataset('data', data=data, compression=compression,
+                        chunks=chunks)
     data1['data'] = h5py.SoftLink('/entry_1/instrument_1/detector_1/data')
 
     if axes is not None:

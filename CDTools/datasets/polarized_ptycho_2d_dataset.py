@@ -115,7 +115,7 @@ class PolarizedPtycho2DDataset(Ptycho2DDataset):
     # It sucks that I can't reuse the base factory method here,
     # perhaps there is a way but I couldn't figure it out.
     @classmethod
-    def from_cxi(cls, cxi_file):
+    def from_cxi(cls, cxi_file, cut_zeros=True):
         """Generates a new PolarizedPtycho2DDataset from a .cxi file directly
 
         This generates a new PolarizedPtycho2DDataset from a .cxi file storing
@@ -125,19 +125,22 @@ class PolarizedPtycho2DDataset(Ptycho2DDataset):
         ----------
         file : str, pathlib.Path, or h5py.File
             The .cxi file to load from
+        cut_zeros : bool
+            Default True, whether to set all negative data to zero
 
         Returns
         -------
         dataset : PolarizedPtycho2DDataset
             The constructed dataset object
         """
+
         # If a bare string is passed
         if isinstance(cxi_file, str) or isinstance(cxi_file, pathlib.Path):
             with h5py.File(cxi_file, 'r') as f:
-                return cls.from_cxi(f)
+                return cls.from_cxi(f, cut_zeros=cut_zeros)
 
         # Generate a base dataset
-        dataset = Ptycho2DDataset.from_cxi(cxi_file)
+        dataset = Ptycho2DDataset.from_cxi(cxi_file, cut_zeros=cut_zeros)
 
         # Mutate the class to this subclass (PolarizedPtycho2DDataset)
         dataset.__class__ = cls

@@ -22,7 +22,7 @@ defining a new ptychography model before attempting to do so.
 
 # I don't believe that __all__ really needed, but it's nice to define it
 # to be explicit that import * is safe
-__all__ = ['CDIModel', 'SimplePtycho', 'FancyPtycho', 'PolarizedFancyPtycho', 'Bragg2DPtycho', 'Multislice2DPtycho', 'RPI']
+__all__ = ['CDIModel', 'SimplePtycho', 'FancyPtycho', 'PolarizedFancyPtycho', 'Bragg2DPtycho', 'Multislice2DPtycho', 'RPI', 'TimeResolvedPtychoCalibration', 'TimeResolvedRPI']
 
 from CDTools.models.base import CDIModel
 from CDTools.models.simple_ptycho import SimplePtycho
@@ -31,6 +31,9 @@ from CDTools.models.polarized_fancy_ptycho import PolarizedFancyPtycho
 from CDTools.models.bragg_2d_ptycho import Bragg2DPtycho
 from CDTools.models.multislice_2d_ptycho import Multislice2DPtycho
 from CDTools.models.rpi import RPI
+from CDTools.models.multimode_rpi import MultimodeRPI
+from CDTools.models.time_resolved_ptycho_calibration import TimeResolvedPtychoCalibration
+from CDTools.models.time_resolved_rpi import TimeResolvedRPI
 
 # Still needs to be updated for the new complex numbers
 #from CDTools.models.s_matrix_ptycho import SMatrixPtycho

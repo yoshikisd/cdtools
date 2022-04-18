@@ -8,44 +8,13 @@ from scipy.ndimage.morphology import binary_dilation
 import numpy as np
 from copy import copy
 
-__all__ = ['RPI']
+__all__ = ['MultimodeRPI']
 
-#
-# This model has to work a bit differently from a ptychography model
-# because a typical RPI dataset will have lots of images, each of which
-# can be reconstructed on it's own. I can see a few ways to approach this:
-#
-# 1) Enfore 1 image per dataset as a restriction for internal consistency
-# of the "model" idea
-#
-# 2) Override some of the base functions of the CDIModel to accept optional
-# parameters that make it work on larger datasets
-#
-# I think #1 is basically untenable, because it would require creating
-# a new dataset and model for each reconstruction - which means instantiating
-# tons of stuff and storing all sorts of excess information for each frame,
-# when that could easily be reused for other frames. As a result, I think I
-# will try the following pattern:
-#
-# 1) A model will contain a single object "guess" at all times
-# 2) Constructing a model from a data will automatically instantiate the object guess from the first diffraction pattern in the dataset
-# 3) All the optimization functions will get an additional argument for the index of the diffraction pattern to reconstruct. This could either be handled by editing the CDIModel base class to pass through some kwargs, or by overriding all the optimization functions explicitly.
-# 4) A few convenience functions can be written to re-initialize the object array from any image / index in the dataset
-# 5) A new function can be written to reconstruct the entire dataset by running through each pattern one at a time.
-#
-# The advantage of this approach is that I can start by writing a class that
-# will only reconstruct the first diffraction pattern from a dataset and then
-# extend it.
-#
-# Final note: It is worth seeing whether it is possible to include the
-# probe propagation explicitly as a parameter which can be reconstructed
-# via gradient descent.
-#
-#
+
 
 __all__ = ['RPI']
 
-class RPI(CDIModel):
+class MultimodeRPI(CDIModel):
 
     @property
     def obj(self):
@@ -55,15 +24,13 @@ class RPI(CDIModel):
     def weights(self):
         ws = t.complex(self.weights_real, self.weights_imag) 
         return ws / 10# / self.obj_real.size().numel()
-
-
     
     def __init__(self, wavelength, detector_geometry, probe_basis,
                  probe, obj_guess, detector_slice=None,
                  background=None, mask=None, saturation=None,
                  obj_support=None, oversampling=1, weight_matrix=False):
 
-        super(RPI, self).__init__()
+        super(MultimodeRPI, self).__init__()
 
         self.wavelength = t.tensor(wavelength)
         self.detector_geometry = copy(detector_geometry)
@@ -95,9 +62,6 @@ class RPI(CDIModel):
 
             
         self.probe = t.tensor(probe, dtype=t.complex64)
-        
-        if obj_guess.dim() == 2:
-            obj_guess = obj_guess[None, :, :]
 
         obj_guess = t.tensor(obj_guess, dtype=t.complex64)
         
@@ -136,6 +100,7 @@ class RPI(CDIModel):
 
     @classmethod
     def from_dataset(cls, dataset, probe, obj_size=None, background=None, mask=None, padding=0, n_modes=1, saturation=None, scattering_mode=None, oversampling=1, auto_center=False, initialization='random', opt_for_fft=False, weight_matrix=False, probe_threshold=0):
+        raise NotImplementedError()
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -283,14 +248,14 @@ class RPI(CDIModel):
             # Here we have a 3D probe (one single mode)
             # and a 4D object (multiple modes mixing incoherently)
             exit_waves = RPI_interaction(pr,
-                                         self.obj_support * self.obj)
-                
-            all_exit_waves.append(exit_waves)
+                                         self.obj_support * self.obj[i])
+            all_exit_waves.append(exit_waves.unsqueeze(0))
 
         # This creates a bunch of modes generated from all possible combos
         # of the probe and object modes all strung out along the first index
+
         output = t.cat(all_exit_waves)
-        
+
         # If we have multiple indexes input, we unsqueeze and repeat the stack
         # of wavefields enough times to simulate each requested index. This
         # seems silly, but it enables (for example) one to do a reconstruction
@@ -329,14 +294,11 @@ class RPI(CDIModel):
         #return tools.losses.poisson_nll(real_data, sim_data, mask=mask)
 
     def regularizer(self, factors):
-        if self.obj.shape[0] == 1:
-            return factors[0] * t.sum(t.abs(self.obj[0,:,:])**2)
-        else:
-            return factors[0] * t.sum(t.abs(self.obj[0,:,:])**2) \
-                + factors[1] * t.sum(t.abs(self.obj[1:,:,:])**2)
+        return factors[0] * t.sum(t.abs(self.obj[0,:,:])**2) \
+            + factors[1] * t.sum(t.abs(self.obj[1:,:,:])**2)
         
     def to(self, *args, **kwargs):
-        super(RPI, self).to(*args, **kwargs)
+        super(MultimodeRPI, self).to(*args, **kwargs)
         self.wavelength = self.wavelength.to(*args,**kwargs)
         # move the detector geometry too
         det_geo = self.detector_geometry
@@ -367,20 +329,12 @@ class RPI(CDIModel):
          lambda self, fig: p.plot_amplitude(
              np.sqrt(np.sum((t.abs(t.sum(self.weights[..., None, None].detach() * self.probe, axis=-3))**2).cpu().numpy(),axis=0)),
              fig=fig, basis=self.probe_basis)),
-        ('Dominant Object Amplitude', 
-         lambda self, fig: p.plot_amplitude(self.obj[0], fig=fig,
+        ('Object Amplitudes', 
+         lambda self, fig: p.plot_amplitude(self.obj, fig=fig,
                                             basis=self.obj_basis)),
-        ('Dominant Object Phase',
-         lambda self, fig: p.plot_phase(self.obj[0], fig=fig,
-                                        basis=self.obj_basis)),
-        ('Subdominant Object Amplitude',
-         lambda self, fig: p.plot_amplitude(self.obj[1], fig=fig,
-                                            basis=self.obj_basis),
-         lambda self: len(self.obj) >=2),
-        ('Subdominant Object Phase',
-         lambda self, fig: p.plot_phase(self.obj[1], fig=fig,
-                                        basis=self.obj_basis),
-         lambda self: len(self.obj) >=2)
+        ('Object Phases',
+         lambda self, fig: p.plot_phase(self.obj, fig=fig,
+                                        basis=self.obj_basis))
     ]
 
 
