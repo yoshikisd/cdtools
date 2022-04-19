@@ -116,9 +116,12 @@ def test_add_entry_info(tmp_path):
     with data.create_cxi(tmp_path / 'test_add_entry_info.cxi') as f:
         data.add_entry_info(f, entry_info)
 
+
     with h5py.File(tmp_path / 'test_add_entry_info.cxi','r') as f:
         read_entry_info = data.get_entry_info(f)
 
+    print(read_entry_info)
+        
     for key in entry_info:
         if isinstance(entry_info[key], np.ndarray):
             assert np.allclose(entry_info[key], read_entry_info[key])

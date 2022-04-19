@@ -63,7 +63,9 @@ def get_entry_info(cxi_file):
     metadata_attrs = ['title',
                       'experiment_identifier',
                       'experiment_description',
-                      'program_name']
+                      'program_name',
+                      'start_time',
+                      'end_time']
     metadata = {attr: str(e1[attr][()].decode()) for attr in metadata_attrs
                 if attr in e1}
     
@@ -479,6 +481,7 @@ def add_entry_info(cxi_file, metadata):
         elif isinstance(value, t.Tensor):
             asnumpy = value.detach().cpu().numpy()
             cxi_file['entry_1'].create_dataset(key, data=asnumpy)
+
 
 
 def add_sample_info(cxi_file, metadata):

@@ -280,8 +280,9 @@ def test_calc_frc():
     threshold = (snr + (2 * snr + 1) / np.sqrt(n_pix)) / \
         (1 + snr + (2 * np.sqrt(snr)) / np.sqrt(n_pix))
 
-    test_bins, test_frc, test_threshold = analysis.calc_frc(obj1, obj2,
-                    basis, im_slice=np.s_[10:-10,20:-20], nbins=100, snr=2)
+    test_bins, test_frc, test_threshold = analysis.calc_frc(
+        obj1, obj2, basis, im_slice=np.s_[10:-10,20:-20],
+        nbins=100, snr=2, limit='corner')
     
     assert np.allclose(bins, test_bins)
     assert np.allclose(frc, test_frc)
@@ -292,10 +293,11 @@ def test_calc_frc():
     obj2_torch = t.as_tensor(obj2)
     basis_torch = t.tensor(basis)
 
-    test_bins_t, test_frc_t, test_threshold_t = analysis.calc_frc(obj1_torch,
-                                                                  obj2_torch,
-                                                                  basis_torch,
-                            im_slice=np.s_[10:-10,20:-20], nbins=100, snr=2)
+    test_bins_t, test_frc_t, test_threshold_t = analysis.calc_frc(
+        obj1_torch,
+        obj2_torch,
+        basis_torch,
+        im_slice=np.s_[10:-10,20:-20], nbins=100, snr=2, limit='corner')
 
     assert np.allclose(bins, test_bins_t.numpy())
     assert np.allclose(frc, test_frc_t.numpy())

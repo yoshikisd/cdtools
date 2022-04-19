@@ -546,7 +546,8 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1., limit='side'):
                                         weights=F2.detach().cpu().numpy())
     n_pix, bins = np.histogram(Rs, bins=nbins, range=frc_range)
 
-    n_pix = n_pix / 4 # This is for an apodized image, apodized with a hann window
+    
+    #n_pix = n_pix / 4 # This is for an apodized image, apodized with a hann window
     
     frc = np.abs(numerator) / np.sqrt(denominator_F1*denominator_F2)
 

@@ -254,23 +254,22 @@ def test_ptycho_2D_sinc(single_pixel_probe, random_obj):
 def test_RPI_interaction(random_probe, random_obj):
 
 
-    random_obj1 = random_obj[:79,:68]
-    random_probe1 = random_probe
+    random_obj1 = random_obj[:79,:68] * 0 + 1
+    random_probe1 = random_probe * 0 + 1
     t_random_obj1 = t.as_tensor(random_obj1)
     t_random_probe1 = t.as_tensor(random_probe1)
     t_output1 = interactions.RPI_interaction(t_random_probe1, t_random_obj1)
 
     obj1_fourier = fftshift(fft.fft2(ifftshift(random_obj1), norm='ortho'))
     obj1_ups = np.zeros(random_probe1.shape[:2]).astype(np.complex128)
-    obj1_ups[(random_probe1.shape[0]-79)//2:
-             (random_probe1.shape[0]-79)//2 + 79,
+    obj1_ups[random_probe1.shape[0]//2 - 79//2:
+             -(random_probe1.shape[0]-79 - (random_probe1.shape[0]//2 - 79//2)),
              (random_probe1.shape[1]-68)//2:
              (random_probe1.shape[1]-68)//2 + 68] = obj1_fourier
     output1 = random_probe1 * fftshift(fft.ifft2(ifftshift(obj1_ups),
                                                 norm='ortho'))
-    
-    assert np.allclose(t.as_tensor(t_output1), output1)
 
+    assert np.allclose(t_output1, output1)
     
     random_obj2 = np.stack([random_obj[:64,:89]]*3)
     random_probe2 = random_probe[3:,5:]

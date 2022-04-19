@@ -627,7 +627,7 @@ def RPI_interaction(probe, obj):
     # Again, just an inverse FFT but with an fftshift
     upsampled_obj = propagators.inverse_far_field(fftobj)
 
-    if obj.dim() == 3:
+    if obj.dim() >= 3:
         return probe[None,...] *  upsampled_obj
     else:
         return probe * upsampled_obj

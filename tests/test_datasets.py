@@ -61,7 +61,8 @@ def test_CDataset_from_cxi(test_ptycho_cxis):
             assert t.all(t.eq(t.tensor(expected['mask']),dataset.mask))
 
         if expected['dark'] is not None:
-            assert t.all(t.eq(t.Tensor(expected['dark']),dataset.background))
+            assert t.all(t.eq(t.as_tensor(expected['dark'], dtype=t.float32),
+                              dataset.background))
 
             
 
@@ -147,8 +148,8 @@ def test_Ptycho2DDataset_init():
     assert dataset.sample_info == sample_info
     assert dataset.wavelength == wavelength
     assert dataset.detector_geometry == detector_geometry
-    assert t.allclose(dataset.patterns, t.Tensor(patterns))
-    assert t.allclose(dataset.translations, t.Tensor(translations))
+    assert t.allclose(dataset.patterns, t.as_tensor(patterns))
+    assert t.allclose(dataset.translations, t.as_tensor(translations))
 
 
 def test_Ptycho2DDataset_from_cxi(test_ptycho_cxis):
@@ -180,7 +181,8 @@ def test_Ptycho2DDataset_from_cxi(test_ptycho_cxis):
             assert t.all(t.eq(t.tensor(expected['mask']),dataset.mask))
 
         if expected['dark'] is not None:
-            assert t.all(t.eq(t.Tensor(expected['dark']),dataset.background))
+            assert t.all(t.eq(t.as_tensor(expected['dark'], dtype=t.float32),
+                              dataset.background))
 
             
         assert t.allclose(t.tensor(expected['data']),dataset.patterns)
@@ -305,17 +307,15 @@ def test_PolarizedPtycho2DDataset_init():
                                        detector_geometry=detector_geometry,
                                        mask=mask)
 
-    print(analyzer.dtype)
-    print(dataset.analyzer.dtype)
     assert t.all(t.eq(dataset.mask,t.BoolTensor(mask)))
     assert dataset.entry_info == entry_info
     assert dataset.sample_info == sample_info
     assert dataset.wavelength == wavelength
     assert dataset.detector_geometry == detector_geometry
-    assert t.allclose(dataset.patterns, t.Tensor(patterns))
-    assert t.allclose(dataset.translations, t.Tensor(translations))
-    assert t.allclose(dataset.analyzer, t.Tensor(analyzer))
-    assert t.allclose(dataset.polarizer, t.Tensor(polarizer))
+    assert t.allclose(dataset.patterns, t.as_tensor(patterns))
+    assert t.allclose(dataset.translations, t.as_tensor(translations))
+    assert t.allclose(dataset.analyzer, t.as_tensor(analyzer, dtype=t.float32))
+    assert t.allclose(dataset.polarizer, t.as_tensor(polarizer, dtype=t.float32))
 
 
 def test_PolarizedPtycho2DDataset_from_cxi(polarized_ptycho_cxi):
@@ -347,7 +347,8 @@ def test_PolarizedPtycho2DDataset_from_cxi(polarized_ptycho_cxi):
         assert t.all(t.eq(t.tensor(expected['mask']),dataset.mask))
         
     if expected['dark'] is not None:
-        assert t.all(t.eq(t.Tensor(expected['dark']),dataset.background))
+        assert t.all(t.eq(t.as_tensor(expected['dark'], dtype=t.float32),
+                          dataset.background))
         
         
     assert t.allclose(t.tensor(expected['data']),dataset.patterns)
