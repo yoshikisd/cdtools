@@ -77,12 +77,14 @@ class FancyPtycho(CDIModel):
 
         if background is None:
             if detector_slice is not None:
-                shape = self.probe[0][self.detector_slice].shape
+                dummy_det = t.empty([s//oversampling
+                                     for s in self.probe[0].shape])
+                shape = dummy_det[self.detector_slice].shape
+                #shape = self.probe[0][self.detector_slice].shape
             else:
-                shape = self.probe[0].shape
-            background = 1e-6 * t.ones([s//oversampling for s in shape],
-                                       dtype=t.float32)
-
+                shape = [s//oversampling for s in self.probe[0]]
+            background = 1e-6 * t.ones(shape, dtype=t.float32)
+            
         self.background = t.nn.Parameter(background)
 
         if weights is None:

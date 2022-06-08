@@ -123,7 +123,7 @@ class Ptycho2DDataset(CDataset):
     # It sucks that I can't reuse the base factory method here,
     # perhaps there is a way but I couldn't figure it out.
     @classmethod
-    def from_cxi(cls, cxi_file, cut_zeros=True):
+    def from_cxi(cls, cxi_file, cut_zeros=True, load_patterns=True):
         """Generates a new Ptycho2DDataset from a .cxi file directly
 
         This generates a new Ptycho2DDataset from a .cxi file storing
@@ -144,7 +144,7 @@ class Ptycho2DDataset(CDataset):
         # If a bare string is passed
         if isinstance(cxi_file, str) or isinstance(cxi_file, pathlib.Path):
             with h5py.File(cxi_file,'r') as f:
-                return cls.from_cxi(f)
+                return cls.from_cxi(f, cut_zeros=cut_zeros, load_patterns=load_patterns)
 
         # Generate a base dataset
         dataset = CDataset.from_cxi(cxi_file)
@@ -152,17 +152,19 @@ class Ptycho2DDataset(CDataset):
         dataset.__class__ = cls
 
         # Load the data that is only relevant for this class
-        patterns, axes = cdtdata.get_data(cxi_file, cut_zeros=cut_zeros)
         translations = cdtdata.get_ptycho_translations(cxi_file)
         # And now re-do the stuff from __init__
         dataset.translations = t.tensor(translations, dtype=t.float32)
-        dataset.patterns = t.as_tensor(patterns)
-        if dataset.patterns.dtype == t.float64:
-            raise NotImplementedError('64-bit floats are not supported and precision will not be retained in reconstructions! Please explicitly convert your data to 32-bit or submit a pull request')
-
-        dataset.axes = axes
-        if dataset.mask is None:
-            dataset.mask = t.ones(dataset.patterns.shape[-2:]).to(dtype=t.bool)
+        if load_patterns:
+            patterns, axes = cdtdata.get_data(cxi_file, cut_zeros=cut_zeros)
+            dataset.patterns = t.as_tensor(patterns)
+            if dataset.patterns.dtype == t.float64:
+                raise NotImplementedError('64-bit floats are not supported and precision will not be retained in reconstructions! Please explicitly convert your data to 32-bit or submit a pull request')
+            
+            dataset.axes = axes
+            
+            if dataset.mask is None:
+                dataset.mask = t.ones(dataset.patterns.shape[-2:]).to(dtype=t.bool)
 
         try:
             intensities = cdtdata.get_shot_to_shot_info(cxi_file, 'intensities')

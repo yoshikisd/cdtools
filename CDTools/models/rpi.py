@@ -7,6 +7,7 @@ from CDTools.tools import initializers
 from scipy.ndimage.morphology import binary_dilation
 import numpy as np
 from copy import copy
+import time
 
 __all__ = ['RPI']
 
@@ -245,7 +246,36 @@ class RPI(CDIModel):
                    obj_support=obj_support, oversampling=oversampling,
                    weight_matrix=weight_matrix)
 
+    @classmethod
+    def from_calibration(cls, calibration, obj_size=None, n_modes=1, saturation=None):
+        
+        wavelength = calibration['wavelength']
+        probe_basis = t.as_tensor(calibration['basis'])
+        probe = t.as_tensor(calibration['probe'])
+        if 'background' in calibration:
+            background = t.as_tensor(calibration['background'])
+        else:
+            background = t.zeros_like(probe.real)
+        if 'mask' in calibration:
+            mask = t.as_tensor(calibration['mask'])
+        else:
+            mask = t.ones_like(probe.real, dtype=t.bool)
 
+        # Now we initialize the object
+        if obj_size is None:
+            # This is a standard size for a well-matched probe and detector
+            obj_size = (np.array(probe.shape[-2:]) // 2).astype(int)
+
+        obj_guess = t.exp(2j * np.pi * t.rand([n_modes,]+obj_size))
+
+        det_geo = {'distance': 1,
+                   'basis': wavelength / probe_basis} # Is this even right?
+                
+        return cls(wavelength, det_geo, probe_basis,
+                   probe, obj_guess,
+                   background=background, mask=mask)
+
+    
     def random_init(self, pattern):
         scale = t.sum(pattern) / t.sum(t.abs(self.probe)**2)
         self.obj.data = scale * t.exp(
@@ -306,7 +336,8 @@ class RPI(CDIModel):
 
 
     def forward_propagator(self, wavefields):
-        return tools.propagators.far_field(wavefields)
+        p = tools.propagators.far_field(wavefields)
+        return p
 
 
     def backward_propagator(self, wavefields):
@@ -317,12 +348,13 @@ class RPI(CDIModel):
         # Here I'm taking advantage of an undocumented feature in the
         # incoherent_sum measurement function where it will work with
         # a 4D wavefield array as well as a 5D array.
-        return tools.measurements.quadratic_background(wavefields,
+        m = tools.measurements.quadratic_background(wavefields,
                             self.background,
                             detector_slice=self.detector_slice,
                             measurement=tools.measurements.incoherent_sum,
                             saturation=self.saturation,
                             oversampling=self.oversampling)
+        return m
     
     def loss(self, sim_data, real_data, mask=None):
         return tools.losses.amplitude_mse(real_data, sim_data, mask=mask)
