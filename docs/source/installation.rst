@@ -8,22 +8,22 @@ The source code for CDTools is hosted on it's `MIT github page`_. Access to the 
 
 .. _`MIT github page`: https://github.mit.edu/Scattering/CDTools
 
-It is recommended that you clone the repository, rather than just downloading the contents, as it remains under rapid development. Cloning the repository will allow you to get access to new updates.
+It is recommended that you clone the repository, rather than just downloading the contents, as it remains under development. Cloning the repository will allow you to easily get access to new updates, bug fixes, etc.
 
 Step 2: Install Dependencies
 ----------------------------
 
-The dependencies for CDTools can be installed, if you are managing your environment with anaconda, by running the following command in the top level directory of the package:
+The major dependency for CDTools is pytorch, and because the details of the installation can vary depending on platform, GPU availability, etc, it is recommended that you follow the install instructions on `the pytorch site`_ to install pytorch before the remaining dependencies.
+
+.. _`the pytorch site`: https://pytorch.org/get-started/locally/
+
+If you manage your environment with conda, the remaining dependencies can be installe by running the following command in the top level directory of the package:
 
 .. code:: bash
 	  
-   $ conda install --file conda_requirements.txt
+   $ conda install --file conda_requirements.txt -c conda-forge
 
-One optional dependencies is not installed via this procedure - the dependency sphinx-argparse for building the docs. Sphinx-argparse can either be installed manually via conda-forge, otherwise it will be installed automatically by pip during the final installation step if needed.
-
-If you manage your environment with pip, all required packges should be installed automatically. The only thing to be aware of is that pytorch must be compiled with MKL support, and CUDA support if you would like to use the GPU. For this reason, using anaconda python is strongly recommended.
-
-For convenience, the full set of dependencies are noted below:
+This will install all dependencies, including optional dependencies for the tests and docs. For convenience, the full set of dependencies are noted below:
    
 CDTools depends on the following packages:
 
@@ -41,13 +41,9 @@ And has optional dependencies on
    * `sphinx-argparse <https://sphinx-argparse.readthedocs.io>`_
    * `sphinx_rtd_theme <https://sphinx-rtd-theme.readthedocs.io/en/stable/>`_
 
-     
-All of these can be installed via pip or conda. Finally, CDTools is NOT python 2 compatible.
-
-**It is required that pytorch is built with MKL**, as that enables FFTs. Additionally, installing pytorch **with CUDA support** is recommended, if you intend to run any serious reconstructions with the package.
-
 Finally, the optional depencency on pytest enables the tests to be run to confirm a successful installation. Sphinx and sphinx-argparse are only required if you plan on building the documentation.
 
+Finally, CDTools is NOT python 2 compatible.
 
 Step 3: Install
 ---------------
@@ -56,21 +52,23 @@ To install in CDTools in developer mode (recommended, to allow any updates to be
 
 .. code:: bash
 	  
-   $ pip install -e .[tests,docs]
+   $ pip install -e . --no-deps
 
-If you don't need to run the tests, or don't need to build the docs, you can omit the relevant option or options.
+To install normally (not in developer mode), run:
 
-If you prefer to use a tool other than pip, CDTools can be installed via any other package management tool that works with a setup.py file.
+.. code:: bash
+	  
+   $ pip install . --no-deps
 
   
 Step 4: Run The Tests
 ---------------------
 
-To ensure that the installation has worked correctly, it is recommended, although not required, that you run the unit tests. After ensuring that pytest is installed, run the following command from the top level directory:
+To ensure that the installation has worked correctly, it is recommended that you run the unit tests. After ensuring that pytest is installed, run the following command from the top level directory:
 
 .. code:: bash
 
    $ pytest
 
 
-If any tests fail, make sure that you have all the noted dependencies properly installed (specifically that pytorch is installed with MKL support). If so, `shoot me an email <alevitan@mit.edu>`_ and we'll get to the bottom of it.
+If any tests fail, make sure that you have all the noted dependencies properly installed, and particularly that pytorch was installed with FFT support. If so, `shoot me an email <alevitan@mit.edu>`_ or open an issue on the github page and we'll get to the bottom of it.

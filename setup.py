@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 setuptools.setup(
     name="CDTools",
     version="0.1.1",
-    python_requires='>3.4', # we use pathlib, introduced in 3.4
+    python_requires='>3.7', # recommended minimum version for pytorch
     author="Abe Levitan",
     author_email="alevitan@mit.edu",
     description="Coherent Diffraction Tools",
@@ -24,9 +24,11 @@ setuptools.setup(
         'tests': ["pytest"],
         'docs': ["sphinx","sphinx-argparse","sphinx_rtd_theme"]
     },
+    package_dir={"": "src"},
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",
     ],
 )
+
