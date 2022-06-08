@@ -1,2 +1,2 @@
-from CDTools.tools.plotting.plotting import *
+from cdtools.tools.plotting.plotting import *
 

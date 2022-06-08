@@ -2,9 +2,9 @@ import numpy as np
 import torch as t
 import h5py
 import pathlib
-from CDTools.datasets import Ptycho2DDataset
-from CDTools.tools import data as cdtdata
-from CDTools.tools import plotting
+from cdtools.datasets import Ptycho2DDataset
+from cdtools.tools import data as cdtdata
+from cdtools.tools import plotting
 
 __all__ = ['PolarizedPtycho2DDataset']
 

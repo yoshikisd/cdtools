@@ -1,1 +1,1 @@
-from CDTools.tools.analysis.analysis import *
+from cdtools.tools.analysis.analysis import *

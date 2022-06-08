@@ -8,7 +8,7 @@ data has been stored in numpy arrays.
 
 import torch as t
 import numpy as np
-from CDTools.tools import image_processing as ip
+from cdtools.tools import image_processing as ip
 from scipy import fftpack
 from scipy import linalg as sla
 from scipy import special

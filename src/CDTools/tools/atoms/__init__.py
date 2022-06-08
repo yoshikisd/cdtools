@@ -1,1 +1,1 @@
-from CDTools.tools.atoms.atoms import *
+from cdtools.tools.atoms.atoms import *

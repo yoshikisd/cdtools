@@ -1,6 +1,6 @@
-from CDTools.tools import initializers
-from CDTools.tools import propagators
-from CDTools.tools import image_processing
+from cdtools.tools import initializers
+from cdtools.tools import propagators
+from cdtools.tools import image_processing
 
 import numpy as np
 import torch as t

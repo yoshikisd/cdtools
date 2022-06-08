@@ -4,7 +4,7 @@ from scipy import linalg as la
 import torch as t
 from itertools import combinations
 
-from CDTools.tools import analysis, initializers
+from cdtools.tools import analysis, initializers
 
 
 def test_orthogonalize_probes():

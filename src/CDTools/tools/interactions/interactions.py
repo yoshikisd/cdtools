@@ -7,7 +7,7 @@ for ptychographic reconstruction.
 
 import torch as t
 import numpy as np
-from CDTools.tools import propagators, image_processing, polarization
+from cdtools.tools import propagators, image_processing, polarization
 
 __all__ = ['translations_to_pixel', 'pixel_to_translations',
            'project_translations_to_sample',

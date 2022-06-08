@@ -29,6 +29,6 @@ dataset before attempting to do so
 # to be explicit that import * is safe
 __all__ = ['CDataset','Ptycho2DDataset','PolarizedPtycho2DDataset']
 
-from CDTools.datasets.base import CDataset
-from CDTools.datasets.ptycho_2d_dataset import Ptycho2DDataset
-from CDTools.datasets.polarized_ptycho_2d_dataset import PolarizedPtycho2DDataset
+from cdtools.datasets.base import CDataset
+from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
+from cdtools.datasets.polarized_ptycho_2d_dataset import PolarizedPtycho2DDataset

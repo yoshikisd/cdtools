@@ -1,1 +1,1 @@
-from CDTools.tools.propagators.propagators import *
+from cdtools.tools.propagators.propagators import *

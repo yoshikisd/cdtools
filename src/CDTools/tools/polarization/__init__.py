@@ -1,1 +1,1 @@
-from CDTools.tools.polarization.polarization import *
+from cdtools.tools.polarization.polarization import *

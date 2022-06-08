@@ -8,9 +8,9 @@ geierating sensible initializations for the probe guess.
 import math
 import numpy as np
 import torch as t
-from CDTools.tools.propagators import *
-from CDTools.tools.analysis import orthogonalize_probes
-from CDTools.tools import image_processing
+from cdtools.tools.propagators import *
+from cdtools.tools.analysis import orthogonalize_probes
+from cdtools.tools import image_processing
 from scipy.fftpack import next_fast_len
 from scipy.sparse import linalg as spla
 from torch.nn.functional import pad

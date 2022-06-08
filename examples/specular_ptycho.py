@@ -1,4 +1,4 @@
-import CDTools
+import cdtools
 from matplotlib import pyplot as plt
 import numpy as np
 
@@ -6,7 +6,7 @@ import numpy as np
 # This file is too large to be distributed via Github.
 # Please contact Abe Levitan (alevitan@mit) if you would like access
 filename = '/media/Data Bank/CSX_10_18/Processed_CXIs/110531_p.cxi'
-dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
+dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
 
 # This model definition includes lots of tweaks, described below.
@@ -14,7 +14,7 @@ dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
 # randomize_ang defines the initial random phase noise's extent
 # translations_scale defines how aggressive the position reconstruction is
 # scattering_mode overrides any sample normal information stored in the .cxi file
-model = CDTools.models.FancyPtycho.from_dataset(dataset,
+model = cdtools.models.FancyPtycho.from_dataset(dataset,
                                                 randomize_ang = np.pi/4,
                                                 translation_scale=10,
                                                 scattering_mode='reflection')

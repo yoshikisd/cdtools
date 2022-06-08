@@ -1,4 +1,4 @@
-from CDTools.tools import data
+from cdtools.tools import data
 import numpy as np
 import torch as t
 import h5py

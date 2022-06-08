@@ -9,7 +9,7 @@ a way that it is safe to include them in automatic differentiation models.
 
 import numpy as np
 import torch as t
-from CDTools.tools import propagators
+from cdtools.tools import propagators
 
 __all__ = ['centroid', 'centroid_sq', 'sinc_subpixel_shift',
            'find_subpixel_shift', 'find_pixel_shift', 'find_shift',

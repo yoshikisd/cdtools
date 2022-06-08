@@ -1,5 +1,5 @@
-from CDTools.tools import plotting
-from CDTools.tools import initializers
+from cdtools.tools import plotting
+from cdtools.tools import initializers
 import numpy as np
 import torch as t
 import scipy.misc

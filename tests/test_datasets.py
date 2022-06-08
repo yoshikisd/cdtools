@@ -1,5 +1,5 @@
-from CDTools.datasets import *
-from CDTools.tools import data as cdtdata
+from cdtools.datasets import *
+from cdtools.tools import data as cdtdata
 import numpy as np
 import torch as t
 import h5py

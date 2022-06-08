@@ -1,9 +1,9 @@
 import torch as t
-from CDTools.models import CDIModel
-from CDTools import tools
-from CDTools.tools import plotting as p
-from CDTools.tools.interactions import RPI_interaction
-from CDTools.tools import initializers
+from cdtools.models import CDIModel
+from cdtools import tools
+from cdtools.tools import plotting as p
+from cdtools.tools.interactions import RPI_interaction
+from cdtools.tools import initializers
 from scipy.ndimage.morphology import binary_dilation
 import numpy as np
 from copy import copy

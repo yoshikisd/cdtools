@@ -1,5 +1,5 @@
-from CDTools.tools import initializers
-from CDTools.datasets import Ptycho2DDataset
+from cdtools.tools import initializers
+from cdtools.datasets import Ptycho2DDataset
 import numpy as np
 import torch as t
 

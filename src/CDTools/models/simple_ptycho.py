@@ -1,8 +1,8 @@
 import torch as t
-from CDTools.models import CDIModel
-from CDTools.datasets import Ptycho2DDataset
-from CDTools import tools
-from CDTools.tools import plotting as p
+from cdtools.models import CDIModel
+from cdtools.datasets import Ptycho2DDataset
+from cdtools import tools
+from cdtools.tools import plotting as p
 from copy import copy
 from torch.utils import data as torchdata
 from datetime import datetime
@@ -159,7 +159,7 @@ class SimplePtycho(CDIModel):
 
         # First, I need to gather all the relevant data
         # that needs to be added to the dataset
-        entry_info = {'program_name': 'CDTools',
+        entry_info = {'program_name': 'cdtools',
                       'instrument_n': 'Simulated Data',
                       'start_time': datetime.now()}
 

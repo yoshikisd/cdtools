@@ -17,7 +17,7 @@ import torch as t
 from copy import copy
 import h5py
 import pathlib
-from CDTools.tools import data as cdtdata
+from cdtools.tools import data as cdtdata
 from torch.utils import data as torchdata
 
 __all__ = ['CDataset']

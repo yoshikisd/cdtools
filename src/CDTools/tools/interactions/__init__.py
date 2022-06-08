@@ -1,1 +1,1 @@
-from CDTools.tools.interactions.interactions import *
+from cdtools.tools.interactions.interactions import *

@@ -1,8 +1,8 @@
 import numpy as np
 import torch as t
 from matplotlib import pyplot as plt
-from CDTools.datasets import CDataset
-from CDTools.tools import data as cdtdata
+from cdtools.datasets import CDataset
+from cdtools.tools import data as cdtdata
 
 
 __all__ = ['BasicPtychoDataset']

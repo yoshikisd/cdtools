@@ -3,9 +3,9 @@ import torch as t
 from copy import copy
 import h5py
 import pathlib
-from CDTools.datasets import CDataset
-from CDTools.tools import data as cdtdata
-from CDTools.tools import plotting
+from cdtools.datasets import CDataset
+from cdtools.tools import data as cdtdata
+from cdtools.tools import plotting
 
 __all__ = ['Ptycho2DDataset']
 

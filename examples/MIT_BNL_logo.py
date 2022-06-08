@@ -1,11 +1,11 @@
-import CDTools
+import cdtools
 from matplotlib import pyplot as plt
 
 
 # This file is too large to be distributed via Github.
 # Please contact Abe Levitan (alevitan@mit) if you would like access
-filename = '/media/Data Bank/CSX_6_17/Processed_CXIs/79511_p.cxi'
-dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
+filename = '79511_p.cxi'
+dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
 # In this dataset, the edges of the patterns are masked off anyway
 # We can easily just remove this data instead of leaving it to float.
@@ -18,7 +18,7 @@ dataset.mask = dataset.mask[70:-70,70:-70]
 # translations_scale defines how aggressive the position reconstruction is
 # n_modes is the number of incoherent modes
 # propagation_distance is the distance to propagate from the SHARP-style guess of the probe's focal spot (in this case, the value comes from knowledge of the experimental geometry).
-model = CDTools.models.FancyPtycho.from_dataset(dataset,
+model = cdtools.models.FancyPtycho.from_dataset(dataset,
                                                 translation_scale = 4,
                                                 n_modes=2,
                                                 propagation_distance=73e-6)

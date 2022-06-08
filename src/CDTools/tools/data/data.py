@@ -419,7 +419,7 @@ def get_ptycho_translations(cxi_file):
     """Gets an array of x,y,z translations, if such an array has been defined in the file
 
     It negates the translations, because the CXI file format is designed
-    to specify translations of the samples and the CDTools code specifies
+    to specify translations of the samples and the cdtools code specifies
     translations of the optics.
 
     Parameters
@@ -775,7 +775,7 @@ def add_ptycho_translations(cxi_file, translations):
         The translations to be saved
     """
     # accounting for the different definition between cxi files and
-    # CDTools
+    # cdtools
     translations = -translations
 
     add_shot_to_shot_info(cxi_file, translations, 'translation')

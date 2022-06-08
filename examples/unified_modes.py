@@ -1,10 +1,10 @@
-import CDTools
+import cdtools
 from matplotlib import pyplot as plt
 from scipy import io
 
 
 filename = 'example_data/lab_ptycho_data.cxi'
-dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
+dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
 #dataset.inspect(units='mm')
 #plt.show()

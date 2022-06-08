@@ -1,4 +1,4 @@
-from CDTools.tools import losses
+from cdtools.tools import losses
 import numpy as np
 import torch as t
 

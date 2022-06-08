@@ -1,8 +1,8 @@
 from matplotlib import pyplot as plt
 from scipy import io
 
-from CDTools.tools import plotting
-from CDTools.tools import analysis
+from cdtools.tools import plotting
+from cdtools.tools import analysis
 
 
 

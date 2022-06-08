@@ -9,19 +9,19 @@ that one needs for a specific application.
 The submodules are all structured as modules with their own __init__ files,
 which use an import * statement to import from a file defining the various
 functions. This is done to prevent leakage of imported packages into the
-namespace of CDTools. I know, we're all consenting adults, but I just hate
-having numpy and torch defined under CDTools.tools.cmath, you know?
+namespace of cdtools. I know, we're all consenting adults, but I just hate
+having numpy and torch defined under cdtools.tools.cmath, you know?
 
 """
 
-from CDTools.tools import losses
-from CDTools.tools import data
-from CDTools.tools import image_processing
-from CDTools.tools import initializers
-from CDTools.tools import plotting
-from CDTools.tools import interactions
-from CDTools.tools import propagators
-from CDTools.tools import measurements
-from CDTools.tools import analysis
-from CDTools.tools import atoms
-from CDTools.tools import polarization
+from cdtools.tools import losses
+from cdtools.tools import data
+from cdtools.tools import image_processing
+from cdtools.tools import initializers
+from cdtools.tools import plotting
+from cdtools.tools import interactions
+from cdtools.tools import propagators
+from cdtools.tools import measurements
+from cdtools.tools import analysis
+from cdtools.tools import atoms
+from cdtools.tools import polarization

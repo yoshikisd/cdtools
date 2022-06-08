@@ -1,7 +1,7 @@
 import numpy as np
 import torch as t
-from CDTools.models import CDIModel
-from CDTools import tools
+from cdtools.models import CDIModel
+from cdtools import tools
 
 __all__ = ['SimplePtycho']
 

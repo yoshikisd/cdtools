@@ -1,4 +1,4 @@
-from CDTools.tools import measurements
+from cdtools.tools import measurements
 import torch as t
 import numpy as np
 

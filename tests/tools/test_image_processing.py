@@ -1,7 +1,7 @@
 import numpy as np
 import torch as t
 
-from CDTools.tools import image_processing, interactions
+from cdtools.tools import image_processing, interactions
 from scipy import ndimage
 
 def test_centroid():

@@ -51,7 +51,7 @@ def ptycho_cxi_1():
     e1f['experiment_identifier'] = np.string_(e1e['experiment_identifier'])
     e1e['experiment_description'] = 'A fully defined ptychography experiment to test the data loading'
     e1f['experiment_description'] = np.string_(e1e['experiment_description'])
-    e1e['program_name'] = 'CDTools'
+    e1e['program_name'] = 'cdtools'
     e1f['program_name'] = np.string_(e1e['program_name'])
     e1e['title'] = 'The one experiment we did'
     e1f['title'] = np.string_(e1e['title'])

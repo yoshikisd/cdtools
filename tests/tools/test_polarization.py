@@ -1,7 +1,7 @@
 import numpy as np
 import torch as t
-from CDTools.tools.polarization import apply_linear_polarizer, generate_linear_polarizer
-from CDTools.tools.polarization import apply_jones_matrix as jones
+from cdtools.tools.polarization import apply_linear_polarizer, generate_linear_polarizer
+from cdtools.tools.polarization import apply_jones_matrix as jones
 
 
 # Abe - I removed all the imports that didn't need to be here.

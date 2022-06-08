@@ -6,7 +6,7 @@ warnings.filterwarnings("ignore",
 
 __all__ = ['tools', 'datasets', 'models']
 
-from CDTools import tools
-from CDTools import datasets
-from CDTools import models
+from cdtools import tools
+from cdtools import datasets
+from cdtools import models
 

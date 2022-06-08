@@ -1,4 +1,4 @@
-import CDTools
+import cdtools
 from matplotlib import pyplot as plt
 from scipy import io
 
@@ -10,12 +10,12 @@ from scipy import io
 
 # This file is too large to be distributed via Github.
 # Please contact Abe Levitan (alevitan@mit) if you would like access
-filename = '/media/Data Bank/Lab Ptycho/Zone Plate Bragg 633.cxi'
-dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
+filename = 'Zone Plate Bragg 633.cxi'
+dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
 #dataset.inspect()
 
-model = CDTools.models.Bragg2DPtycho.from_dataset(dataset,probe_support_radius=60,correct_tilt=False)
+model = cdtools.models.Bragg2DPtycho.from_dataset(dataset,probe_support_radius=60,correct_tilt=False)
 model.to(device='cuda')
 dataset.get_as(device='cuda')
 

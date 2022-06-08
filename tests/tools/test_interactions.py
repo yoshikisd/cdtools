@@ -1,4 +1,4 @@
-from CDTools.tools import interactions
+from cdtools.tools import interactions
 import numpy as np
 import torch as t
 from numpy import fft

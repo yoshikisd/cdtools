@@ -1,16 +1,16 @@
 import torch as t
-from CDTools.models import CDIModel, FancyPtycho
-from CDTools.datasets import Ptycho2DDataset
-from CDTools import tools
-from CDTools.tools import plotting as p
-# from CDTools.tools import polarized_plotting as pp
-from CDTools.tools import analysis
+from cdtools.models import CDIModel, FancyPtycho
+from cdtools.datasets import Ptycho2DDataset
+from cdtools import tools
+from cdtools.tools import plotting as p
+# from cdtools.tools import polarized_plotting as pp
+from cdtools.tools import analysis
 from matplotlib import pyplot as plt
 from datetime import datetime
 import numpy as np
 from scipy import linalg as sla
 from copy import copy
-from CDTools.tools import polarization
+from cdtools.tools import polarization
 
 __all__ = ['PolarizedFancyPtycho']
 
@@ -353,7 +353,7 @@ class PolarizedFancyPtycho(FancyPtycho):
 
         # First, I need to gather all the relevant data
         # that needs to be added to the dataset
-        entry_info = {'program_name': 'CDTools',
+        entry_info = {'program_name': 'cdtools',
                       'instrument_n': 'Simulated Data',
                       'start_time': datetime.now()}
 

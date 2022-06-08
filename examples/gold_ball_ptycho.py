@@ -1,14 +1,14 @@
-import CDTools
+import cdtools
 from matplotlib import pyplot as plt
 from scipy import io
 
 # First, we load an example dataset from a .cxi file
 filename = 'example_data/AuBalls_700ms_30nmStep_3_6SS_filter.cxi'
-dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
+dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
 # Next, we create a ptychography model from the dataset
 # Note that we explicitly ask for two incoherent probe modes
-model = CDTools.models.FancyPtycho.from_dataset(dataset, n_modes=2)
+model = cdtools.models.FancyPtycho.from_dataset(dataset, n_modes=2)
 
 # Let's do this reconstruction on the GPU, shall we? 
 model.to(device='cuda')

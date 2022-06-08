@@ -1,4 +1,4 @@
-import CDTools
+import cdtools
 import pickle
 from matplotlib import pyplot as plt
 
@@ -11,12 +11,12 @@ with open('example_data/Optical_ptycho_incoherent.pickle', 'rb') as f:
 probe = ptycho_results['probe']
 background = ptycho_results['background']
 
-dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(ss_filename)
+dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(ss_filename)
 
 
 # Next, we create an RPI model from the dataset
 # Note that we explicitly as for two incoherent probe modes
-model = CDTools.models.RPI.from_dataset(dataset, probe, [500,500],
+model = cdtools.models.RPI.from_dataset(dataset, probe, [500,500],
                                         background=background, n_modes=2,
                                         initialization='random')
 

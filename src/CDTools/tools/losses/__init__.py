@@ -1,1 +1,1 @@
-from CDTools.tools.losses.losses import *
+from cdtools.tools.losses.losses import *
