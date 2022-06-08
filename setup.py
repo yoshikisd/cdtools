@@ -16,9 +16,9 @@ setuptools.setup(
     install_requires=[
         "numpy>=1.0",
         "scipy>=1.0",
-        "matplotlib>=2.0", # Matplotlib 2.0 introduces better colormaps and no I'm not sorry
+        "matplotlib>=2.0", # 2.0 introduces better colormaps which are used by default
         "python-dateutil",
-        "torch>=1.9.0", #1.9.0 implements support for autograd on indexed complex tensors, which we need in order to use complex tensors in the forward models
+        "torch>=1.9.0", #1.9.0 implements support for autograd on indexed complex tensors
         "h5py>=2.1"],
     extras_require={
         'tests': ["pytest"],

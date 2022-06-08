@@ -450,7 +450,7 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
             - probe.shape[-2]//2
         j = t.arange(probe.shape[-1],device=probe.device,dtype=t.float32) \
             - probe.shape[-1]//2
-        I,J = t.meshgrid(i,j)
+        I,J = t.meshgrid(i,j, indexing='ij')
         I = 2 * np.pi * I / probe.shape[-2]
         J = 2 * np.pi * J / probe.shape[-1]
         phase_masks = t.exp(1j*(-subpixel_translations[:,0,None,None]*I
@@ -543,7 +543,7 @@ def ptycho_2D_sinc_s_matrix(probe, s_matrix, translations, shift_probe=True, pad
     if shift_probe:
         i = t.arange(probe.shape[-2]) - probe.shape[-2]//2
         j = t.arange(probe.shape[-1]) - probe.shape[-1]//2
-        I,J = t.meshgrid(i,j)
+        I,J = t.meshgrid(i,j, indexing='ij')
         I = 2 * np.pi * I.to(t.float32) / probe.shape[-2]
         J = 2 * np.pi * J.to(t.float32) / probe.shape[-1]
         I = I.to(dtype=probe.dtype,device=probe.device)

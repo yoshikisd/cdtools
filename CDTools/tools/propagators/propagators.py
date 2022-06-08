@@ -385,7 +385,7 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
         # No need to multiply by 2pi
         ki = 2 * np.pi * t.fft.fftfreq(shape[0],spacing[0])
         kj = 2 * np.pi * t.fft.fftfreq(shape[1],spacing[1])
-        Ki, Kj = t.meshgrid(ki,kj)
+        Ki, Kj = t.meshgrid(ki,kj, indexing='ij')
         min_radius = min(t.max(ki),t.max(kj))
         Rs = t.sqrt((Ki/t.max(ki))**2 + (Kj/t.max(kj))**2)
         propagator = propagator * (Rs < bandlimit)
@@ -492,7 +492,7 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     # Then we calculate the frequencies in (i,j) space
     ki = 2 * np.pi * t.fft.fftfreq(shape[0], dtype=inv_basis.dtype)
     kj = 2 * np.pi * t.fft.fftfreq(shape[1], dtype=inv_basis.dtype)
-    K_ij = t.stack(t.meshgrid(ki,kj))
+    K_ij = t.stack(t.meshgrid(ki,kj, indexing='ij'))
     
     # Now we convert these to frequencies in reciprocal space
     # These frequencies span the 2D plane of the input wavefield,

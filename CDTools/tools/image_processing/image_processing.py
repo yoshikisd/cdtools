@@ -39,7 +39,7 @@ def centroid(im, dims=2):
     """
     # For some reason this needs to be a list
     indices = [t.arange(im.shape[-dims+i]).to(t.float32) for i in range(dims)]
-    indices = t.meshgrid(*indices)
+    indices = t.meshgrid(*indices, indexing='ij')
 
     use_dims = [-dims+i for i in range(dims)]
     divisor = t.sum(im, dim=use_dims)
@@ -102,7 +102,7 @@ def sinc_subpixel_shift(im, shift):
 
     i = t.arange(im.shape[0]) - im.shape[0]//2
     j = t.arange(im.shape[1]) - im.shape[1]//2
-    I,J = t.meshgrid(i,j)
+    I,J = t.meshgrid(i,j, indexing='ij')
     I = 2 * np.pi * I.to(t.float32) / im.shape[0]
     J = 2 * np.pi * J.to(t.float32) / im.shape[1]
     I = I.to(dtype=im.dtype,device=im.device)
