@@ -10,10 +10,7 @@ implemented by default in pytorch (such as drawing data in a random order,
 drawing minibatches, etc.)
 
 New Datasets can be defined a subclass of the main CDataset class defined
-in the base.py file. Example implementations of all these functions
-can be found in the code for the Ptycho2DDataset class. In addition, it is
-recommended to read through the tutorial section on defining a new CDI
-dataset before attempting to do so
+in the base.py file, and should define the following functions:
 
 * __init__
 * __len__
@@ -22,6 +19,11 @@ dataset before attempting to do so
 * from_cxi
 * to_cxi
 * inspect
+
+Example implementations of all these functions can be found in the code
+for the Ptycho2DDataset class. In addition, it is recommended to read
+through the tutorial section on defining a new CDI dataset before
+attempting to do so
 
 """
 

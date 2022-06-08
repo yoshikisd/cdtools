@@ -24,6 +24,6 @@ model.compare(dataset) # See how the simulated and measured patterns compare
 plt.show()
 ```
 
-Full installation instructions and documentation can be found [here](https://github.mit.edu/pages/Scattering/CDTools/).
+Full installation instructions and documentation can be found [here](https://github.mit.edu/pages/Scattering/cdtools/).
 
 Have a wonderful day!

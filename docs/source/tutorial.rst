@@ -13,7 +13,7 @@ Our first step will be creating the file and filling out the boilerplate: All th
 
 .. code-block:: python
 
-   import CDTools
+   import cdtools
    from matplotlib import pyplot as plt
    from scipy import io
 
@@ -24,7 +24,7 @@ You can always import more libraries, like numpy, or pytorch, or pandas, or what
 .. code-block:: python
 
    filename = 'example_data/lab_ptycho_data.cxi'
-   dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(filename)
+   dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
    dataset.inspect()
    plt.show()
@@ -35,7 +35,7 @@ Now that we know we have the data loaded and it looks good, we can go ahead and 
 
 .. code-block:: python
 		
-   model = CDTools.models.FancyPtycho.from_dataset(dataset)
+   model = cdtools.models.FancyPtycho.from_dataset(dataset)
    model.to(device='cuda')
    dataset.get_as(device='cuda')
 
@@ -62,7 +62,7 @@ Once we run this, we can take a look at the result. What we see is pretty good, 
 
 .. code-block:: python
 
-   model = CDTools.models.FancyPtycho.from_dataset(dataset, oversampling=2)
+   model = cdtools.models.FancyPtycho.from_dataset(dataset, oversampling=2)
 
 
 And secondly, we note that there don't seem to be any errors with the positioning. So we can just not reconstruct the probe positions, knowing that the initial guesses are already accurate enough. We can do this by writing the following line, just before we run the reconstruction for loop.
@@ -77,7 +77,7 @@ After running this reconstruction, we can see that we're getting a little improv
 
 .. code-block:: python
    
-   model = CDTools.models.FancyPtycho.from_dataset(dataset, oversampling=2,
+   model = cdtools.models.FancyPtycho.from_dataset(dataset, oversampling=2,
                                                    probe_support_radius=90)
 
 
@@ -129,8 +129,8 @@ We can start with the basic skeleton for this file. In addition to our standard 
     import numpy as np
     import torch as t
     from matplotlib import pyplot as plt
-    from CDTools.datasets import CDataset
-    from CDTools.tools import data as cdtdata
+    from cdtools.datasets import CDataset
+    from cdtools.tools import data as cdtdata
 
     __all__ = ['BasicPtychoDataset']
 
@@ -288,8 +288,8 @@ Once again, we start with the basic skeleton
 
     import numpy as np
     import torch as t
-    from CDTools.models import CDIModel
-    from CDTools import tools
+    from cdtools.models import CDIModel
+    from cdtools import tools
 
     __all__ = ['SimplePtycho']
 
