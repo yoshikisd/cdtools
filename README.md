@@ -5,11 +5,11 @@ CDTools is a python library for ptychography and CDI reconstructions, using an A
 ```python
 # imports
 from matplotlib import pyplot as plt
-from cdtools.datasets import Ptycho_2D_Dataset
+from cdtools.datasets import Ptycho2DDataset
 from cdtools.models import FancyPtycho
 
 # Load the file
-dataset = Ptycho_2D_Dataset.from_cxi('ptycho_data.cxi')
+dataset = Ptycho2DDataset.from_cxi('ptycho_data.cxi')
 
 # Generate a model from the data
 model = FancyPtycho.from_dataset(dataset)
