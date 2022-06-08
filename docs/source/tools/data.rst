@@ -1,5 +1,5 @@
 Data
 ====
 
-.. automodule:: CDTools.tools.data
+.. automodule:: cdtools.tools.data
    :members:

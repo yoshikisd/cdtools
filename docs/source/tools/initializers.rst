@@ -1,5 +1,5 @@
 Initializers
 ============
 
-.. automodule:: CDTools.tools.initializers
+.. automodule:: cdtools.tools.initializers
    :members:

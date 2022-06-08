@@ -1,5 +1,5 @@
 Propagators
 ===========
 
-.. automodule:: CDTools.tools.propagators
+.. automodule:: cdtools.tools.propagators
    :members:

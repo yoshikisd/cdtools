@@ -1,5 +1,5 @@
 Interactions
 ============
 
-.. automodule:: CDTools.tools.interactions
+.. automodule:: cdtools.tools.interactions
    :members:

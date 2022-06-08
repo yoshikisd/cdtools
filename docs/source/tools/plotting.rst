@@ -1,5 +1,5 @@
 Plotting
 ========
 
-.. automodule:: CDTools.tools.plotting
+.. automodule:: cdtools.tools.plotting
    :members:

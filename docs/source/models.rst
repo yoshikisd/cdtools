@@ -1,7 +1,7 @@
 Models
 ======
 
-.. automodule:: CDTools.models
+.. automodule:: cdtools.models
    :members:
    :private-members:
 

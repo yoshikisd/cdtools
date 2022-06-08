@@ -6,7 +6,7 @@ Step 1: Download
 
 The source code for CDTools is hosted on it's `MIT github page`_. Access to the MIT github page can be granted to any member of the MIT community - if you are not a member, access can be arranged through a guest account on MIT's GitHub enterprise server.
 
-.. _`MIT github page`: https://github.mit.edu/Scattering/CDTools
+.. _`MIT github page`: https://github.mit.edu/Scattering/cdtools
 
 It is recommended that you clone the repository, rather than just downloading the contents, as it remains under development. Cloning the repository will allow you to easily get access to new updates, bug fixes, etc.
 

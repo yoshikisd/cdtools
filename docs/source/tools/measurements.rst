@@ -1,5 +1,5 @@
 Measurements
 ============
 
-.. automodule:: CDTools.tools.measurements
+.. automodule:: cdtools.tools.measurements
    :members:

@@ -1,5 +1,5 @@
 Image Processing
 ================
 
-.. automodule:: CDTools.tools.image_processing
+.. automodule:: cdtools.tools.image_processing
    :members:

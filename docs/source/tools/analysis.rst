@@ -1,5 +1,5 @@
 Analysis
 ========
 
-.. automodule:: CDTools.tools.analysis
+.. automodule:: cdtools.tools.analysis
    :members:

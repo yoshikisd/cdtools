@@ -94,11 +94,5 @@ First is :code:`analysis.synthesize_reconstructions`. This function takes a stac
 
 Second is :code:`analysis.calc_consistency_prtf`. This function compares the power into various spatial frequencies between a stack of individual reconstructions and a synthesized reconstruction, in analogy with the phase retrieval transfer function. It then outputs a curve analogous to the PRTF, that shows at what spatial frequencies the reconstructions have converged consistently. This result is then plotted as well.
 
-Much of this functionality is duplicated by the analysis script, which will perform much of the same analysis on any saved reconstruction ensemble saved in this format.
-
-.. code-block:: bash
-		
-   $ python -m CDTools.scripts.synthesize example_reconstructions/gold_balls_ensemble.pickle
-
 
 

@@ -1,5 +1,5 @@
 Losses
 ======
 
-.. automodule:: CDTools.tools.losses
+.. automodule:: cdtools.tools.losses
    :members:
