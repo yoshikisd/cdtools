@@ -6,7 +6,6 @@ ptychography model. Each function implements a different propagator.
 
 import torch as t
 from torch.nn.functional import grid_sample
-from scipy import fftpack
 import numpy as np
 from matplotlib import pyplot as plt
 
