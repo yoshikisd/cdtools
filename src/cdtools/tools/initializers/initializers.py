@@ -11,7 +11,6 @@ import torch as t
 from cdtools.tools.propagators import *
 from cdtools.tools.analysis import orthogonalize_probes
 from cdtools.tools import image_processing
-from scipy.fftpack import next_fast_len
 from scipy.sparse import linalg as spla
 from torch.nn.functional import pad
 import numpy as np
@@ -20,7 +19,12 @@ from functools import *
 __all__ = ['exit_wave_geometry', 'calc_object_setup', 'gaussian',
            'gaussian_probe', 'SHARP_style_probe', 'STEM_style_probe',
            'RPI_spectral_init',
-           'generate_subdominant_modes'] 
+           'generate_subdominant_modes']
+
+# I need to remove a dependency on scipy.fftpack, so I did this.
+# I should replace this with a real function
+def next_fast_len(x):
+    return x
 
 def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, opt_for_fft=True, padding=0, oversampling=1):
     """Returns an exit wave basis and shape, as well as a detector slice for the given detector geometry

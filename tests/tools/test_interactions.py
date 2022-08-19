@@ -2,7 +2,7 @@ from cdtools.tools import interactions
 import numpy as np
 import torch as t
 from numpy import fft
-from scipy.fftpack import fftshift, ifftshift
+from numpy.fft import fftshift, ifftshift
 import pytest
 
 

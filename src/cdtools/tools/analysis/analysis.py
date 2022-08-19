@@ -9,7 +9,6 @@ data has been stored in numpy arrays.
 import torch as t
 import numpy as np
 from cdtools.tools import image_processing as ip
-from scipy import fftpack
 from scipy import linalg as sla
 from scipy import special
 
@@ -378,8 +377,8 @@ def calc_consistency_prtf(synth_obj, objects, basis, obj_slice=None,nbins=None):
     di = np.linalg.norm(basis[:,0])
     dj = np.linalg.norm(basis[:,1])
 
-    i_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[0],d=di))
-    j_freqs = fftpack.fftshift(fftpack.fftfreq(synth_fft.shape[1],d=dj))
+    i_freqs = np.fft.fftshift(np.fft.fftfreq(synth_fft.shape[0],d=di))
+    j_freqs = np.fft.fftshift(np.fft.fftfreq(synth_fft.shape[1],d=dj))
 
     Js,Is = np.meshgrid(j_freqs,i_freqs)
     Rs = np.sqrt(Is**2+Js**2)
@@ -523,8 +522,8 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1., limit='side'):
     di = np.linalg.norm(basis[:,0])
     dj = np.linalg.norm(basis[:,1])
 
-    i_freqs = fftpack.fftshift(fftpack.fftfreq(cor_fft.shape[0],d=di))
-    j_freqs = fftpack.fftshift(fftpack.fftfreq(cor_fft.shape[1],d=dj))
+    i_freqs = np.fft.fftshift(np.fft.fftfreq(cor_fft.shape[0],d=di))
+    j_freqs = np.fft.fftshift(np.fft.fftfreq(cor_fft.shape[1],d=dj))
 
     Js,Is = np.meshgrid(j_freqs,i_freqs)
     Rs = np.sqrt(Is**2+Js**2)
@@ -919,8 +918,8 @@ def calc_generalized_frc(fields_1, fields_2, basis, im_slice=None, nbins=None, s
     di = np.linalg.norm(basis[:,0])
     dj = np.linalg.norm(basis[:,1])
 
-    i_freqs = fftpack.fftshift(fftpack.fftfreq(cor_fft.shape[0],d=di))
-    j_freqs = fftpack.fftshift(fftpack.fftfreq(cor_fft.shape[1],d=dj))
+    i_freqs = np.fft.fftshift(np.fft.fftfreq(cor_fft.shape[0],d=di))
+    j_freqs = np.fft.fftshift(np.fft.fftfreq(cor_fft.shape[1],d=dj))
 
     Js,Is = np.meshgrid(j_freqs,i_freqs)
     Rs = np.sqrt(Is**2+Js**2)

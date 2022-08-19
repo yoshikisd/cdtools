@@ -10,7 +10,6 @@ written by Jim LeBeau, but above is the original reference.
 
 import numpy as np
 import torch as t
-from scipy import fftpack
 
 
 __all__ = ['generate_k_grid','generate_atom']
@@ -1259,8 +1258,8 @@ def fParams(Z):
 
 
 def generate_k_grid(shape, spacing):
-    ki = 2 * np.pi * fftpack.fftfreq(shape[0],spacing[0])
-    kj = 2 * np.pi * fftpack.fftfreq(shape[1],spacing[1])
+    ki = 2 * np.pi * np.fft.fftfreq(shape[0],spacing[0])
+    kj = 2 * np.pi * np.fft.fftfreq(shape[1],spacing[1])
     Kj, Ki = np.meshgrid(kj,ki)
     return Ki, Kj, np.sqrt(Ki**2 + Kj**2)
     

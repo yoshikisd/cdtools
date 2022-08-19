@@ -1,5 +1,4 @@
 import numpy as np
-from scipy import fftpack as ffts
 from scipy import linalg as la
 import torch as t
 from itertools import combinations
@@ -251,18 +250,18 @@ def test_calc_frc():
     nbins = 100
     snr = 2
     
-    cor_fft = ffts.fftshift(ffts.fft2(obj1[10:-10,20:-20])) * \
-        ffts.fftshift(np.conj(ffts.fft2(obj2[10:-10,20:-20])))
+    cor_fft = np.fft.fftshift(np.fft.fft2(obj1[10:-10,20:-20])) * \
+        np.fft.fftshift(np.conj(np.fft.fft2(obj2[10:-10,20:-20])))
     
-    F1 = np.abs(ffts.fftshift(ffts.fft2(obj1[10:-10,20:-20])))**2
-    F2 = np.abs(ffts.fftshift(ffts.fft2(obj2[10:-10,20:-20])))**2
+    F1 = np.abs(np.fft.fftshift(np.fft.fft2(obj1[10:-10,20:-20])))**2
+    F2 = np.abs(np.fft.fftshift(np.fft.fft2(obj2[10:-10,20:-20])))**2
     
 
     di = np.linalg.norm(basis[:,0]) 
     dj = np.linalg.norm(basis[:,1])
     
-    i_freqs = ffts.fftshift(ffts.fftfreq(cor_fft.shape[0],d=di))
-    j_freqs = ffts.fftshift(ffts.fftfreq(cor_fft.shape[1],d=dj))
+    i_freqs = np.fft.fftshift(np.fft.fftfreq(cor_fft.shape[0],d=di))
+    j_freqs = np.fft.fftshift(np.fft.fftfreq(cor_fft.shape[1],d=dj))
     
     Js,Is = np.meshgrid(j_freqs,i_freqs)
     Rs = np.sqrt(Is**2+Js**2)
