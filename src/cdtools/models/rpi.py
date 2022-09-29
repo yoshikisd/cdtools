@@ -62,7 +62,8 @@ class RPI(CDIModel):
     def __init__(self, wavelength, detector_geometry, probe_basis,
                  probe, obj_guess, detector_slice=None,
                  background=None, mask=None, saturation=None,
-                 obj_support=None, oversampling=1, weight_matrix=False):
+                 obj_support=None, oversampling=1, weight_matrix=False,
+                 simulate_finite_pixels=False):
 
         super(RPI, self).__init__()
 
@@ -134,9 +135,11 @@ class RPI(CDIModel):
 
         self.oversampling = oversampling
 
+        self.simulate_finite_pixels=simulate_finite_pixels
+
 
     @classmethod
-    def from_dataset(cls, dataset, probe, obj_size=None, background=None, mask=None, padding=0, n_modes=1, saturation=None, scattering_mode=None, oversampling=1, auto_center=False, initialization='random', opt_for_fft=False, weight_matrix=False, probe_threshold=0):
+    def from_dataset(cls, dataset, probe, obj_size=None, background=None, mask=None, padding=0, n_modes=1, saturation=None, scattering_mode=None, oversampling=1, auto_center=False, initialization='random', opt_for_fft=False, weight_matrix=False, probe_threshold=0, simulate_finite_pixels=False):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -213,7 +216,13 @@ class RPI(CDIModel):
             # on a coarser grid needs to be accounted for here that is not
             # accounted for yet
             scale = t.sum(patterns[0]) / t.sum(t.abs(probe)**2)
-            obj_guess = scale * t.exp(2j * np.pi * t.rand([n_modes,]+obj_size))
+            obj_guess = scale * t.exp(2j * np.pi * t.rand([n_modes,]+list(obj_size)))
+        elif initialization.lower().strip() == 'uniform':
+            # I think something to do with the fact that the object is defined
+            # on a coarser grid needs to be accounted for here that is not
+            # accounted for yet
+            scale = t.sum(patterns[0]) / t.sum(t.abs(probe)**2)
+            obj_guess = scale * t.ones([n_modes,]+list(obj_size), dtype=probe.dtype)
         elif initialization.lower().strip() == 'spectral':
             if background is not None:
                 obj_guess = initializers.RPI_spectral_init(
@@ -226,7 +235,7 @@ class RPI(CDIModel):
                 
         else:
             raise KeyError('Initialization "' + str(initialization) + \
-                           '" invalid - use "spectral" or "random"')
+                           '" invalid - use "spectral", "uniform", or "random"')
 
         probe_intensity = t.sqrt(t.sum(t.abs(probe)**2,axis=0))
         probe_fft = tools.propagators.far_field(probe_intensity)
@@ -244,7 +253,8 @@ class RPI(CDIModel):
                    probe, obj_guess, detector_slice=det_slice,
                    background=background, mask=mask, saturation=saturation,
                    obj_support=obj_support, oversampling=oversampling,
-                   weight_matrix=weight_matrix)
+                   weight_matrix=weight_matrix,
+                   simulate_finite_pixels=simulate_finite_pixels)
 
     @classmethod
     def from_calibration(cls, calibration, obj_size=None, n_modes=1, saturation=None):
@@ -353,7 +363,8 @@ class RPI(CDIModel):
                             detector_slice=self.detector_slice,
                             measurement=tools.measurements.incoherent_sum,
                             saturation=self.saturation,
-                            oversampling=self.oversampling)
+                            oversampling=self.oversampling,
+                            simulate_finite_pixels=self.simulate_finite_pixels)
         return m
     
     def loss(self, sim_data, real_data, mask=None):

@@ -33,7 +33,8 @@ class FancyPtycho(CDIModel):
                  fourier_probe=False,
                  loss='amplitude mse',
                  units='um',
-                 simulate_probe_translation=False
+                 simulate_probe_translation=False,
+                 simulate_finite_pixels=False,
                  ):
 
         super(FancyPtycho, self).__init__()
@@ -124,6 +125,8 @@ class FancyPtycho(CDIModel):
             Is, Js = t.meshgrid(Is/t.max(Is), Js/t.max(Js))
             self.I_phase = 2 * np.pi* Is
             self.J_phase = 2 * np.pi* Js
+
+        self.simulate_finite_pixels = simulate_finite_pixels
             
         # Here we set the appropriate loss function
         if (loss.lower().strip() == 'amplitude mse'
@@ -155,7 +158,8 @@ class FancyPtycho(CDIModel):
                      fourier_probe=False,
                      loss='amplitude mse',
                      units='um',
-                     simulate_probe_translation=False
+                     simulate_probe_translation=False,
+                     simulate_finite_pixels=False,
                      ):
 
         wavelength = dataset.wavelength
@@ -209,6 +213,7 @@ class FancyPtycho(CDIModel):
 
         # Next generate the object geometry from the probe geometry and
         # the translations
+
         pix_translations = tools.interactions.translations_to_pixel(probe_basis, translations, surface_normal=surface_normal)
 
         obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=200)
@@ -293,7 +298,8 @@ class FancyPtycho(CDIModel):
                    fourier_probe=fourier_probe,
                    oversampling=oversampling,
                    loss=loss, units=units,
-                   simulate_probe_translation=simulate_probe_translation)
+                   simulate_probe_translation=simulate_probe_translation,
+                   simulate_finite_pixels=simulate_finite_pixels)
 
 
     def interaction(self, index, translations, *args):
@@ -376,7 +382,8 @@ class FancyPtycho(CDIModel):
             detector_slice=self.detector_slice,
             measurement=tools.measurements.incoherent_sum,
             saturation=self.saturation,
-            oversampling=self.oversampling)
+            oversampling=self.oversampling,
+            simulate_finite_pixels=self.simulate_finite_pixels)
 
 
     # Note: No "loss" function is defined here, because it is added

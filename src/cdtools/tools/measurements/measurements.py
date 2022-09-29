@@ -17,7 +17,7 @@ from torch.nn.functional import avg_pool2d
 __all__ = ['intensity', 'incoherent_sum', 'quadratic_background']
 
 
-def intensity(wavefield, detector_slice=None, epsilon=1e-7, saturation=None, oversampling=1):
+def intensity(wavefield, detector_slice=None, epsilon=1e-7, saturation=None, oversampling=1, simulate_finite_pixels=False):
     """Returns the intensity of a wavefield
     
     The intensity is defined as the magnitude squared of the
@@ -40,8 +40,30 @@ def intensity(wavefield, detector_slice=None, epsilon=1e-7, saturation=None, ove
     sim_patterns : torch.Tensor
         A real MxN array storing the wavefield's intensities
     """
-    output = t.abs(wavefield)**2
+    if simulate_finite_pixels:
+        inverse_fft = t.fft.fftshift(t.fft.ifft2(wavefield), dim=(-2,-1))
+        pad1l = wavefield.shape[-2]//2
+        pad1r = wavefield.shape[-2] - pad1l
+        pad2l = wavefield.shape[-1]//2
+        pad2r = wavefield.shape[-1] - pad2l
+        padded = t.nn.functional.pad(inverse_fft, (pad1l, pad1r, pad2l, pad2r))
+        upsampled_field = t.fft.fft2(t.fft.ifftshift(padded, dim=(-2,-2)))
+        upsampled_intensity = t.abs(upsampled_field)**2
+        ifft_intensity = t.fft.fftshift(t.fft.ifft2(upsampled_intensity), dim=(-2,-1))
+        # Now we take a sinc function
+        xs = t.arange(ifft_intensity.shape[-2])
+        xs = (xs / t.max(xs)) * 2 - 1
+        ys = t.arange(ifft_intensity.shape[-1])
+        ys = (ys / t.max(ys)) * 2 - 1
+        Xs, Ys = t.meshgrid(xs, ys, indexing='ij')
+        mask = (t.special.sinc(Xs) * t.special.sinc(Ys)).to(device=ifft_intensity.device)
+        blurred_intensity = t.fft.fft2(t.fft.ifftshift(mask * ifft_intensity, dim=(-2,-2)))
+        output = blurred_intensity[...,::2,::2]
+    else:
+        output = t.abs(wavefield)**2
 
+        
+    
     # Now we apply oversampling
     if oversampling != 1:
         if wavefield.dim() == 2:
@@ -63,7 +85,7 @@ def intensity(wavefield, detector_slice=None, epsilon=1e-7, saturation=None, ove
         return t.clamp(output + epsilon,0,saturation)
             
             
-def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=None, oversampling=1):
+def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=None, oversampling=1, simulate_finite_pixels=False):
     """Returns the incoherent sum of the intensities of the wavefields
     
     The intensity is defined as the sum of the magnitudes squared of
@@ -91,8 +113,27 @@ def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=Non
     sim_patterns : torch.Tensor 
         A real LXMxN array storing the incoherently summed intensities
     """
-
-    output = t.sum(t.abs(wavefields)**2,dim=-3) 
+    if simulate_finite_pixels:
+        inverse_fft = t.fft.fftshift(t.fft.ifft2(wavefields), dim=(-2,-1))
+        pad1l = wavefields.shape[-2]//2
+        pad1r = wavefields.shape[-2] - pad1l
+        pad2l = wavefields.shape[-1]//2
+        pad2r = wavefields.shape[-1] - pad2l
+        padded = t.nn.functional.pad(inverse_fft, (pad1l, pad1r, pad2l, pad2r))
+        upsampled_field = t.fft.fft2(t.fft.ifftshift(padded, dim=(-2,-2)))
+        upsampled_intensity = t.sum(t.abs(upsampled_field)**2, dim=-3)
+        ifft_intensity = t.fft.fftshift(t.fft.ifft2(upsampled_intensity), dim=(-2,-1))
+        # Now we take a sinc function
+        xs = t.arange(ifft_intensity.shape[-2])
+        xs = (xs / t.max(xs)) * 2 - 1
+        ys = t.arange(ifft_intensity.shape[-1])
+        ys = (ys / t.max(ys)) * 2 - 1
+        Xs, Ys = t.meshgrid(xs, ys, indexing='ij')
+        mask = (t.special.sinc(Xs) * t.special.sinc(Ys)).to(device=ifft_intensity.device)
+        blurred_intensity = t.fft.fft2(t.fft.ifftshift(mask * ifft_intensity, dim=(-2,-2)))
+        output = t.abs(blurred_intensity[...,::2,::2])
+    else:
+        output = t.sum(t.abs(wavefields)**2,dim=-3) 
 
     # Now we apply oversampling
     if oversampling != 1:
@@ -114,7 +155,7 @@ def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=Non
         return t.clamp(output + epsilon,0,saturation)
 
 
-def quadratic_background(wavefield, background, *args, detector_slice=None, measurement=intensity, epsilon=1e-7, saturation=None, oversampling=1):
+def quadratic_background(wavefield, background, *args, detector_slice=None, measurement=intensity, epsilon=1e-7, saturation=None, oversampling=1, simulate_finite_pixels=False):
     """Returns the intensity of a wavefield plus a background
     
     The intensity is calculated via the given measurment function 
@@ -145,10 +186,13 @@ def quadratic_background(wavefield, background, *args, detector_slice=None, meas
     
     if detector_slice is None:
         output = measurement(wavefield, *args, epsilon=epsilon,
-                             oversampling=oversampling) + background**2
+                             oversampling=oversampling,
+                             simulate_finite_pixels=simulate_finite_pixels) \
+                             + background**2
     else:
         output = measurement(wavefield, *args, detector_slice=detector_slice,
-                             epsilon=epsilon, oversampling=oversampling) \
+                             epsilon=epsilon, oversampling=oversampling,
+                             simulate_finite_pixels=simulate_finite_pixels) \
                              + background**2
 
     # This has to be done after the background is added, hence we replicate
