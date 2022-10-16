@@ -22,34 +22,27 @@ class SimplePtycho(CDIModel):
                  surface_normal=np.array([0.,0.,1.]), mask=None):
 
         super(SimplePtycho,self).__init__()
-        self.wavelength = t.tensor(wavelength)
-        self.detector_geometry = copy(detector_geometry)
-        det_geo = self.detector_geometry
-        if hasattr(det_geo, 'distance'):
-            det_geo['distance'] = t.tensor(det_geo['distance'])
-        if hasattr(det_geo, 'basis'):
-            det_geo['basis'] = t.tensor(det_geo['basis'])
-        if hasattr(det_geo, 'corner'):
-            det_geo['corner'] = t.tensor(det_geo['corner'])
+        self.register_buffer('wavelength', t.as_tensor(wavelength))
+        self.store_detector_geometry(detector_geometry)
 
-        self.min_translation = t.tensor(min_translation)
-
-        self.probe_basis = t.tensor(probe_basis)
+        self.register_buffer('min_translation', t.as_tensor(min_translation))
+        self.register_buffer('probe_basis', t.as_tensor(probe_basis))
         self.detector_slice = copy(detector_slice)
 
-        self.surface_normal = t.tensor(surface_normal)
+        self.register_buffer('surface_normal', t.as_tensor(surface_normal))
 
+        
         if mask is None:
-            self.mask = None
+            self.register_buffer('mask', None)
         else:
-            self.mask = t.tensor(mask, dtype=t.bool)
+            self.register_buffer('mask', t.as_tensor(mask, dtype=t.bool))
 
         probe_guess = t.tensor(probe_guess, dtype=t.complex64)
         obj_guess = t.tensor(obj_guess, dtype=t.complex64)
 
         # We rescale the probe here so it learns at the same rate as the
         # object
-        self.probe_norm = t.max(t.abs(probe_guess))
+        self.register_buffer('probe_norm', t.max(t.abs(probe_guess)))
 
         self.probe = t.nn.Parameter(probe_guess / self.probe_norm)
         self.obj = t.nn.Parameter(obj_guess)
@@ -133,26 +126,6 @@ class SimplePtycho(CDIModel):
         return tools.losses.amplitude_mse(real_data, sim_data, mask=mask)
 
 
-    def to(self, *args, **kwargs):
-        super(SimplePtycho, self).to(*args, **kwargs)
-        self.wavelength = self.wavelength.to(*args,**kwargs)
-        # move the detector geometry too
-        det_geo = self.detector_geometry
-        if hasattr(det_geo, 'distance'):
-            det_geo['distance'] = det_geo['distance'].to(*args,**kwargs)
-        if hasattr(det_geo, 'basis'):
-            det_geo['basis'] = det_geo['basis'].to(*args,**kwargs)
-        if hasattr(det_geo, 'corner'):
-            det_geo['corner'] = det_geo['corner'].to(*args,**kwargs)
-
-        if self.mask is not None:
-            self.mask = self.mask.to(*args, **kwargs)
-
-        self.min_translation = self.min_translation.to(*args,**kwargs)
-        self.probe_basis = self.probe_basis.to(*args,**kwargs)
-        self.probe_norm = self.probe_norm.to(*args,**kwargs)
-        self.surface_normal = self.surface_normal.to(*args, **kwargs)
-
     def sim_to_dataset(self, args_list):
         # In the future, potentially add more control
         # over what metadata is saved (names, etc.)
@@ -201,14 +174,6 @@ class SimplePtycho(CDIModel):
         ('Object Phase',
          lambda self, fig: p.plot_phase(self.obj, fig=fig, basis=self.probe_basis))
     ]
-
-
-
-    def save_results(self):
-        probe = self.probe.detach().cpu().numpy()
-        probe = probe * self.probe_norm.detach().cpu().numpy()
-        obj = self.obj.detach().cpu().numpy()
-        return {'probe':probe,'obj':obj}
 
 
     def ePIE(self, iterations, dataset, beta = 1.0):

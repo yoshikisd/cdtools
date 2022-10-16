@@ -94,16 +94,47 @@ class CDIModel(t.nn.Module):
     def loss(self, sim_data, real_data):
         raise NotImplementedError()
 
+    
+    def store_detector_geometry(self, detector_geometry):
+        if 'distance' in detector_geometry:
+            self.register_buffer('det_distance',
+                                 t.as_tensor(detector_geometry['distance']))
+        if 'basis' in detector_geometry:
+            self.register_buffer('det_basis',
+                                 t.as_tensor(detector_geometry['basis']))
+        if 'corner' in detector_geometry:
+            self.register_buffer('det_corner',
+                                 t.as_tensor(detector_geometry['corner']))
 
-    def to(self, *args, **kwargs):
-        super(CDIModel,self).to(*args,**kwargs)
-
-
+    def get_detector_geometry(self):
+        detector_geometry = {}
+        if hasattr(self, 'det_distance'):
+            detector_geometry['distance'] = self.det_distance
+        if hasattr(self, 'det_basis'):
+            detector_geometry['basis'] = self.det_basis
+        if hasattr(self, 'det_corner'):
+            detector_geometry['corner'] = self.det_corner
+        return detector_geometry    
+    
     def simulate_to_dataset(self, args_list):
         raise NotImplementedError()
 
     def save_results(self):
-        raise NotImplementedError()
+        """A convenience function to get the state dict as numpy arrays
+
+        This function exists for two reasons, even though it is just a thin
+        wrapper on top of t.module.state_dict(). First, because the model
+        parameters for Automatic Differentiation ptychography and
+        related CDI methods *are* the results, it's nice to explicitly
+        recognize the role of extracting the state_dict as saving the
+        results of the reconstruction
+
+        Second, because display, further processing, long-term storage,
+        etc. are often done with dictionaries of numpy files, it's useful
+        to have a convenience function which does that conversion
+        automatically.
+        """
+        return {k: v.cpu().numpy() for k, v in self.state_dict().items()}
 
     def AD_optimize(self, iterations, data_loader,  optimizer,\
                     scheduler=None, regularization_factor=None, thread=True,
