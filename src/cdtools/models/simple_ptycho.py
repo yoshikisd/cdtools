@@ -44,9 +44,16 @@ class SimplePtycho(CDIModel):
         # object
         self.register_buffer('probe_norm', t.max(t.abs(probe_guess)))
 
-        self.probe = t.nn.Parameter(probe_guess / self.probe_norm)
-        self.obj = t.nn.Parameter(obj_guess)
+        self.probe_data = t.nn.Parameter(t.view_as_real(probe_guess / self.probe_norm))
+        self.obj_data = t.nn.Parameter(t.view_as_real(obj_guess))
 
+    @property
+    def probe(self):
+        return t.view_as_complex(self.probe_data)
+
+    @property
+    def obj(self):
+        return t.view_as_complex(self.obj_data)
 
     @classmethod
     def from_dataset(cls, dataset):
@@ -99,11 +106,11 @@ class SimplePtycho(CDIModel):
 
 
     def interaction(self, index, translations):
+
         pix_trans = tools.interactions.translations_to_pixel(self.probe_basis,
                                                              translations,
                                             surface_normal=self.surface_normal)
         pix_trans -= self.min_translation
-
         return tools.interactions.ptycho_2D_round(self.probe_norm * self.probe,
                                                   self.obj,
                                                   pix_trans)
