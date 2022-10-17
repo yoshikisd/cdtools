@@ -10,6 +10,11 @@ import numpy as np
 
 __all__ = ['SimplePtycho']
 
+class complexWrapper(t.Tensor):
+    def __new__(base_tensor):
+        return t.view_as_complex(base_tensor)
+        
+
 class SimplePtycho(CDIModel):
     """A simple ptychography model for exploring ideas and extensions
 
@@ -44,11 +49,14 @@ class SimplePtycho(CDIModel):
         # object
         self.register_buffer('probe_norm', t.max(t.abs(probe_guess)))
 
-        self.probe_data = t.nn.Parameter(t.view_as_real(probe_guess / self.probe_norm))
+        self.probe_data = complexParameter(probe_guess/self.probe_norm)
+        #self.probe_data = t.nn.Parameter(t.view_as_real(probe_guess / self.probe_norm))
         self.obj_data = t.nn.Parameter(t.view_as_real(obj_guess))
 
     @property
     def probe(self):
+        probe = t.view_as_complex(self.probe_data)
+        
         return t.view_as_complex(self.probe_data)
 
     @property
@@ -106,7 +114,6 @@ class SimplePtycho(CDIModel):
 
 
     def interaction(self, index, translations):
-
         pix_trans = tools.interactions.translations_to_pixel(self.probe_basis,
                                                              translations,
                                             surface_normal=self.surface_normal)
@@ -181,7 +188,7 @@ class SimplePtycho(CDIModel):
         ('Object Phase',
          lambda self, fig: p.plot_phase(self.obj, fig=fig, basis=self.probe_basis))
     ]
-
+    
 
     def ePIE(self, iterations, dataset, beta = 1.0):
         """Runs an ePIE reconstruction as described in `Maiden et al. (2017) <https://www.osapublishing.org/optica/abstract.cfm?uri=optica-4-7-736>`_.

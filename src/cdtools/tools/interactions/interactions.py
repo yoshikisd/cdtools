@@ -43,7 +43,6 @@ def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0.,0.,1.
     pixel_translations : torch.Tensor
         A Jx2 stack of translations in internal (i,j) pixel-space, or a single translation
     """
-
     projection_1 = t.as_tensor(np.array([[1,0,0],
                                          [0,1,0],
                                          [0,0,0]]),
@@ -53,7 +52,8 @@ def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0.,0.,1.
     projection_2[2] = t.as_tensor(-surface_normal / surface_normal[2],
                                   dtype=projection_2.dtype,
                                   device=projection_2.device)
-    projection_2 = t.inverse(projection_2)
+    projection_2 = t.linalg.inv(projection_2)
+    
 
     basis_vectors_inv = t.pinverse(basis).to(device=translations.device,
                                              dtype=translations.dtype)

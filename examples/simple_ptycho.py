@@ -18,7 +18,7 @@ model = cdtools.models.SimplePtycho.from_dataset(dataset)
 #    def __getattr__(self, name):
 #        return getattr(self.module, name)
 
-model = t.nn.DataParallel(model, device_ids=[0,1,2,3])
+#model = t.nn.DataParallel(model, device_ids=[0,1,2,3])
 
 
 # Make a dataloader

@@ -35,6 +35,8 @@ def demo_basic():
         print(i)
         optimizer.zero_grad()
         outputs = ddp_model(torch.randn(20, 10))
+        mat = torch.rand([3,3], dtype=torch.complex64)
+        inv_mat = torch.inverse(mat)
         labels = torch.randn(20, 5).to(device_id)
         loss_fn(outputs, labels).backward()
         optimizer.step()

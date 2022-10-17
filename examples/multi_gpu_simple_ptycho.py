@@ -34,7 +34,7 @@ def demo():
     sampler = torchdata.distributed.DistributedSampler(dataset)
     # Make a dataloader
     #data_loader = torchdata.DataLoader(dataset, batch_size=20,
-    #                                   shuffle=True)
+    #                                   shuffle=True, num_workers=0)
     data_loader = torchdata.DataLoader(dataset, batch_size=20,
                                        shuffle=False, sampler=sampler)
     
@@ -42,26 +42,29 @@ def demo():
     dataset.get_as(device=device)
     
     # Define the optimizer
-    optimizer = MyAdam(model.parameters(), lr=0.01)
+    #optimizer = MyAdam(model.parameters(), lr=0.01)
+    optimizer = t.optim.Adam(model.parameters(), lr=0.01)
     
     normalization=0
-    for inputs, patterns in data_loader:
+    for inputs, patterns in dataset:#data_loader:
         normalization += t.sum(patterns)
         
     dist.all_reduce(normalization)
 
-    for it in range(100):
+    for it in range(10):
+        print(it)
         sampler.set_epoch(it)
         loss = 0
         N = 0
         t0 = time.time()
         for inputs, patterns in data_loader:
+            #print(inputs)
             N += 1
             def closure():
                 optimizer.zero_grad()
                 
                 sim_patterns = model.forward(*inputs)
-            
+                
                 if hasattr(model, 'mask'):
                     loss = model.loss(patterns,sim_patterns, mask=model.mask)
                 else:
@@ -70,12 +73,11 @@ def demo():
                 loss.backward()
                 return loss.detach()
 
-            loss += optimizer.step(closure).detach()#.cpu().numpy()
+            loss += optimizer.step(closure)#.cpu().numpy()
         #dist.all_reduce(loss)
         #loss = dist.all_reduce(loss)
         #print(it, 'time', time.time()-t0)
         #print(loss / normalization)
-        
     return loss#.cpu().numpy()
 
 if __name__=='__main__':
