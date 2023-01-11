@@ -34,6 +34,7 @@ from cdtools.models.rpi import RPI
 from cdtools.models.multimode_rpi import MultimodeRPI
 from cdtools.models.time_resolved_ptycho_calibration import TimeResolvedPtychoCalibration
 from cdtools.models.time_resolved_rpi import TimeResolvedRPI
+from cdtools.models.fastccd_ptycho import FastCCDPtycho
 
 # Still needs to be updated for the new complex numbers
 #from cdtools.models.s_matrix_ptycho import SMatrixPtycho

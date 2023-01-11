@@ -11,10 +11,30 @@ import numpy as np
 import torch as t
 from cdtools.tools import propagators
 
-__all__ = ['centroid', 'centroid_sq', 'sinc_subpixel_shift',
+__all__ = ['hann_window', 'centroid', 'centroid_sq', 'sinc_subpixel_shift',
            'find_subpixel_shift', 'find_pixel_shift', 'find_shift',
            'convolve_1d', 'fourier_upsample']
 
+def hann_window(im):
+    """ Applies a hann window to a 2D image to apodize it
+
+    TODO: update for pytorch
+    
+    Parameters
+    ----------
+    im: np.array
+        A numpy array to apply a hann window to
+
+    Returns
+    -------
+    apodidzed : np.array
+        The image, apodized by a hann window
+    """
+    Xs, Ys = np.mgrid[:im.shape[0],:im.shape[1]]
+    Xhann = np.sin(np.pi*Xs/(im.shape[1]-1))**2
+    Yhann = np.sin(np.pi*Ys/(im.shape[0]-1))**2
+    Hann = Xhann * Yhann
+    return im * Hann
 
 def centroid(im, dims=2):
     """Returns the centroid of an image or a stack of images

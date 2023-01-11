@@ -8,12 +8,8 @@ from torch.utils import data as torchdata
 from datetime import datetime
 import numpy as np
 
-__all__ = ['SimplePtycho']
+__all__ = ['SimplePtycho']        
 
-class complexWrapper(t.Tensor):
-    def __new__(base_tensor):
-        return t.view_as_complex(base_tensor)
-        
 
 class SimplePtycho(CDIModel):
     """A simple ptychography model for exploring ideas and extensions
@@ -49,14 +45,17 @@ class SimplePtycho(CDIModel):
         # object
         self.register_buffer('probe_norm', t.max(t.abs(probe_guess)))
 
-        self.probe_data = complexParameter(probe_guess/self.probe_norm)
-        #self.probe_data = t.nn.Parameter(t.view_as_real(probe_guess / self.probe_norm))
+        #self.probe_data = complexWrapper(probe_guess/self.probe_norm)
+        self.probe_data = t.nn.Parameter(t.view_as_real(probe_guess / self.probe_norm))
         self.obj_data = t.nn.Parameter(t.view_as_real(obj_guess))
 
+    # Do this for all the complex-valued parameters which are stored as real
+    # valued for compatibility reasons. Note that updating model.probe.data
+    # won't update the underlying storage, but something like:
+    # model.probe.data[:] = ...
+    # will update the underlying storage
     @property
     def probe(self):
-        probe = t.view_as_complex(self.probe_data)
-        
         return t.view_as_complex(self.probe_data)
 
     @property

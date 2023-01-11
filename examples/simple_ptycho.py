@@ -36,7 +36,7 @@ normalization=0
 for inputs, patterns in data_loader:
     normalization += t.sum(patterns).cpu().numpy()
 
-def run_iteration(stop_event=None):
+for it in range(20):
     loss = 0
     N = 0
     t0 = time.time()
@@ -50,22 +50,19 @@ def run_iteration(stop_event=None):
             sim_patterns = model.forward(*inp)
             
             if hasattr(model, 'mask'):
-                loss = model.module.loss(pats,sim_patterns, mask=model.module.mask)
+                loss = model.loss(pats,sim_patterns, mask=model.mask)
             else:
-                loss = model.module.loss(pats,sim_patterns)
+                loss = model.loss(pats,sim_patterns)
                 
             loss.backward()
             return loss.detach()
 
         loss += optimizer.step(closure).detach().cpu().numpy()
     print('time', time.time()-t0)
-    return loss / normalization
+    print(loss / normalization)
 
 
-for it in range(20):
-    print(run_iteration())
-
-print(model.module.save_results().keys())
+print(model.save_results().keys())
 exit()
 # Finally, we plot the results
 model.module.inspect(dataset)

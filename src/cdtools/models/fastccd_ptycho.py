@@ -10,16 +10,17 @@ import numpy as np
 from scipy import linalg as sla
 from copy import copy
 
-__all__ = ['FancyPtycho']
+__all__ = ['FastCCDPtycho']
 
 
-class FancyPtycho(CDIModel):
+class FastCCDPtycho(CDIModel):
 
     def __init__(self, wavelength, detector_geometry,
                  probe_basis,
                  probe_guess,
                  obj_guess,
                  detector_slice=None,
+                 threshold=None,
                  surface_normal=t.tensor([0., 0., 1.], dtype=t.float32),
                  min_translation=t.tensor([0, 0], dtype=t.float32),
                  background=None,
@@ -37,7 +38,7 @@ class FancyPtycho(CDIModel):
                  simulate_finite_pixels=False,
                  ):
 
-        super(FancyPtycho, self).__init__()
+        super(FastCCDPtycho, self).__init__()
         self.wavelength = t.tensor(wavelength)
         self.detector_geometry = copy(detector_geometry)
         det_geo = self.detector_geometry
@@ -88,6 +89,11 @@ class FancyPtycho(CDIModel):
             
         self.background = t.nn.Parameter(background)
 
+        if threshold is None:
+            threshold = t.zeros([960,2], dtype=t.float32)
+
+        self.threshold = t.nn.Parameter(threshold)
+        
         if weights is None:
             self.weights = None
         else:
@@ -376,7 +382,7 @@ class FancyPtycho(CDIModel):
 
 
     def measurement(self, wavefields):
-        return tools.measurements.quadratic_background(
+        measured =  tools.measurements.quadratic_background(
             wavefields,
             self.background,
             detector_slice=self.detector_slice,
@@ -384,13 +390,15 @@ class FancyPtycho(CDIModel):
             saturation=self.saturation,
             oversampling=self.oversampling,
             simulate_finite_pixels=self.simulate_finite_pixels)
-
-
+        thresholds = t.repeat_interleave(self.threshold, 480,dim=-1)
+        return t.clamp(measured - thresholds, min=0.001)
+        
+        
     # Note: No "loss" function is defined here, because it is added
     # dynamically during object creation in __init__
 
     def to(self, *args, **kwargs):
-        super(FancyPtycho, self).to(*args, **kwargs)
+        super(FastCCDPtycho, self).to(*args, **kwargs)
         self.wavelength = self.wavelength.to(*args, **kwargs)
         # move the detector geometry too
         det_geo = self.detector_geometry
@@ -632,7 +640,9 @@ class FancyPtycho(CDIModel):
         ('Corrected Translations',
          lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig, units=self.units)),
         ('Background',
-         lambda self, fig: plt.figure(fig.number) and plt.imshow(self.background.detach().cpu().numpy()**2))
+         lambda self, fig: plt.figure(fig.number) and plt.imshow(self.background.detach().cpu().numpy()**2)),
+        ('Thresholds',
+         lambda self, fig: p.plot_real(t.repeat_interleave(self.threshold, 480,dim=-1), fig=fig))
     ]
 
 #    def plot_errors(self, dataset):
@@ -640,6 +650,7 @@ class FancyPtycho(CDIModel):
     
     
     def save_results(self, dataset):
+        thresholds = self.thresholds.detach().cpu().numpy()
         basis = self.probe_basis.detach().cpu().numpy()
         translations = self.corrected_translations(dataset).detach().cpu().numpy()
         probe = self.probe.detach().cpu().numpy()
@@ -653,4 +664,4 @@ class FancyPtycho(CDIModel):
                 'probe': probe, 'obj': obj,
                 'background': background,
                 'oversampling': oversampling,
-                'weights': weights}
+                'weights': weights, 'thresholds':thresholds}
