@@ -439,7 +439,7 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
     subpixel_translations = translations - integer_translations
     integer_translations = integer_translations.to(dtype=t.int32)
     if not polarized:
-        selections = t.stack([obj[tr[0]:tr[0]+probe.shape[-2],
+        selections = t.stack([obj[..., tr[0]:tr[0]+probe.shape[-2],
                                   tr[1]:tr[1]+probe.shape[-1]]
                               for tr in integer_translations])
     else:
@@ -474,9 +474,12 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
         shifted_probe = t.fft.ifft2(t.fft.ifftshift(shifted_fft_probe,
                                                     dim=(-1,-2)))
         if not polarized:
-            if multiple_modes: # Multi-mode probe
+            # TODO This is a kludge, I will fix this. I need to handle
+            # multiple incoherently mixing polarized objects
+            if multiple_modes and len(selections.shape) == 3: # Multi-mode probe
                 output = shifted_probe * selections[...,None,:,:]
             else:
+                # This will only work if the 
                 output = shifted_probe * selections
         # selections: Nx2x2xMxL
         # probe: Nx(P)x2x1xMxL

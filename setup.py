@@ -25,7 +25,7 @@ setuptools.setup(
         'docs': ["sphinx","sphinx-argparse","sphinx_rtd_theme"]
     },
     package_dir={"": "src"},
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_packages("src"),
     classifiers=[
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",

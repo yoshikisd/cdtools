@@ -17,22 +17,22 @@ The major dependency for CDTools is pytorch, and because the details of the inst
 
 .. _`the pytorch site`: https://pytorch.org/get-started/locally/
 
-If you manage your environment with conda, the remaining dependencies can be installe by running the following command in the top level directory of the package:
+If you manage your environment with conda, the remaining dependencies can be installed by running the following command in the top level directory of the package:
 
 .. code:: bash
 	  
-   $ conda install --file conda_requirements.txt -c conda-forge
+   $ conda install --file conda_requirements.txt 
 
-This will install all dependencies, including optional dependencies for the tests and docs. For convenience, the full set of dependencies are noted below:
+This will install all dependencies which are available from the main repos, including some optional dependencies for the tests and docs. Following this, any final remining dependencies can be installed from conda-forge or pip. For convenience, the full set of dependencies are noted below:
    
 CDTools depends on the following packages:
 
-   * `numpy <http://www.numpy.org>`_
-   * `scipy <http://www.scipy.org>`_
-   * `matplotlib <https://matplotlib.org>`_
-   * `pytorch <https://pytorch.org>`_
+   * `numpy <http://www.numpy.org>`_ >= 1.0
+   * `scipy <http://www.scipy.org>`_ >= 1.0
+   * `matplotlib <https://matplotlib.org>`_ >= 2.0
+   * `pytorch <https://pytorch.org>`_ >= 1.9.0
    * `python-dateutil <https://github.com/dateutil/dateutil/>`_
-   * `h5py <https://www.h5py.org/>`_
+   * `h5py <https://www.h5py.org/>`_ >= 2.1
 
 And has optional dependencies on
 

@@ -146,6 +146,7 @@ class FancyPtycho(CDIModel):
                      randomize_ang=0,
                      padding=0,
                      n_modes=1,
+                     n_obj_modes=1,
                      dm_rank=None,
                      translation_scale=1,
                      saturation=None,
@@ -240,6 +241,8 @@ class FancyPtycho(CDIModel):
         probe = t.stack([probe, ] + probe_stack)
 
         obj = t.exp(1j * randomize_ang * (t.rand(obj_size)-0.5))
+        if n_obj_modes != 1:
+            obj = t.stack([obj,] + [0.05*t.ones_like(obj),]*(n_obj_modes-1))
 
         det_geo = dataset.detector_geometry
 
