@@ -12,6 +12,9 @@ from copy import copy
 
 __all__ = ['FancyPtycho']
 
+# TODO The information on bases is all wrong when the probe_fourier_crop is
+# used, this affects display but also saveout of data and maybe even stuff
+# like the probe translation simulation
 
 class FancyPtycho(CDIModel):
 
@@ -151,6 +154,7 @@ class FancyPtycho(CDIModel):
                      translation_scale=1,
                      saturation=None,
                      probe_support_radius=None,
+                     probe_fourier_crop=None,
                      propagation_distance=None,
                      scattering_mode=None,
                      oversampling=1,
@@ -230,6 +234,12 @@ class FancyPtycho(CDIModel):
         else:
             probe = tools.initializers.gaussian_probe(dataset, probe_basis, probe_shape, probe_size, propagation_distance=propagation_distance)
 
+        if probe_fourier_crop is not None:
+            probe = tools.propagators.far_field(probe)
+            probe = probe[probe_fourier_crop:-probe_fourier_crop,
+                          probe_fourier_crop:-probe_fourier_crop]
+            probe = tools.propagators.inverse_far_field(probe)
+            
         # Now we initialize all the subdominant probe modes
         probe_max = t.max(t.abs(probe))
         probe_stack = [0.01 * probe_max * t.rand(probe.shape, dtype=probe.dtype) for i in range(n_modes - 1)]
@@ -361,7 +371,20 @@ class FancyPtycho(CDIModel):
                                      self.J_phase[None,...]))
             prs = prs * probe_masks[...,None,:,:]
 
+        # We automatically rescale the probe to match the background size,
+        # which allows us to do stuff like let the object be super-resolution,
+        # while restricting the probe to the detector resolution but still
+        # doing an explicit real-space limitation of the probe
+        padding = [self.background.shape[-2] - prs.shape[-2],
+                   self.background.shape[-1] - prs.shape[-1]]
 
+        if any([p != 0 for p in padding]): # For probe_fourier_crop != 0.
+            padding = [padding[-1]//2, padding[-1]-padding[-1]//2,
+                       padding[-2]//2, padding[-2]-padding[-2]//2]
+            prs = tools.propagators.far_field(prs)
+            prs = t.nn.functional.pad(prs, padding)
+            prs = tools.propagators.inverse_far_field(prs)
+            
         # Now we actually do the interaction, using the sinc subpixel
         # translation model as per usual
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
@@ -651,9 +674,10 @@ class FancyPtycho(CDIModel):
         background = self.background.detach().cpu().numpy()**2
         weights = self.weights.detach().cpu().numpy()
         oversampling = self.oversampling
+        wavelength = self.wavelength.cpu().numpy()
 
         return {'basis': basis, 'translation': translations,
                 'probe': probe, 'obj': obj,
                 'background': background,
                 'oversampling': oversampling,
-                'weights': weights}
+                'weights': weights, 'wavelength': wavelength}

@@ -514,7 +514,12 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1., limit='side'):
     f1 = t.fft.fftshift(t.fft.fft2(im1[im_slice]),dim=(-1,-2))
     f2 = t.fft.fftshift(t.fft.fft2(im2[im_slice]),dim=(-1,-2))
     cor_fft = f1 * t.conj(f2)
-
+    #from cdtools.tools import plotting as p
+    #from matplotlib import pyplot as plt
+    #p.plot_amplitude(t.log(t.abs(cor_fft)))
+    #p.plot_amplitude(t.log(t.abs(f1)))
+    #p.plot_phase(cor_fft)
+    #plt.show()
     F1 = t.abs(f1)**2
     F2 = t.abs(f2)**2
 
