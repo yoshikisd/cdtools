@@ -126,8 +126,8 @@ class FancyPtycho(CDIModel):
             Is = t.arange(self.probe.shape[-2], dtype=t.float32)
             Js = t.arange(self.probe.shape[-1], dtype=t.float32)
             Is, Js = t.meshgrid(Is/t.max(Is), Js/t.max(Js))
-            self.I_phase = 2 * np.pi* Is
-            self.J_phase = 2 * np.pi* Js
+            self.I_phase = 2 * np.pi* Is * self.oversampling
+            self.J_phase = 2 * np.pi* Js * self.oversampling
 
         self.simulate_finite_pixels = simulate_finite_pixels
             
