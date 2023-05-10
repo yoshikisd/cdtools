@@ -37,7 +37,6 @@ import numpy as np
 import threading
 import queue
 import time
-from .complex_adam import MyAdam
 from .complex_lbfgs import MyLBFGS
 
 __all__ = ['CDIModel']
@@ -95,18 +94,52 @@ class CDIModel(t.nn.Module):
         raise NotImplementedError()
 
     
-    def store_detector_geometry(self, detector_geometry):
-        if 'distance' in detector_geometry:
+    def simulate_to_dataset(self, args_list):
+        raise NotImplementedError()
+
+    
+    def store_detector_geometry(self, detector_geometry, dtype=t.float32):
+        """Registers the information in a detector geometry dictionary
+
+        Information about the detector geometry is passed in as a dictionary,
+        but we want the various properties to be registered as buffers in
+        the model. This has nice effects, for example automatically updating
+        with model.to, and making it possible to automatically save them out.
+
+        Parameters
+        ----------
+        detector_geometry : dict
+            A dictionary containing at least the two entries 'distance' and 'basis'
+        dtype : torch.dtype, default: torch.float32
+            The datatype to convert the values to before registering
+        """
+        self.register_buffer('det_basis',
+                             t.tensor(detector_geometry['basis'],
+                                      dtype=dtype))
+        
+        if 'distance' in detector_geometry \
+           and detector_geometry['distance'] is not None:                
             self.register_buffer('det_distance',
-                                 t.as_tensor(detector_geometry['distance']))
-        if 'basis' in detector_geometry:
-            self.register_buffer('det_basis',
-                                 t.as_tensor(detector_geometry['basis']))
-        if 'corner' in detector_geometry:
+                                 t.tensor(detector_geometry['distance'],
+                                          dtype=dtype))
+        if 'corner' in detector_geometry \
+           and detector_geometry['corner'] is not None:
             self.register_buffer('det_corner',
-                                 t.as_tensor(detector_geometry['corner']))
+                                 t.tensor(detector_geometry['corner'],
+                                          dtype=dtype))
 
     def get_detector_geometry(self):
+        """Makes a detector geometry dictionary from the registered buffers
+
+        This extracts a dictionary with the detector geometry data from
+        the registered buffers, helpful for functions which expect the
+        geometry data to be in this format.
+
+        Returns
+        -------
+        detector_geometry : dict
+            A dictionary containing at least the two entries 'distance' and 'basis', pulled from the model's buffers
+        """
         detector_geometry = {}
         if hasattr(self, 'det_distance'):
             detector_geometry['distance'] = self.det_distance
@@ -116,9 +149,6 @@ class CDIModel(t.nn.Module):
             detector_geometry['corner'] = self.det_corner
         return detector_geometry    
     
-    def simulate_to_dataset(self, args_list):
-        raise NotImplementedError()
-
     def save_results(self):
         """A convenience function to get the state dict as numpy arrays
 
@@ -130,29 +160,40 @@ class CDIModel(t.nn.Module):
         results of the reconstruction
 
         Second, because display, further processing, long-term storage,
-        etc. are often done with dictionaries of numpy files, it's useful
+        etc. are often done with dictionaries of numpy arrays. So, it's useful
         to have a convenience function which does that conversion
         automatically.
+        
+        Returns
+        -------
+        results : dict
+            A dictionary containing all the parameters and buffers of the model, i.e. the result of self.state_dict(), converted to numpy.
         """
         return {k: v.cpu().numpy() for k, v in self.state_dict().items()}
 
+    
     def AD_optimize(self, iterations, data_loader,  optimizer,\
                     scheduler=None, regularization_factor=None, thread=True,
                     calculation_width=10):
         """Runs a round of reconstruction using the provided optimizer
 
         This is the basic automatic differentiation reconstruction tool
-        which all the other, algorithm-specific tools, use.
+        which all the other, algorithm-specific tools, use. It is a
+        generator which yields the average loss each epoch, ending after
+        the specified number of iterations.
 
-        Like all the other optimization routines, it is defined as a
-        generator function which yields the average loss each epoch.
+        By default, the computation will be run in a separate thread. This
+        is done to enable live plotting with matplotlib during a reconstruction.
+        If the computation was done in the main thread, this would freeze
+        the plots. This behavior can be turned off by setting the keyword
+        argument 'thread' to False.        
 
         Parameters
         ----------
         iterations : int
             How many epochs of the algorithm to run
-        dataset : CDataset
-            The dataset to reconstruct against
+        data_loader : torch.utils.data.DataLoader
+            A data loader loading the CDataset to reconstruct
         optimizer : torch.optim.Optimizer
             The optimizer to run the reconstruction with
         scheduler : torch.optim.lr_scheduler._LRScheduler
@@ -162,22 +203,34 @@ class CDIModel(t.nn.Module):
         thread : bool
             Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
         calculation_width : int
-            Default 10, how many translations to pass through at once for each round of gradient accumulation
-        """
-        # First, calculate the normalization
-        normalization = 0
-        for inputs, patterns in data_loader:
-            normalization += t.sum(patterns).cpu().numpy()
+            Default 10, how many translations to pass through at once for each round of gradient accumulation. This does not affect the result, but may affect the calculation speed.
 
-        def run_iteration(stop_event=None):
+        Yields
+        ------
+        loss : float
+            The summed loss over the latest epoch, divided by the total diffraction pattern intensity
+        """
+
+        def run_epoch(stop_event=None):
+            """Runs one full epoch of the reconstruction."""
+            # First, initialize some tracking variables
+            normalization = 0
             loss = 0
             N = 0
             t0 = time.time()
+
+            # The data loader is responsible for setting the minibatch
+            # size, so each set is a minibatch
             for inputs, patterns in data_loader:
+                normalization += t.sum(patterns).cpu().numpy()
                 N += 1
                 def closure():
                     optimizer.zero_grad()
 
+                    # We further break up the minibatch into a set of chunks.
+                    # This lets us use larger minibatches than can fit
+                    # on the GPU at once, while still doing batch processing
+                    # for efficiency
                     input_chunks = [[inp[i:i + calculation_width]
                                      for inp in inputs]
                                     for i in range(0, len(inputs[0]),
@@ -188,31 +241,39 @@ class CDIModel(t.nn.Module):
 
                     total_loss = 0
                     for inp, pats in zip(input_chunks, pattern_chunks):
-                        # This is just used to allow graceful exit when
-                        # threading
+                        # This check allows for graceful exit when threading
                         if stop_event is not None and stop_event.is_set():
                             exit()
 
+                        # Run the simulation
                         sim_patterns = self.forward(*inp)
 
+                        # Calculate the loss
                         if hasattr(self, 'mask'):
                             loss = self.loss(pats,sim_patterns, mask=self.mask)
                         else:
                             loss = self.loss(pats,sim_patterns)
 
+                        # And accumulate the gradients
                         loss.backward()
-
                         total_loss += loss.detach()
 
+                    # If we have a regularizer, we can calculate it separately,
+                    # and the gradients will add to the minibatch gradient
                     if regularization_factor is not None \
                        and hasattr(self, 'regularizer'):
                         loss = self.regularizer(regularization_factor)
                         loss.backward()
+                    
                     return total_loss
 
+                # This takes the step for this minibatch
                 loss += optimizer.step(closure).detach().cpu().numpy()
 
+            
             loss /= normalization
+
+            # We step the scheduler after the full epoch
             if scheduler is not None:
                 scheduler.step(loss)
 
@@ -220,19 +281,26 @@ class CDIModel(t.nn.Module):
             self.latest_iteration_time = time.time() - t0
             return loss
 
-        if thread:
+        # If we don't want to run in a different thread, this is easy
+        if not thread:
+            for it in range(iterations):
+                yield run_iteration()
+
+        # But if we do want to thread, it's annoying:
+        else:
+            # Here we set up the communication with the computation thread
             result_queue = queue.Queue()
             stop_event = threading.Event()
             def target():
                 try:
-                    result_queue.put(run_iteration(stop_event))
+                    result_queue.put(run_epoch(stop_event))
                 except Exception as e:
                     # If something bad happens, put the exception into the
                     # result queue
                     result_queue.put(e)
 
-        for it in range(iterations):
-            if thread:
+            # And this actually starts and monitors the thread
+            for it in range(iterations):
                 calc = threading.Thread(target=target, name='calculator', daemon=True)
                 try:
                     calc.start()
@@ -256,9 +324,6 @@ class CDIModel(t.nn.Module):
 
                 yield res
 
-            else:
-                yield run_iteration()
-
 
     def Adam_optimize(self, iterations, dataset, batch_size=15, lr=0.005,
                       schedule=False, amsgrad=False, subset=None,
@@ -280,7 +345,7 @@ class CDIModel(t.nn.Module):
         batch_size : int
             Optional, the size of the minibatches to use
         lr : float
-            Optional, The learning rate (alpha) to use
+            Optional, The learning rate (alpha) to use. 0.05 is typically the highest value with any chance of being stable
         schedule : float
             Optional, whether to use the ReduceLROnPlateau scheduler
         subset : list(int) or int
@@ -290,24 +355,23 @@ class CDIModel(t.nn.Module):
         thread : bool
             Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
         calculation_width : int
-            Default 1, how many translations to pass through at once for each round of gradient accumulation
+            Default 10, how many translations to pass through at once for each round of gradient accumulation. Does not affect the result, only the calculation speed
 
         """
 
         if subset is not None:
-            # if just one pattern, turn into a list for convenience
+            # if subset is just one pattern, turn into a list for convenience
             if type(subset) == type(1):
                 subset = [subset]
             dataset = torchdata.Subset(dataset, subset)
 
         # Make a dataloader
-        data_loader = torchdata.DataLoader(dataset, batch_size=batch_size,
+        data_loader = torchdata.DataLoader(dataset,
+                                           batch_size=batch_size,
                                            shuffle=True)
 
         # Define the optimizer
-        #optimizer = t.optim.Adam(self.parameters(), lr = lr, amsgrad=amsgrad)
-        optimizer = MyAdam(self.parameters(), lr = lr, amsgrad=amsgrad)
-
+        optimizer = t.optim.Adam(self.parameters(), lr = lr, amsgrad=amsgrad)
 
         # Define the scheduler
         if schedule:
@@ -351,7 +415,7 @@ class CDIModel(t.nn.Module):
         regularization_factor : float or list(float)
             Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
         thread : bool
-            Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
+            Default True, whether to run the computation in a separate thread to allow interaction with plots during computation.
 
         """
         if subset is not None:
@@ -382,7 +446,7 @@ class CDIModel(t.nn.Module):
                      lr=0.01, momentum=0, dampening=0, weight_decay=0,
                      nesterov=False, subset=None, regularization_factor=None,
                      thread=True, calculation_width=10):
-        """Runs a round of reconstruction using the SGDoptimizer
+        """Runs a round of reconstruction using the SGD optimizer
 
         This algorithm is often less stable that Adam, but it is simpler
         and is the basic workhorse of gradience descent.
@@ -438,7 +502,7 @@ class CDIModel(t.nn.Module):
 
 
     def report(self):
-        """Returns a string informing on the latest reconstruction iteration
+        """Returns a string with info about the latest reconstruction iteration
 
         Returns
         -------
@@ -463,7 +527,7 @@ class CDIModel(t.nn.Module):
         of plots, if one exists, and then redraw them. Otherwise, it will
         plot a new set, and any subsequent updates will update the new set
 
-        Optionally, a dataset can be passed, which then will plot any
+        Optionally, a dataset can be passed, which will allow plotting of any
         registered plots which need to incorporate some information from
         the dataset (such as geometry or a comparison with measured data).
 
@@ -479,22 +543,11 @@ class CDIModel(t.nn.Module):
         ----------
         dataset : CDataset
             Optional, a dataset matched to the model type
-        update : bool
-            Default True, whether to update existing plots or plot new ones
+        update : bool, default: True
+            Whether to update existing plots or plot new ones
 
         """
-
-        #print('base models inspect: checking the object')
-        #a = self.obj.detach()
-        #def saveobj(a, filename):
-        #    a = np.abs(a)
-        #    plt.imshow(a)
-        #    plt.savefig(filename)
-        #f = ['base_a.png', 'base_b.png', 'base_c.png', 'base_d.png']
-        #comp = [a[i, j, :, :] for i, j in zip([0, 0, 1, 1], [0, 1, 0, 1])]
-        #for i in range(4):
-        #    saveobj(comp[i], f[i])
-        
+        # We find or create all the figures
         first_update = False
         if update and hasattr(self, 'figs') and self.figs:
             figs = self.figs
@@ -508,7 +561,8 @@ class CDIModel(t.nn.Module):
 
         idx = 0
         for plots in self.plot_list:
-            # If a conditional is included in the plot
+            # If a conditional is included in the plot, we check whether
+            # it is True
             try:
                 if len(plots) >=3 and not plots[2](self):
                     continue
@@ -525,33 +579,36 @@ class CDIModel(t.nn.Module):
             else:
                 fig = figs[idx]
 
-            try:
+                
+            try: # We try just plotting using the simplest allowed signature
                 plotter(self,fig)
                 plt.title(name)
-
             except TypeError as e:
+                # TypeError implies it wanted another argument, i.e. a dataset
                 if dataset is not None:
                     try:
                         plotter(self, fig, dataset)
                         plt.title(name)
-
-                    except (IndexError, KeyError, AttributeError, np.linalg.LinAlgError) as e:
+                    except Exception as e: # Don't raise errors: it's just plots
                         pass
 
-            except (IndexError, KeyError, AttributeError, np.linalg.LinAlgError) as e:
+            except Exception as e: # Don't raise errors, it's just a plot
                 pass
 
             idx += 1
 
             if update:
+                # This seems to update the figure without blocking.
                 plt.draw()
                 fig.canvas.start_event_loop(0.001)
 
         if first_update:
+            # But this is needed the first time the figures update, or
+            # they won't get drawn at all
             plt.pause(0.05 * len(self.figs))
 
 
-    def save_figures(self, prefix='', extension='.eps'):
+    def save_figures(self, prefix='', extension='.pdf'):
         """Saves all currently open inspection figures.
 
         Note that this function is not very intelligent - so, for example,
@@ -586,10 +643,18 @@ class CDIModel(t.nn.Module):
     def compare(self, dataset, logarithmic=False):
         """Opens a tool for comparing simulated and measured diffraction patterns
 
+        This does what it says on the tin.
+        
+        Also, I am very sorry, the implementation was done while I was
+        possessed by Beezlebub - do not try to fix this, if it breaks just
+        kill it and start from scratch.
+
         Parameters
         ----------
         dataset : CDataset
             A dataset containing the simulated diffraction patterns to compare against
+        logarithmic : bool, default: False
+            Whether to plot the diffraction on a logarithmic scale
         """
 
         fig, axes = plt.subplots(1,3,figsize=(12,5.3))
@@ -598,13 +663,6 @@ class CDIModel(t.nn.Module):
 
 
         def update_colorbar(im):
-            # If the update brought the colorbar out of whack
-            # (say, from clicking back in the navbar)
-            # Holy fuck this was annoying. Sorry future for how
-            # crappy this solution is.
-            #if not np.allclose(im.colorbar.ax.get_xlim(),
-            #                   (np.min(im.get_array()),
-            #                    np.max(im.get_array()))):
             if hasattr(im, 'norecurse') and im.norecurse:
                 im.norecurse=False
                 return
@@ -617,9 +675,9 @@ class CDIModel(t.nn.Module):
             fig.pattern_idx = idx
             updating = True if len(axes[0].images) >= 1 else False
 
-            inputs, output = dataset[idx]
-            sim_data = self.forward(*inputs).detach().cpu().numpy()
-            meas_data = output.detach().cpu().numpy()
+            inputs, output = dataset[idx:idx+1]
+            sim_data = self.forward(*inputs).detach().cpu().numpy()[0]
+            meas_data = output.detach().cpu().numpy()[0]
             if hasattr(self, 'mask') and self.mask is not None:
                 mask = self.mask.detach().cpu().numpy()
             else:

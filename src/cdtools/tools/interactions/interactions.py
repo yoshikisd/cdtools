@@ -95,8 +95,8 @@ def pixel_to_translations(basis, pixel_translations, surface_normal=t.Tensor([0,
         The real space basis the wavefields are defined in
     translations : torch.Tensor
         A Jx2 stack of pixel-space translations, or a single translation
-    surface_normal : torch.Tensor
-        Optional, the sample's surface normal
+    surface_normal : torch.Tensor, default: torch.Tensor([0,0,1])
+        The sample's surface normal
 
     Returns
     -------

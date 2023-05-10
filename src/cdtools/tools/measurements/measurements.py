@@ -148,7 +148,7 @@ def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=Non
             output = output[detector_slice]
         else:
             output = output[(np.s_[:],) + detector_slice]
-
+        
     if saturation is None:
         return output + epsilon
     else:
@@ -193,7 +193,7 @@ def quadratic_background(wavefield, background, *args, detector_slice=None, meas
         output = measurement(wavefield, *args, detector_slice=detector_slice,
                              epsilon=epsilon, oversampling=oversampling,
                              simulate_finite_pixels=simulate_finite_pixels) \
-                             + background**2
+                            + background**2
 
     # This has to be done after the background is added, hence we replicate
     # it here

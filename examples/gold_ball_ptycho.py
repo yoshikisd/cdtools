@@ -15,7 +15,7 @@ model.to(device='cuda')
 dataset.get_as(device='cuda')
 
 # Now, we run a short reconstruction from the dataset
-for loss in model.Adam_optimize(100, dataset, batch_size=50, schedule=True):
+for loss in model.Adam_optimize(10, dataset, batch_size=50, schedule=True):
     # And we liveplot the updates to the model as they happen
     print(model.report())
     model.inspect(dataset)

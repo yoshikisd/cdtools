@@ -45,22 +45,9 @@ class SimplePtycho(CDIModel):
         # object
         self.register_buffer('probe_norm', t.max(t.abs(probe_guess)))
 
-        #self.probe_data = complexWrapper(probe_guess/self.probe_norm)
-        self.probe_data = t.nn.Parameter(t.view_as_real(probe_guess / self.probe_norm))
-        self.obj_data = t.nn.Parameter(t.view_as_real(obj_guess))
+        self.probe = t.nn.Parameter(probe_guess / self.probe_norm)
+        self.obj = t.nn.Parameter(obj_guess)
 
-    # Do this for all the complex-valued parameters which are stored as real
-    # valued for compatibility reasons. Note that updating model.probe.data
-    # won't update the underlying storage, but something like:
-    # model.probe.data[:] = ...
-    # will update the underlying storage
-    @property
-    def probe(self):
-        return t.view_as_complex(self.probe_data)
-
-    @property
-    def obj(self):
-        return t.view_as_complex(self.obj_data)
 
     @classmethod
     def from_dataset(cls, dataset):
@@ -94,8 +81,13 @@ class SimplePtycho(CDIModel):
 
         # Next generate the object geometry from the probe geometry and
         # the translations
-        pix_translations = tools.interactions.translations_to_pixel(probe_basis, translations, surface_normal=surface_normal)
-        obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations)
+        pix_translations = tools.interactions.translations_to_pixel(
+            probe_basis,
+            translations,
+            surface_normal=surface_normal)
+        obj_size, min_translation = tools.initializers.calc_object_setup(
+            probe_shape,
+            pix_translations)
 
         # Finally, initialize the probe and  object using this information
         probe = tools.initializers.SHARP_style_probe(dataset, probe_shape, det_slice)
@@ -109,17 +101,28 @@ class SimplePtycho(CDIModel):
         else:
             mask = None
 
-        return cls(wavelength, det_geo, probe_basis, det_slice, probe, obj, min_translation=min_translation, mask=mask, surface_normal=surface_normal)
+        return cls(wavelength,
+                   det_geo,
+                   probe_basis,
+                   det_slice,
+                   probe,
+                   obj,
+                   min_translation=min_translation,
+                   mask=mask,
+                   surface_normal=surface_normal)
 
 
     def interaction(self, index, translations):
-        pix_trans = tools.interactions.translations_to_pixel(self.probe_basis,
-                                                             translations,
-                                            surface_normal=self.surface_normal)
+        pix_trans = tools.interactions.translations_to_pixel(
+            self.probe_basis,
+            translations,
+            surface_normal=self.surface_normal)
+        
         pix_trans -= self.min_translation
-        return tools.interactions.ptycho_2D_round(self.probe_norm * self.probe,
-                                                  self.obj,
-                                                  pix_trans)
+        return tools.interactions.ptycho_2D_round(
+            self.probe_norm * self.probe,
+            self.obj,
+            pix_trans)
 
 
     def forward_propagator(self, wavefields):
@@ -133,48 +136,10 @@ class SimplePtycho(CDIModel):
     def measurement(self, wavefields):
         return tools.measurements.intensity(wavefields,
                                             detector_slice=self.detector_slice)
-
+    
 
     def loss(self, real_data, sim_data, mask=None):
         return tools.losses.amplitude_mse(real_data, sim_data, mask=mask)
-
-
-    def sim_to_dataset(self, args_list):
-        # In the future, potentially add more control
-        # over what metadata is saved (names, etc.)
-
-        # First, I need to gather all the relevant data
-        # that needs to be added to the dataset
-        entry_info = {'program_name': 'cdtools',
-                      'instrument_n': 'Simulated Data',
-                      'start_time': datetime.now()}
-
-        surface_normal = self.surface_normal.detach().cpu().numpy()
-        xsurfacevec = np.cross(np.array([0.,1.,0.]), surface_normal)
-        xsurfacevec /= np.linalg.norm(xsurfacevec)
-        ysurfacevec = np.cross(surface_normal, xsurfacevec)
-        ysurfacevec /= np.linalg.norm(ysurfacevec)
-        orientation = np.array([xsurfacevec, ysurfacevec, surface_normal])
-
-        sample_info = {'description': 'A simulated sample',
-                       'orientation': orientation}
-
-        detector_geometry = self.detector_geometry
-        mask = self.mask
-        wavelength = self.wavelength
-        indices, translations = args_list
-
-        # Then we simulate the results
-        data = self.forward(indices, translations)
-
-        # And finally, we make the dataset
-        return Ptycho2DDataset(translations, data,
-                                 entry_info = entry_info,
-                                 sample_info = sample_info,
-                                 wavelength=wavelength,
-                                 detector_geometry=detector_geometry,
-                                 mask=mask)
-
 
 
     plot_list = [
@@ -188,65 +153,3 @@ class SimplePtycho(CDIModel):
          lambda self, fig: p.plot_phase(self.obj, fig=fig, basis=self.probe_basis))
     ]
     
-
-    def ePIE(self, iterations, dataset, beta = 1.0):
-        """Runs an ePIE reconstruction as described in `Maiden et al. (2017) <https://www.osapublishing.org/optica/abstract.cfm?uri=optica-4-7-736>`_.
-        Optional parameters are:
-
-        :arg ``iterations``: Controls the number of iterations run, defaults to 1.
-        :arg ``beta``: Algorithmic parameter described in Maiden's implementation of rPIE. Defaults to 0.15.
-        :arg ``probe``: Initial probe wavefunction.
-        :arg ``object``: Initial object wavefunction.
-        """
-        probe_shape = self.probe.shape
-
-        if self.mask is not None:
-            mask = self.mask[...,None]
-        else:
-            mask=None
-
-        def probe_update(exit_wave, exit_wave_corrected, probe, object, translation):
-            new_probe = probe + tools.cmath.cmult(beta * tools.cmath.cconj(object[translation])/(self.probe_norm*t.max(tools.cmath.cabssq(object))), exit_wave_corrected-exit_wave)
-            return new_probe
-
-        def object_update(exit_wave, exit_wave_corrected, probe, object, translation):
-            new_object = object.clone()
-            new_object[translation] = object[translation] + tools.cmath.cmult(beta * tools.cmath.cconj(probe)/(self.probe_norm*t.max(tools.cmath.cabssq(probe))), exit_wave_corrected-exit_wave)
-            return new_object
-
-        with t.no_grad():
-            data_loader = torchdata.DataLoader(dataset, shuffle=True)
-
-            for it in range(iterations):
-                loss = []
-                for (i, [translations]), [patterns] in data_loader:
-                    probe = self.probe.data.clone()
-                    object = self.obj.data.clone()
-
-                    exit_wave = self.interaction(i, translations).clone()
-                    # Apply modulus constraint
-                    exit_wave_corrected = exit_wave.clone()
-                    exit_wave_corrected = self.forward_propagator(exit_wave_corrected.clone())
-                    exit_wave_corrected[self.detector_slice] = tools.projectors.modulus(exit_wave_corrected.clone()[self.detector_slice], patterns, mask = mask)
-                    exit_wave_corrected = self.backward_propagator(exit_wave_corrected.clone())
-
-                    # Calculate the section of the object wavefunction to be modified
-                    pix_trans = tools.interactions.translations_to_pixel(self.probe_basis,
-                                                                         translations)
-                    pix_trans -= self.min_translation
-
-                    pix_trans = t.round(pix_trans).to(dtype=t.int32).detach().cpu().numpy()
-
-                    object_slice = np.s_[pix_trans[0]:
-                                      pix_trans[0]+probe_shape[0],
-                                      pix_trans[1]:
-                                      pix_trans[1]+probe_shape[1]]
-
-                    # Apply probe and object updates
-                    self.probe.data = probe_update(exit_wave, exit_wave_corrected, probe, object, object_slice)
-                    self.obj.data = object_update(exit_wave, exit_wave_corrected, probe, object, object_slice)
-
-                    # Calculate loss
-                    loss.append(self.loss(self.measurement(self.interaction(i, translations)), patterns))
-
-                yield t.mean(t.tensor(loss)).cpu().numpy()

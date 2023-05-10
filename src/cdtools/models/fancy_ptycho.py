@@ -38,33 +38,40 @@ class FancyPtycho(CDIModel):
                  units='um',
                  simulate_probe_translation=False,
                  simulate_finite_pixels=False,
+                 dtype=t.float32,
+                 obj_view_crop=0
                  ):
 
         super(FancyPtycho, self).__init__()
-        self.wavelength = t.tensor(wavelength)
-        self.detector_geometry = copy(detector_geometry)
-        det_geo = self.detector_geometry
-        if 'distance' in det_geo:
-            det_geo['distance'] = t.tensor(det_geo['distance'], dtype=t.float32)
-        if 'basis' in det_geo:
-            det_geo['basis'] = t.tensor(det_geo['basis'], dtype=t.float32)
-        if 'corner' in det_geo and det_geo['corner'] is not None:
-            det_geo['corner'] = t.tensor(det_geo['corner'], dtype=t.float32)
+        self.register_buffer('wavelength',
+                             t.tensor(wavelength, dtype=dtype))
+        self.store_detector_geometry(detector_geometry,
+                                     dtype=dtype)
 
-        self.min_translation = t.tensor(min_translation)
+        self.register_buffer('min_translation',
+                             t.tensor(min_translation, dtype=dtype))
 
-        self.probe_basis = t.tensor(probe_basis)
+        self.register_buffer('probe_basis',
+                             t.tensor(probe_basis, dtype=dtype))
+        
         self.detector_slice = copy(detector_slice)
-        self.surface_normal = t.tensor(surface_normal)
-
-        self.saturation = saturation
+        self.register_buffer('surface_normal',
+                             t.tensor(surface_normal, dtype=dtype))
+        if saturation is None:
+            self.saturation = None
+        else:
+            self.register_buffer('saturation',
+                                 t.tensor(saturation, dtype=dtype))
+        # Not sure how to make this a buffer...
         self.units = units
+
         self.fourier_probe = fourier_probe
 
         if mask is None:
-            self.mask = mask
+            self.mask = None
         else:
-            self.mask = t.tensor(mask, dtype=t.bool)
+            self.register_buffer('mask',
+                                 t.tensor(mask, dtype=t.bool))
         
         probe_guess = t.tensor(probe_guess, dtype=t.complex64)
         obj_guess = t.tensor(obj_guess, dtype=t.complex64)
@@ -72,13 +79,18 @@ class FancyPtycho(CDIModel):
         # We rescale the probe here so it learns at the same rate as the
         # object
         if probe_guess.dim() > 2:
-            self.probe_norm = 1 * t.max(t.abs(probe_guess[0]))
+            probe_norm = 1 * t.max(t.abs(probe_guess[0]))
         else:
-            self.probe_norm = 1 * t.max(t.abs(probe_guess))        
+            probe_norm = 1 * t.max(t.abs(probe_guess))
+        self.register_buffer('probe_norm', probe_norm.to(dtype))
         
         self.probe = t.nn.Parameter(probe_guess / self.probe_norm)
         self.obj = t.nn.Parameter(obj_guess)
 
+
+        self.obj_view_slice = np.s_[obj_view_crop:-obj_view_crop,
+                                    obj_view_crop:-obj_view_crop]
+        
         if background is None:
             if detector_slice is not None:
                 dummy_det = t.empty([s//oversampling
@@ -112,22 +124,28 @@ class FancyPtycho(CDIModel):
             t_o = t_o / translation_scale
             self.translation_offsets = t.nn.Parameter(t_o)
 
-        self.translation_scale = translation_scale
+        self.register_buffer('translation_scale',
+                             t.tensor(translation_scale, dtype=dtype))
 
-        if probe_support is not None:
-            self.probe_support = probe_support
-        else:
-            self.probe_support = t.ones_like(self.probe[0], dtype=t.bool)
-
+        if probe_support is None:
+            probe_support = t.ones_like(self.probe[0], dtype=t.bool)
+        self.register_buffer('probe_support',
+                             t.tensor(probe_support, dtype=t.bool))
+            
         self.oversampling = oversampling
 
         self.simulate_probe_translation = simulate_probe_translation
+
         if simulate_probe_translation:
-            Is = t.arange(self.probe.shape[-2], dtype=t.float32)
-            Js = t.arange(self.probe.shape[-1], dtype=t.float32)
+            Is = t.arange(self.probe.shape[-2], dtype=dtype)
+            Js = t.arange(self.probe.shape[-1], dtype=dtype)
             Is, Js = t.meshgrid(Is/t.max(Is), Js/t.max(Js))
-            self.I_phase = 2 * np.pi* Is * self.oversampling
-            self.J_phase = 2 * np.pi* Js * self.oversampling
+            
+            I_phase = 2 * np.pi* Is * self.oversampling
+            J_phase = 2 * np.pi* Js * self.oversampling
+            self.register_buffer('I_phase', I_phase)
+            self.register_buffer('J_phase', J_phase)
+            
 
         self.simulate_finite_pixels = simulate_finite_pixels
             
@@ -165,6 +183,8 @@ class FancyPtycho(CDIModel):
                      units='um',
                      simulate_probe_translation=False,
                      simulate_finite_pixels=False,
+                     obj_view_crop=None,
+                     obj_padding=200
                      ):
 
         wavelength = dataset.wavelength
@@ -221,7 +241,7 @@ class FancyPtycho(CDIModel):
 
         pix_translations = tools.interactions.translations_to_pixel(probe_basis, translations, surface_normal=surface_normal)
 
-        obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=200)
+        obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=obj_padding)
 
         if hasattr(dataset, 'background') and dataset.background is not None:
             background = t.sqrt(dataset.background)
@@ -254,6 +274,12 @@ class FancyPtycho(CDIModel):
         if n_obj_modes != 1:
             obj = t.stack([obj,] + [0.05*t.ones_like(obj),]*(n_obj_modes-1))
 
+        if obj_view_crop is None:
+            obj_view_crop = min(probe.shape[-2], probe.shape[-1]) // 2
+        if obj_view_crop < 0:
+            obj_view_crop += min(probe.shape[-2], probe.shape[-1]) // 2
+        obj_view_crop += obj_padding
+            
         det_geo = dataset.detector_geometry
 
         translation_offsets = 0 * (t.rand((len(dataset), 2)) - 0.5)
@@ -312,7 +338,8 @@ class FancyPtycho(CDIModel):
                    oversampling=oversampling,
                    loss=loss, units=units,
                    simulate_probe_translation=simulate_probe_translation,
-                   simulate_finite_pixels=simulate_finite_pixels)
+                   simulate_finite_pixels=simulate_finite_pixels,
+                   obj_view_crop=obj_view_crop)
 
 
     def interaction(self, index, translations, *args):
@@ -338,7 +365,7 @@ class FancyPtycho(CDIModel):
         # For a Fourier-space probe, we take an IFT
         if self.fourier_probe:
             basis_prs = tools.propagators.inverse_far_field(basis_prs)
-
+            
         # Now we construct the probes for each shot from the basis probes
         if self.weights is not None:
             Ws = self.weights[index]
@@ -358,10 +385,10 @@ class FancyPtycho(CDIModel):
             # coherent mode index, then x,y, and then complex index
             # Maybe this can be done with a matmul now?
             prs = t.sum(Ws[..., None, None] * basis_prs, axis=-3)
-
+        
         if self.simulate_probe_translation:
             det_pix_trans = tools.interactions.translations_to_pixel(
-                    self.detector_geometry['basis'],
+                    self.det_basis,
                     translations,
                     surface_normal=self.surface_normal)
             
@@ -375,8 +402,8 @@ class FancyPtycho(CDIModel):
         # which allows us to do stuff like let the object be super-resolution,
         # while restricting the probe to the detector resolution but still
         # doing an explicit real-space limitation of the probe
-        padding = [self.background.shape[-2] - prs.shape[-2],
-                   self.background.shape[-1] - prs.shape[-1]]
+        padding = [self.oversampling * self.background.shape[-2] - prs.shape[-2],
+                   self.oversampling * self.background.shape[-1] - prs.shape[-1]]
 
         if any([p != 0 for p in padding]): # For probe_fourier_crop != 0.
             padding = [padding[-1]//2, padding[-1]-padding[-1]//2,
@@ -415,32 +442,6 @@ class FancyPtycho(CDIModel):
     # Note: No "loss" function is defined here, because it is added
     # dynamically during object creation in __init__
 
-    def to(self, *args, **kwargs):
-        super(FancyPtycho, self).to(*args, **kwargs)
-        self.wavelength = self.wavelength.to(*args, **kwargs)
-        # move the detector geometry too
-        det_geo = self.detector_geometry
-        if 'distance' in det_geo:
-            det_geo['distance'] = det_geo['distance'].to(*args, **kwargs)
-        if 'basis' in det_geo:
-            det_geo['basis'] = det_geo['basis'].to(*args, **kwargs)
-        if 'corner' in det_geo and det_geo['corner'] is not None:
-            det_geo['corner'] = det_geo['corner'].to(*args, **kwargs)
-
-        if self.mask is not None:
-            self.mask = self.mask.to(*args, **kwargs)
-
-        if self.simulate_probe_translation:
-            self.I_phase = self.I_phase.to(*args, **kwargs)
-            self.J_phase = self.J_phase.to(*args, **kwargs)
-
-        self.min_translation = self.min_translation.to(*args, **kwargs)
-        self.probe_basis = self.probe_basis.to(*args, **kwargs)
-        self.probe_norm = self.probe_norm.to(*args, **kwargs)
-        self.probe_support = self.probe_support.to(*args, **kwargs)
-        self.surface_normal = self.surface_normal.to(*args, **kwargs)
-
-
     def sim_to_dataset(self, args_list, calculation_width=None):
         # In the future, potentially add more control
         # over what metadata is saved (names, etc.)
@@ -462,7 +463,6 @@ class FancyPtycho(CDIModel):
                        'orientation': orientation}
 
 
-        detector_geometry = self.detector_geometry
         mask = self.mask
         wavelength = self.wavelength
         indices, translations = args_list
@@ -490,7 +490,7 @@ class FancyPtycho(CDIModel):
             entry_info=entry_info,
             sample_info=sample_info,
             wavelength=wavelength,
-            detector_geometry=detector_geometry,
+            detector_geometry=self.get_detector_geometry(),
             mask=mask)
 
 
@@ -629,32 +629,77 @@ class FancyPtycho(CDIModel):
         
     plot_list = [
         ('',
-         lambda self, fig, dataset: self.plot_wavefront_variation(dataset, fig=fig, mode='root_sum_intensity', image_title='Root Summed Probe Intensities', image_colorbar_title='Square Root of Intensity'),
+         lambda self, fig, dataset: self.plot_wavefront_variation(
+             dataset,
+             fig=fig,
+             mode='root_sum_intensity',
+             image_title='Root Summed Probe Intensities',
+             image_colorbar_title='Square Root of Intensity'),
          lambda self: len(self.weights.shape) >= 2),
         ('',
-         lambda self, fig, dataset: self.plot_wavefront_variation(dataset, fig=fig, mode='amplitude', image_title='Probe Amplitudes (scroll to view modes)', image_colorbar_title='Probe Amplitude'),
+         lambda self, fig, dataset: self.plot_wavefront_variation(
+             dataset,
+             fig=fig,
+             mode='amplitude',
+             image_title='Probe Amplitudes (scroll to view modes)',
+             image_colorbar_title='Probe Amplitude'),
          lambda self: len(self.weights.shape) >= 2),
         ('',
-         lambda self, fig, dataset: self.plot_wavefront_variation(dataset, fig=fig, mode='phase', image_title='Probe Phases (scroll to view modes)', image_colorbar_title='Probe Phase'),
+         lambda self, fig, dataset: self.plot_wavefront_variation(
+             dataset,
+             fig=fig,
+             mode='phase',
+             image_title='Probe Phases (scroll to view modes)',
+             image_colorbar_title='Probe Phase'),
          lambda self: len(self.weights.shape) >= 2),
         ('Basis Probe Fourier Space Amplitudes',
-         lambda self, fig: p.plot_amplitude(self.probe if self.fourier_probe else tools.propagators.inverse_far_field(self.probe), fig=fig)),
+         lambda self, fig: p.plot_amplitude(
+             (self.probe if self.fourier_probe
+              else tools.propagators.inverse_far_field(self.probe)),
+              fig=fig)),
         ('Basis Probe Fourier Space Phases',
-         lambda self, fig: p.plot_phase(self.probe if self.fourier_probe else tools.propagators.inverse_far_field(self.probe), fig=fig)),
+         lambda self, fig: p.plot_phase(
+             (self.probe if self.fourier_probe
+              else tools.propagators.inverse_far_field(self.probe))
+             , fig=fig)),
         ('Basis Probe Real Space Amplitudes',
-         lambda self, fig: p.plot_amplitude(self.probe if not self.fourier_probe else tools.propagators.inverse_far_field(self.probe), fig=fig, basis=self.probe_basis, units=self.units)),
+         lambda self, fig: p.plot_amplitude(
+             (self.probe if not self.fourier_probe
+              else tools.propagators.inverse_far_field(self.probe)),
+             fig=fig,
+             basis=self.probe_basis,
+             units=self.units)),
         ('Basis Probe Real Space Phases',
-         lambda self, fig: p.plot_phase(self.probe if not self.fourier_probe else tools.propagators.inverse_far_field(self.probe), fig=fig, basis=self.probe_basis, units=self.units)),
+         lambda self, fig: p.plot_phase(
+             (self.probe if not self.fourier_probe
+              else tools.propagators.inverse_far_field(self.probe)),
+             fig=fig,
+             basis=self.probe_basis,
+             units=self.units)),
         ('Average Density Matrix Amplitudes',
-         lambda self, fig: p.plot_amplitude(np.nanmean(np.abs(self.get_rhos()), axis=0), fig=fig),
+         lambda self, fig: p.plot_amplitude(
+             np.nanmean(np.abs(self.get_rhos()), axis=0),
+             fig=fig),
          lambda self: len(self.weights.shape) >= 2),
         ('% Power in Top Mode (only accurate after tidy_probes)',
-         lambda self, fig, dataset: p.plot_nanomap(self.corrected_translations(dataset), analysis.calc_top_mode_fraction(self.get_rhos()), fig=fig, units=self.units),
+         lambda self, fig, dataset: p.plot_nanomap(
+             self.corrected_translations(dataset),
+             analysis.calc_top_mode_fraction(self.get_rhos()),
+             fig=fig,
+             units=self.units),
          lambda self: len(self.weights.shape) >= 2),
         ('Object Amplitude',
-         lambda self, fig: p.plot_amplitude(self.obj, fig=fig, basis=self.probe_basis, units=self.units)),
+         lambda self, fig: p.plot_amplitude(
+             self.obj[self.obj_view_slice],
+             fig=fig,
+             basis=self.probe_basis,
+             units=self.units)),
         ('Object Phase',
-         lambda self, fig: p.plot_phase(self.obj, fig=fig, basis=self.probe_basis, units=self.units)),
+         lambda self, fig: p.plot_phase(
+             self.obj[self.obj_view_slice],
+             fig=fig,
+             basis=self.probe_basis,
+             units=self.units)),
         ('Corrected Translations',
          lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig, units=self.units)),
         ('Background',

@@ -72,7 +72,7 @@ class Bragg2DPtycho(CDIModel):
                  background=None, translation_offsets=None, mask=None,
                  weights=None, translation_scale=1, saturation=None,
                  probe_support=None, oversampling=1,
-                 propagate_probe=True, correct_tilt=True, lens=False):
+                 propagate_probe=True, correct_tilt=True, lens=False, units='um'):
 
         # We need the detector geometry
         # We need the probe basis (but in this case, we don't need the surface
@@ -84,6 +84,7 @@ class Bragg2DPtycho(CDIModel):
         # propagate_probe and correct_tilt are important!
 
         super(Bragg2DPtycho, self).__init__()
+        self.units = units
         self.wavelength = t.tensor(wavelength)
         self.detector_geometry = copy(detector_geometry)
         det_geo = self.detector_geometry
@@ -375,14 +376,15 @@ class Bragg2DPtycho(CDIModel):
         prs = Ws[...,None,None,None] * self.probe * self.probe_support[...,:,:]
         # Now we need to propagate each of the probes
 
-        
-        for j in range(prs.shape[0]):
-            # I believe this -1 sign is in error, but I need a dataset with
-            # well understood geometry to figure it out
-            propagator = t.exp(
-                1j*(props[j]*(2*np.pi)/self.wavelength)
-                * self.universal_propagator)
-            prs[j] = tools.propagators.near_field(prs[j], propagator)
+
+        if self.propagate_probe:
+            for j in range(prs.shape[0]):
+                # I believe this -1 sign is in error, but I need a dataset with
+                # well understood geometry to figure it out
+                propagator = t.exp(
+                    1j*(props[j]*(2*np.pi)/self.wavelength)
+                    * self.universal_propagator)
+                prs[j] = tools.propagators.near_field(prs[j], propagator)
 
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
             prs, self.obj,pix_trans,
@@ -495,20 +497,18 @@ class Bragg2DPtycho(CDIModel):
 
 
     plot_list = [
-        ('Dominant Probe Amplitude',
-         lambda self, fig: p.plot_amplitude(self.probe[0], fig=fig)),
-        ('Dominant Probe Phase',
-         lambda self, fig: p.plot_phase(self.probe[0], fig=fig)),
-        ('Subdominant Probe Amplitude',
-         lambda self, fig: p.plot_amplitude(self.probe[1], fig=fig),
-         lambda self: len(self.probe) >=2),
-        ('Subdominant Probe Phase',
-         lambda self, fig: p.plot_phase(self.probe[1], fig=fig),
-         lambda self: len(self.probe) >=2),
+        ('Basis Probe Fourier Space Amplitudes',
+         lambda self, fig: p.plot_amplitude(tools.propagators.inverse_far_field(self.probe), fig=fig)),
+        ('Basis Probe Fourier Space Phases',
+         lambda self, fig: p.plot_phase(tools.propagators.inverse_far_field(self.probe), fig=fig)),
+        ('Basis Probe Real Space Amplitudes',
+         lambda self, fig: p.plot_amplitude(self.probe, fig=fig, basis=self.probe_basis, units=self.units)),
+        ('Basis Probe Real Space Phases',
+         lambda self, fig: p.plot_phase(self.probe, fig=fig, basis=self.probe_basis, units=self.units)),
         ('Object Amplitude', 
-         lambda self, fig: p.plot_amplitude(self.obj, fig=fig)),
+         lambda self, fig: p.plot_amplitude(self.obj, fig=fig, basis=self.probe_basis)),
         ('Object Phase',
-         lambda self, fig: p.plot_phase(self.obj, fig=fig)),
+         lambda self, fig: p.plot_phase(self.obj, fig=fig, basis=self.probe_basis)),
         ('Corrected Translations',
          lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig)),
         ('Background',

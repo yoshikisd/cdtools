@@ -14,6 +14,8 @@ dataset.patterns = t.cat([dataset.patterns]*5)
 # Next, we create a ptychography model from the dataset
 model = cdtools.models.SimplePtycho.from_dataset(dataset)
 
+print(model.mask)
+exit()
 #class MyDataParallel(t.nn.DataParallel):
 #    def __getattr__(self, name):
 #        return getattr(self.module, name)

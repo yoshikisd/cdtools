@@ -16,11 +16,6 @@ def demo():
     model = cdtools.models.SimplePtycho.from_dataset(dataset)
     
     
-    #class MyDataParallel(t.nn.DataParallel):
-    #    def __getattr__(self, name):
-    #        return getattr(self.module, name)
-    
-    
     print(dist.is_torchelastic_launched())
     dist.init_process_group(backend="nccl", init_method='env://')
     rank = dist.get_rank()
@@ -29,7 +24,9 @@ def demo():
     print('device id', device_id)
     model = model.to(device_id)
     ddp_model = DDP(model, device_ids=[device_id])
-    
+    print(model.loss_train)
+    print(model.Adam_optimize)
+    print(ddp_model.Adam_optimize)
     
     sampler = torchdata.distributed.DistributedSampler(dataset)
     # Make a dataloader
@@ -78,6 +75,8 @@ def demo():
         #loss = dist.all_reduce(loss)
         #print(it, 'time', time.time()-t0)
         #print(loss / normalization)
+        if rank==0:
+            model.inspect()
     return loss#.cpu().numpy()
 
 if __name__=='__main__':
