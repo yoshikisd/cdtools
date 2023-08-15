@@ -41,7 +41,7 @@ def translations_to_pixel(basis, translations, surface_normal=t.Tensor([0.,0.,1.
     Returns
     -------
     pixel_translations : torch.Tensor
-        A Jx2 stack of translations in internal (i,j) pixel-space, or a single translation
+        A Jx2 stack of translations, or a single translation, in (i,j) pixel-space
     """
     projection_1 = t.as_tensor(np.array([[1,0,0],
                                          [0,1,0],
