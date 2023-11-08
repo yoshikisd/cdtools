@@ -22,12 +22,13 @@ defining a new ptychography model before attempting to do so.
 
 # I don't believe that __all__ really needed, but it's nice to define it
 # to be explicit that import * is safe
-__all__ = ['CDIModel', 'SimplePtycho', 'FancyPtycho', 'PolarizedFancyPtycho', 'Bragg2DPtycho', 'Multislice2DPtycho', 'RPI', 'TimeResolvedPtychoCalibration', 'TimeResolvedRPI']
+__all__ = ['CDIModel', 'SimplePtycho', 'FancyPtycho', 'PolarizationSweptPtycho', 'PolarizedFancyPtycho', 'Bragg2DPtycho', 'Multislice2DPtycho', 'RPI', 'TimeResolvedPtychoCalibration', 'TimeResolvedRPI']
 
 from cdtools.models.base import CDIModel
 from cdtools.models.simple_ptycho import SimplePtycho
 from cdtools.models.fancy_ptycho import FancyPtycho
 from cdtools.models.polarized_fancy_ptycho import PolarizedFancyPtycho
+from cdtools.models.polarization_swept_ptycho import PolarizationSweptPtycho
 from cdtools.models.bragg_2d_ptycho import Bragg2DPtycho
 from cdtools.models.multislice_2d_ptycho import Multislice2DPtycho
 from cdtools.models.rpi import RPI
