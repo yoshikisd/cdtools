@@ -764,11 +764,9 @@ def calc_fidelity(fields_1, fields_2, dims=2):
 
     fields_1 = t.as_tensor(fields_1)
     fields_2 = t.as_tensor(fields_2)
-    
     mult = fields_1.unsqueeze(-dims-2) * fields_2.unsqueeze(-dims-1).conj()
     sumdims = tuple(d - dims for d in range(dims))
     mat = t.sum(mult,dim=sumdims)
-
     # Because I think this is the nuclear norm squared, I would like to swap
     # Out the definition for this, but I need to test it before swapping.
     # It also probably makes sense to implement sqrt_fidelity separately

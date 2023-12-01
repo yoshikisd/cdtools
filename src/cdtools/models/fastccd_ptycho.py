@@ -160,7 +160,6 @@ class FastCCDPtycho(CDIModel):
                      scattering_mode=None,
                      oversampling=1,
                      auto_center=False,
-                     opt_for_fft=False,
                      fourier_probe=False,
                      loss='amplitude mse',
                      units='um',
@@ -197,7 +196,6 @@ class FastCCDPtycho(CDIModel):
                                                   distance,
                                                   center=center,
                                                   padding=padding,
-                                                  opt_for_fft=opt_for_fft,
                                                   oversampling=oversampling)
 
         if hasattr(dataset, 'sample_info') and \

@@ -140,7 +140,6 @@ class SMatrixPtycho(CDIModel):
                                                 wavelength,
                                                 distance,
                                                 padding=padding,
-                                                opt_for_fft=False,
                                                 oversampling=oversampling)
         
         if propagation_distances is None:

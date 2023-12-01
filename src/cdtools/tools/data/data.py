@@ -76,6 +76,12 @@ def get_entry_info(cxi_file):
                 metadata[attr] = dateutil.parser.parse(str(e1[attr][()].decode()))
             except ValueError:
                 metadata[attr] = str(e1[attr][()].decode())
+
+    array_attrs = ['polarization_states']
+    for attr in array_attrs:
+        if attr in e1:
+            metadata[attr] = np.array(e1[attr])
+
     return metadata
 
 

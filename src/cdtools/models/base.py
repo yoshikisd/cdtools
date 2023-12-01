@@ -284,7 +284,7 @@ class CDIModel(t.nn.Module):
         # If we don't want to run in a different thread, this is easy
         if not thread:
             for it in range(iterations):
-                yield run_iteration()
+                yield run_epoch()
 
         # But if we do want to thread, it's annoying:
         else:

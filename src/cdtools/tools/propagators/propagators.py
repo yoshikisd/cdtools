@@ -540,6 +540,12 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     # adding to get the full 3D wavevectors. Note that we convert to complex
     # before the square root to appropriately map negative numbers to
     # complex frequencies
+
+    # The correct algorithm for sqrt(1-x**2) - 1 is
+    # - x**2 / (sqrt(1-x**2) + 1)
+    # This one doesn't have numerical stability issues near x=0.
+    # I need to figure out how to apply that knowledge here.
+    
     K = K_ip + perpendicular_dir[:,None,None] \
         * t.sqrt(t.complex(K_oop_squared,t.zeros_like(K_oop_squared)))
 
@@ -558,7 +564,7 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     K_m_K_0 = K - K_0[:,None,None]
     # We actually calculate the phase mask
     phase_mask = t.tensordot(offset_vector,K_m_K_0, dims=1)
-
+    
     # And we take the conjugate if needed, which makes sure that the
     # imaginary part is always positive (supressing evanescent waves)
     if propagation_vector is not None \

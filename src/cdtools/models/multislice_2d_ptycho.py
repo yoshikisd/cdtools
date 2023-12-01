@@ -181,7 +181,6 @@ class Multislice2DPtycho(CDIModel):
                                                   distance,
                                                   center=center,
                                                   padding=padding,
-                                                  opt_for_fft=False,
                                                   oversampling=oversampling)
 
 

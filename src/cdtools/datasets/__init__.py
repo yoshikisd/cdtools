@@ -29,7 +29,7 @@ attempting to do so
 
 # I don't believe that __all__ really needed, but it's nice to define it
 # to be explicit that import * is safe
-__all__ = ['CDataset','Ptycho2DDataset','PolarizationSwepttycho2DDataset']
+__all__ = ['CDataset','Ptycho2DDataset','PolarizationSweptPtycho2DDataset']
 
 from cdtools.datasets.base import CDataset
 from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset

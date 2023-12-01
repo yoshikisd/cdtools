@@ -4,7 +4,7 @@ from cdtools import tools
 from cdtools.tools import plotting as p
 from cdtools.tools.interactions import RPI_interaction
 from cdtools.tools import initializers
-from scipy.ndimage.morphology import binary_dilation
+from scipy.ndimage import binary_dilation
 import numpy as np
 from copy import copy
 import time
@@ -139,7 +139,7 @@ class RPI(CDIModel):
 
 
     @classmethod
-    def from_dataset(cls, dataset, probe, obj_size=None, background=None, mask=None, padding=0, n_modes=1, saturation=None, scattering_mode=None, oversampling=1, auto_center=False, initialization='random', opt_for_fft=False, weight_matrix=False, probe_threshold=0, simulate_finite_pixels=False):
+    def from_dataset(cls, dataset, probe, obj_size=None, background=None, mask=None, padding=0, n_modes=1, saturation=None, scattering_mode=None, oversampling=1, auto_center=False, initialization='random', weight_matrix=False, probe_threshold=0, simulate_finite_pixels=False):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -167,7 +167,6 @@ class RPI(CDIModel):
                                                    distance,
                                                    center=center,
                                                    padding=padding,
-                                                   opt_for_fft=opt_for_fft,
                                                    oversampling=oversampling)
 
         if not isinstance(probe,t.Tensor):

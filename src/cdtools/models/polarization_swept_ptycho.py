@@ -117,7 +117,7 @@ class PolarizationSweptPtycho(CDIModel):
                              t.tensor(translation_scale, dtype=dtype))
 
         if probe_support is None:
-            probe_support = t.ones_like(self.probe[0], dtype=t.bool)
+            probe_support = t.ones(self.probe.shape[-2:], dtype=t.bool)
         self.register_buffer('probe_support',
                              t.tensor(probe_support, dtype=t.bool))
             
@@ -139,7 +139,7 @@ class PolarizationSweptPtycho(CDIModel):
         self.simulate_finite_pixels = simulate_finite_pixels
 
         self.polarization_states = t.nn.Parameter(
-            t.tensor(polarization_states, dtype=dtype))
+            t.tensor(polarization_states, dtype=t.complex64))
         # by default, don't optimize this, but I think it might be
         # interesting to try it because the polarization states
         # are not very pure
@@ -172,7 +172,6 @@ class PolarizationSweptPtycho(CDIModel):
                      scattering_mode=None,
                      oversampling=1,
                      auto_center=False,
-                     opt_for_fft=False,
                      fourier_probe=False,
                      loss='amplitude mse',
                      units='um',
@@ -212,7 +211,6 @@ class PolarizationSweptPtycho(CDIModel):
                                                   distance,
                                                   center=center,
                                                   padding=padding,
-                                                  opt_for_fft=opt_for_fft,
                                                   oversampling=oversampling)
 
         if hasattr(dataset, 'sample_info') and \
@@ -298,7 +296,7 @@ class PolarizationSweptPtycho(CDIModel):
             mask = None
 
         if probe_support_radius is not None:
-            probe_support = t.zeros(probe[0].shape, dtype=t.bool)
+            probe_support = t.zeros(probe.shape[-2:], dtype=t.bool)
             xs, ys = np.mgrid[:probe.shape[-2], :probe.shape[-1]]
             xs = xs - np.mean(xs)
             ys = ys - np.mean(ys)
@@ -344,15 +342,14 @@ class PolarizationSweptPtycho(CDIModel):
         if self.translation_offsets is not None:
             pix_trans += (self.translation_scale *
                           self.translation_offsets[index])
+
         # This restricts the basis probes to stay within the probe support
         basis_prs = self.probe * self.probe_support[..., :, :]
-        print(basis_prs.shape)
         # Now we expand the polarization states explicitly.
         # pol_basis_prs has dimensions n_states x 2 x n_modes x m x l
         pol_basis_prs = (
             self.polarization_states[...,None,None,None]
             * basis_prs[...,None,:,:,:])
-        print(pol_basis_prs.shape)
         # For a Fourier-space probe, we take an IFT
         if self.fourier_probe:
             basis_prs = tools.propagators.inverse_far_field(basis_prs)
@@ -360,13 +357,13 @@ class PolarizationSweptPtycho(CDIModel):
         # So, first we get the appropriate probe for each shot.
         # prs is now n_frames x 2 x n_modes x m x l
         prs = pol_basis_prs[polarization_indices]
-        print(prs.shape)
+
         # Now we construct the probes for each shot from the basis probes
         if self.weights is not None:
             Ws = self.weights[index]
             # And then we multiply by the weights, along the 0th dimension
-            prs = Ws[..., None, None, None, None] * basis_prs
-                
+            prs = Ws[..., None, None, None, None] * prs#basis_prs
+        
         if self.simulate_probe_translation:
             det_pix_trans = tools.interactions.translations_to_pixel(
                     self.det_basis,
@@ -394,23 +391,28 @@ class PolarizationSweptPtycho(CDIModel):
             prs = tools.propagators.inverse_far_field(prs)
         # Now we actually do the interaction, using the sinc subpixel
         # translation model as per usual
-        print('hi')
-        print(prs[...,0,:,:,:].shape)
-        print(self.obj[:,0].shape)
-        exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
-            prs[...,0,:,:,:], self.obj[:,0], pix_trans,
-            shift_probe=True, multiple_modes=True)
-        exit_waves = exit_waves + (
-            self.probe_norm * tools.interactions.ptycho_2D_sinc(
-            prs[...,1,:,:,:], self.obj[:,1], pix_trans,
-            shift_probe=True, multiple_modes=True)
-        )
-        print(exit_waves.shape)
+
         # After the object, no point in treating the polarization modes
         # any differently from the object/probe modes
-        print(exit_waves.flatten(start_dim=1,end_dim=-3).shape)
-        print('sup')
-        return exit_waves.flatten(start_dim=1,end_dim=-3)
+        # So, this stacks up all the output modes in lexicographic order
+        exit_waves = t.cat(
+            [self.probe_norm * tools.interactions.ptycho_2D_sinc(
+                prs[...,0,:,:,:], self.obj[0,0], pix_trans,
+                shift_probe=True, multiple_modes=True),
+             self.probe_norm * tools.interactions.ptycho_2D_sinc(
+                 prs[...,0,:,:,:], self.obj[1,0], pix_trans,
+                 shift_probe=True, multiple_modes=True)],
+            dim=1)
+        exit_waves = exit_waves + t.cat(
+            [self.probe_norm * tools.interactions.ptycho_2D_sinc(
+                prs[...,1,:,:,:], self.obj[0,1], pix_trans,
+                shift_probe=True, multiple_modes=True),
+             self.probe_norm * tools.interactions.ptycho_2D_sinc(
+                 prs[...,1,:,:,:], self.obj[1,1], pix_trans,
+                 shift_probe=True, multiple_modes=True)],
+            dim=1)
+
+        return exit_waves
 
 
     def forward_propagator(self, wavefields):
@@ -519,14 +521,12 @@ class PolarizationSweptPtycho(CDIModel):
         to calculate a natural basis for the experiment, and update all the
         density matrices to operate in that updated basis
         """
-
-        # First we treat the purely incoherent case
-
-        # I don't love this pattern of using an if statement with a return
-        # to catch this case, but because it's so much simpler than the
-        # unified mode case I think it's appropriate
+        
         probe = self.probe.detach().cpu().numpy()
-        ortho_probes = analysis.orthogonalize_probes(probe)
+        ortho_probes = np.empty(probe.shape, dtype=probe.dtype)
+        for idx in range(probe.shape[0]):
+            ortho_probes[idx] = analysis.orthogonalize_probes(probe[idx])
+        
         self.probe.data = t.as_tensor(
             ortho_probes,
             device=self.probe.device,
@@ -572,13 +572,13 @@ class PolarizationSweptPtycho(CDIModel):
          lambda self: len(self.weights.shape) >= 2),
         ('Object Amplitude',
          lambda self, fig: p.plot_amplitude(
-             self.obj[self.obj_view_slice],
+             self.obj[np.s_[:,:] + self.obj_view_slice],
              fig=fig,
              basis=self.probe_basis,
              units=self.units)),
         ('Object Phase',
          lambda self, fig: p.plot_phase(
-             self.obj[self.obj_view_slice],
+             self.obj[np.s_[:,:] + self.obj_view_slice],
              fig=fig,
              basis=self.probe_basis,
              units=self.units)),

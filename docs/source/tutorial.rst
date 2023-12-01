@@ -358,8 +358,7 @@ To initialize the object from a dataset, we need to start by extracting the rele
         probe_basis, probe_shape, det_slice =  ewg(det_basis,
                                                    det_shape,
                                                    wavelength,
-                                                   distance,
-						   opt_for_fft=False)
+                                                   distance)
 
         # Next generate the object geometry
         pix_translations = tools.interactions.translations_to_pixel(

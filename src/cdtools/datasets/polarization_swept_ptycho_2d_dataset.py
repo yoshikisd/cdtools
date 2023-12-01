@@ -66,7 +66,7 @@ class PolarizationSweptPtycho2DDataset(Ptycho2DDataset):
                                                       *args, **kwargs)
         
         self.polarization_indices = t.tensor(polarization_indices, dtype=t.int32)
-        self.polarization_states = t.tensor(polarization_states, dtype=t.float32)
+        self.polarization_states = t.tensor(polarization_states, dtype=t.complex64)
 
         
     def _load(self, index):
@@ -154,15 +154,18 @@ class PolarizationSweptPtycho2DDataset(Ptycho2DDataset):
         dataset.__class__ = cls
 
         # Now, we save out the polarizer and analyzer states
-        polarization_indices = cdtdata.get_shot_to_shot_info(cxi_file, 'polarization_indices')
-        polarization_states = cdtdata.get_entry_info(cxi_file, 'polarization_states')
+        polarization_indices = cdtdata.get_shot_to_shot_info(
+            cxi_file, 'polarization_indices')
+        polarization_states = dataset.entry_info['polarization_states']
 
-        dataset.polarization_indices = t.tensor(polarization_indices, dtype=t.int32)
-        dataset.polarization_states = t.tensor(polarization_states, dtype=t.complex64)
+        dataset.polarization_indices = t.tensor(polarization_indices,
+                                                dtype=t.int32)
+        dataset.polarization_states = t.tensor(polarization_states,
+                                               dtype=t.complex64)
         
         return dataset
 
-    def to_cxi(self, cxi_file, polarized=False):
+    def to_cxi(self, cxi_file):
         """Saves out a PolarizationSweptPtycho2DDataset as a .cxi file
 
         This function saves all the compatible information in a
@@ -187,5 +190,5 @@ class PolarizationSweptPtycho2DDataset(Ptycho2DDataset):
         # Now, we save out the polarization states
         cdtdata.add_shot_to_shot_info(cxi_file, self.polarization_indices,
                                       'polarization_indices')
-        cdtdata.add_entry_info(cxi_file, self.polarization_states,
-                                      'polarization_states')
+        cdtdata.add_entry_info(cxi_file, {'polarization_states':
+                                          self.polarization_states})

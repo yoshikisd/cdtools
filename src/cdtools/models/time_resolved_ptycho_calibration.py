@@ -125,7 +125,7 @@ class TimeResolvedPtychoCalibration(CDIModel):
 
 
     @classmethod
-    def from_dataset(cls, dataset, zp_geometry, time_window, n_times, n_frames, randomize_ang=0, padding=0, translation_scale=1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um', simulate_probe_translation=False):
+    def from_dataset(cls, dataset, zp_geometry, time_window, n_times, n_frames, randomize_ang=0, padding=0, translation_scale=1, saturation=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=False, loss='amplitude mse', units='um', simulate_probe_translation=False):
 
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -156,7 +156,6 @@ class TimeResolvedPtychoCalibration(CDIModel):
                                                   distance,
                                                   center=center,
                                                   padding=padding,
-                                                  opt_for_fft=opt_for_fft,
                                                   oversampling=oversampling)
 
         if hasattr(dataset, 'sample_info') and \

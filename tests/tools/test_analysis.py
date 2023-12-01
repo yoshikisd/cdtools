@@ -367,18 +367,20 @@ def test_calc_fidelity():
     dm_1 = t.tensordot(dm_1.transpose(0,1), dm_1.conj(), dims=1).numpy()
     dm_2 = t.reshape(fields_2, (3,-1))
     dm_2 = t.tensordot(dm_2.transpose(0,1), dm_2.conj(), dims=1).numpy()
-    
-    inner_mat = la.sqrtm(np.dot(np.dot(la.sqrtm(dm_1),dm_2),la.sqrtm(dm_1)))
+
+    sqrt_dm_1 = la.sqrtm(dm_1).astype(dm_1.dtype)
+    inner_mat = la.sqrtm(np.dot(np.dot(sqrt_dm_1,dm_2), sqrt_dm_1))
+    inner_mat = inner_mat.astype(dm_1.dtype) #la.sqrtm doubles the precision
     fidelity = t.as_tensor(np.abs(np.trace(inner_mat))**2)
-    
+
     assert t.isclose(fidelity, analysis.calc_fidelity(fields_1, fields_2))
 
+    # Check that it reduces to the overlap for coherent fields
     fields_1 = t.rand(1,30,17, dtype=t.complex128)
     fields_2 = t.rand(1,30,17, dtype=t.complex128)
 
     assert t.isclose(t.abs(t.sum(fields_1*fields_2.conj()))**2,
                      analysis.calc_fidelity(fields_1, fields_2))
-
     # Checking that it works with extra dimensions
     fields_1 = t.rand(3,3,30,17, dtype=t.complex128)
     fields_2 = t.rand(3,1,30,17, dtype=t.complex128)

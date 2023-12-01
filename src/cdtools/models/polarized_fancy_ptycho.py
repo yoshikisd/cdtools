@@ -61,7 +61,7 @@ class PolarizedFancyPtycho(FancyPtycho):
         self.probe = t.nn.Parameter(probe_guess / self.probe_norm)
 
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um', left_polarized=True):
+    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, restrict_obj=-1, scattering_mode=None, oversampling=1, auto_center=False, loss='amplitude mse', units='um', left_polarized=True):
 
         # When using this method, remember to pass through the inputs
         model = FancyPtycho.from_dataset(
@@ -78,7 +78,6 @@ class PolarizedFancyPtycho(FancyPtycho):
             scattering_mode=scattering_mode,
             oversampling=oversampling,
             auto_center=auto_center,
-            opt_for_fft=opt_for_fft,
             loss=loss,
             units=units)
 
@@ -122,7 +121,7 @@ class PolarizedFancyPtycho(FancyPtycho):
     polarizers = [tools.polarization.generate_linear_polarizer(i * 45) for i in range(3)]
 
     @classmethod
-    def from_dataset2(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale=1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=False, opt_for_fft=False, loss='amplitude mse', units='um'):
+    def from_dataset2(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, dm_rank=None, translation_scale=1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=False, loss='amplitude mse', units='um'):
 
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -159,7 +158,6 @@ class PolarizedFancyPtycho(FancyPtycho):
                                                   distance,
                                                   center=center,
                                                   padding=padding,
-                                                  opt_for_fft=opt_for_fft,
                                                   oversampling=oversampling)
 
         probe_shape = t.stack((2, probe_shape), dim=-3)

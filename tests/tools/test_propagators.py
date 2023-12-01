@@ -5,7 +5,7 @@ from cdtools.tools import image_processing
 import numpy as np
 import torch as t
 import pytest
-import scipy.misc
+import scipy.datasets
 from scipy import stats
 from matplotlib import pyplot as plt
 
@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 @pytest.fixture(scope='module')
 def exit_waves_1():
     # Import scipy test image and add a random phase
-    obj = scipy.misc.ascent()[0:64,0:64].astype(np.complex128)
+    obj = scipy.datasets.ascent()[0:64,0:64].astype(np.complex128)
     arr = np.random.random_sample((64,64))
     obj *= (arr+(1-arr**2)**.5*1j)
     obj = t.as_tensor(obj)
@@ -53,7 +53,7 @@ def test_generate_high_NA_k_intensity_map():
     distance = 1#6e-3
     rs_basis, full_shape, det_slice = \
         initializers.exit_wave_geometry(basis, shape, wavelength,
-                                        distance, opt_for_fft=False)
+                                        distance)
 
     k_map, intensity_map = propagators.generate_high_NA_k_intensity_map(
         rs_basis, basis, shape, distance, wavelength,
@@ -84,7 +84,7 @@ def test_generate_high_NA_k_intensity_map():
     distance = 0.01#6e-3
     rs_basis, full_shape, det_slice = \
         initializers.exit_wave_geometry(basis, shape, wavelength,
-                                        distance, opt_for_fft=False)
+                                        distance)
     rs_basis_tilted = rs_basis.clone()
     rs_basis_tilted[2,1] = rs_basis_tilted[0,1]
 
@@ -271,7 +271,7 @@ def test_near_field():
     asp = propagators.generate_angular_spectrum_propagator(
         E0.shape, spacing, wavelength, z)
 
-    asp[10,10].backward()
+    t.real(asp[10,10]).backward()
     assert z.grad != 0
     assert spacing.grad[0] != 0
     assert wavelength.grad !=0

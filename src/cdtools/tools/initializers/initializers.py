@@ -21,12 +21,7 @@ __all__ = ['exit_wave_geometry', 'calc_object_setup', 'gaussian',
            'RPI_spectral_init',
            'generate_subdominant_modes']
 
-# I need to remove a dependency on scipy.fftpack, so I did this.
-# I should replace this with a real function
-def next_fast_len(x):
-    return x
-
-def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, opt_for_fft=True, padding=0, oversampling=1):
+def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, padding=0, oversampling=1):
     """Returns an exit wave basis and shape, as well as a detector slice for the given detector geometry
     
     It takes in the parameters for a given detector - the basis defining
@@ -48,8 +43,6 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
         The sample-detector distance, in m
     center : torch.Tensor
         If defined, the location of the zero frequency pixel
-    opt_for_fft : bool
-        Default is true, whether to increase detector size to improve fft performance
     padding : int
         Default is 0, the size of an extra border of nonphysical pixels around the detector
     oversampling : int
@@ -85,11 +78,6 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
 
     # In some edge cases this shape can be smaller than the detector shape
     full_shape = t.max(full_shape, det_shape)
-
-    
-    if opt_for_fft:
-        full_shape = t.as_tensor([next_fast_len(dim) for dim in full_shape],
-                                 dtype=t.int32)
     
     # Then, generate a slice that pops the actual detector from the full
     # detector shape
