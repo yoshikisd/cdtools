@@ -531,7 +531,6 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
         
         K_ip = K_ip + K_0_ip[:,None,None]
     else:
-        print('no prop vector')
         K_0 = t.zeros_like(offset_vector)
 
     # Now, we have accurate in-plane values for K, so we can calculate the
