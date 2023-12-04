@@ -224,25 +224,6 @@ def test_near_field():
     Ez_t = propagators.near_field(t.as_tensor(E0),asp).numpy()
     
     # Check for at least 10^-3 relative accuracy in this scenario
-    assert np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez))
-
-
-    Emz = np.conj(Ez)
-
-    Emz_t = propagators.inverse_near_field(t.as_tensor(E0),asp).numpy()
-
-    # Again, 10^-3 is about all the accuracy we can expect
-    assert np.max(np.abs(Emz-Emz_t)) < 1e-3 * np.max(np.abs(Emz))
-
-    # Then, we check it with the phase correction
-    asp = propagators.generate_angular_spectrum_propagator(
-        E0.shape,(1.5e-9,1e-9),wavelength,z,remove_z_phase=True,
-        dtype=t.complex128)
-    
-    
-    Ez_t = propagators.near_field(t.as_tensor(E0),asp).numpy()
-    
-    # Check for at least 10^-3 relative accuracy in this scenario
     assert np.max(np.abs(Ez_nozphase-Ez_t)) < 1e-3 * np.max(np.abs(Ez_nozphase))
 
 
@@ -255,7 +236,7 @@ def test_near_field():
 
     # Then, we check that the bandlimiting at least does something
     asp = propagators.generate_angular_spectrum_propagator(
-        E0.shape,(1.5e-9,1e-9),wavelength,z,remove_z_phase=True,
+        E0.shape,(1.5e-9,1e-9),wavelength,z,
         dtype=t.complex128, bandlimit=0.3)
 
     assert asp[140,0] == 0
@@ -315,7 +296,7 @@ def test_generalized_near_field():
     def get_inv_R(Zs):
         return Zs / (Zs**2 + zr**2)
     
-    def get_E(Xs, Ys, Zs, correct=False):
+    def get_E(Xs, Ys, Zs, correct=True):
         # Again, this follows the convention opposite from Wikipedia. See
         # the note in test_angular_spectrum_propagator.
         
@@ -326,11 +307,18 @@ def test_generalized_near_field():
         E = w0 / Wzs * np.exp(-Rs_sq / Wzs**2) *\
             np.exp(1j * k * ( Zs + Rs_sq * get_inv_R(Zs) / 2) + \
                    - 1j * np.arctan(Zs / zr))
-        if correct:
+        
+        # This removes the z-dependence of the phase
+        if correct: 
             E = E * np.exp(-1j * k * Zs)
         return E
     
-
+    def check_equiv(analytical, numerical):
+        phase = np.angle(np.mean(numerical.conj()*analytical))
+        comp = np.exp(1j*phase) * numerical
+        return (np.max(np.abs(analytical-comp))
+                < 1e-3 * np.max(np.abs(analytical)))
+    
     # We make some rotation matrices to test
     
     # This tests the straight ahead case
@@ -439,27 +427,35 @@ def test_generalized_near_field():
         Ez_t = propagators.near_field(t.as_tensor(E0),asp).numpy()
         
         # Check for at least 10^-3 relative accuracy in this scenario
-        if not np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez)):
+        if not check_equiv(Ez, Ez_t):
         #if True:
             plt.close('all')
+            plt.figure()
             plt.imshow(np.angle(E0))
+            plt.title('Angle of E0')
             plt.figure()
             plt.imshow(np.angle(Ez))
+            plt.title('Angle of analytically calculated Ez')
+            plt.figure()
+            plt.imshow(np.abs(Ez))
+            plt.title('Magnitude of analytically calculated Ez')
             plt.figure()
             plt.imshow(np.abs(Ez_t))
+            plt.title('Magnitude of numerically calculated Ez')
             plt.figure()
             plt.imshow(np.angle(Ez_t))
+            plt.title('Angle of numerically calculated Ez')
             plt.figure()
-            plt.imshow(np.abs(Ez-Ez_t)/np.max(np.abs(Ez)))
+            plt.imshow(np.abs(Ez-Ez_t))#/np.max(np.abs(Ez)))
+            plt.title('Magnitude of difference')
             plt.show()
             
-        assert np.max(np.abs(Ez-Ez_t)) < 1e-3 * np.max(np.abs(Ez))
+        assert check_equiv(Ez, Ez_t)
         
             
         Em0_t = propagators.inverse_near_field(t.as_tensor(Ez),asp).numpy()
         
-        # Again, 10^-3 is about all the accuracy we can expect
-        assert np.max(np.abs(E0-Em0_t)) < 1e-3 * np.max(np.abs(E0))
+        assert check_equiv(E0,Em0_t)
             
         print('Test Successful')
 

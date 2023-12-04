@@ -314,7 +314,7 @@ def high_NA_far_field(wavefront, k_map, intensity_map=None):
 
 
 
-def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, remove_z_phase=False, bandlimit=None, **kwargs):
+def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, bandlimit=None, **kwargs):
     """Generates an angular-spectrum based near-field propagator from experimental quantities
     
     This function generates an angular-spectrum based near field
@@ -342,8 +342,6 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
         The wavelength of light to simulate propagation of
     z : float
         The distance to simulate propagation over
-    remove_z_phase : bool
-        Default False, whether to remove the dominant z-direction phase dependence
     bandlimit : float
         Optional, a fraction of the full detector radius beyond which to set the propagator to zero.
 
@@ -371,9 +369,12 @@ def generate_angular_spectrum_propagator(shape, spacing, wavelength, z, *args, r
     offset[2] = z
     
     # And we call the generalized function! 
-    propagator = generate_generalized_angular_spectrum_propagator(shape, basis,
-                            wavelength, offset, 
-                            propagate_along_offset=remove_z_phase, **kwargs)
+    propagator = generate_generalized_angular_spectrum_propagator(
+        shape,
+        basis,
+        wavelength,
+        offset, 
+        **kwargs)
     if z < 0:
         propagator = t.conj(propagator)
 
@@ -516,7 +517,6 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
         perpendicular_dir = perpendicular_dir \
             * t.sign(t.dot(perpendicular_dir,propagation_vector))
     else:
-        pass
         perpendicular_dir = perpendicular_dir * \
             t.sign(t.dot(perpendicular_dir,offset_vector))
     
@@ -526,10 +526,12 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     if propagation_vector is not None:
         prop_dir = (propagation_vector /
                     t.linalg.norm(propagation_vector))
-        K_0 = 2*np.pi / wavelength * prop_dir
+        K_0 = 2*np.pi / wavelength * (prop_dir - perpendicular_dir)
         K_0_ip = K_0 - t.dot(perpendicular_dir,K_0) * perpendicular_dir
-        K_ip += K_0_ip[:,None,None]
+        
+        K_ip = K_ip + K_0_ip[:,None,None]
     else:
+        print('no prop vector')
         K_0 = t.zeros_like(offset_vector)
 
     # Now, we have accurate in-plane values for K, so we can calculate the
@@ -541,13 +543,37 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     # before the square root to appropriately map negative numbers to
     # complex frequencies
 
+    # Below was the old, naive approach, that had numerical stability
+    # issues when K_oop >> K_ip, and the subtle changes in K_oop were
+    # clippping because K_ip was so much larger.
+    
+    # K = K_ip + perpendicular_dir[:,None,None] \
+    #     * t.sqrt(t.complex(K_oop_squared,t.zeros_like(K_oop_squared)))
+    
     # The correct algorithm for sqrt(1-x**2) - 1 is
     # - x**2 / (sqrt(1-x**2) + 1)
     # This one doesn't have numerical stability issues near x=0.
-    # I need to figure out how to apply that knowledge here.
-    
-    K = K_ip + perpendicular_dir[:,None,None] \
-        * t.sqrt(t.complex(K_oop_squared,t.zeros_like(K_oop_squared)))
+    # We still use the complex-valued trick in the square root, which
+    # still generates the appropriate complex valued frequencies corresponding
+    # to exponential decay if the in-plane Ks get larger than the
+    # wavenumber of the light.
+
+    # So, it seems like this is a silly way to calculate K_oop (why
+    # not just take the square root of K_oop_squared?), but it is much
+    # more numerically stable. Also note that this has one big difference from
+    # the old method, which (by default) preserved the 
+
+    K_oop_squared_complex = t.complex(K_oop_squared,
+                                      t.zeros_like(K_oop_squared))
+
+    K_oop = - t.linalg.norm(K_ip, dim=0)**2 / \
+        (t.sqrt(K_oop_squared_complex) + (2*np.pi/wavelength))
+    K = K_ip + perpendicular_dir[:,None,None] * K_oop
+
+    # This corrects for the propagation direction, if set. If not, K_0 is
+    # just 0
+    K_m_K_0 = K - K_0[:,None,None]
+    # print(propagation_vector)
 
     # 
     # In this section, we take the inner product of the calcualted
@@ -558,10 +584,7 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     # We need to convert to complex because K is complex
     offset_vector = t.complex(offset_vector,t.zeros_like(offset_vector))
 
-    # We then subtract off K_0, essentially setting the phase offset
-    # experienced by K_0 to 0. K_0 will already have been set to 0 if
-    # there was no propagation vector set.
-    K_m_K_0 = K - K_0[:,None,None]
+
     # We actually calculate the phase mask
     phase_mask = t.tensordot(offset_vector,K_m_K_0, dims=1)
     
