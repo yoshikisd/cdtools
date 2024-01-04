@@ -139,3 +139,5 @@ def test_convolve_1d():
     assert np.allclose(convolved,np_result)
 
 
+def test_center():
+    raise Exception('Not yet tested')

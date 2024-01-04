@@ -15,7 +15,9 @@ from scipy import special
 __all__ = ['orthogonalize_probes', 'standardize', 'synthesize_reconstructions',
            'calc_consistency_prtf', 'calc_deconvolved_cross_correlation',
            'calc_frc', 'calc_vn_entropy', 'calc_top_mode_fraction',
-           'calc_rms_error', 'calc_fidelity', 'calc_generalized_rms_error']
+           'calc_rms_error', 'calc_fidelity', 'calc_generalized_rms_error',
+           'remove_phase_ramp', 'remove_amplitude_exponent',
+           'standardize_reconstruction_set']
 
 
 def orthogonalize_probes(probes, density_matrix=None, keep_transform=False, normalize=False):
@@ -959,4 +961,231 @@ def calc_generalized_frc(fields_1, fields_2, basis, im_slice=None, nbins=None, s
 
     return bins[:-1], frc, threshold
 
+
+def remove_phase_ramp(im, window, probe=None):
+    
+    window = im[window]
+
+    Is, Js = np.mgrid[:window.shape[0],:window.shape[1]]
+    def zero_freq_component(freq):
+        phase_ramp = np.exp(2j * np.pi * (freq[0] * Is + freq[1] * Js))
+        return -np.abs(np.sum(phase_ramp * window))**2
+    
+    x0 = np.array([0,0])
+    result = opt.minimize(zero_freq_component, x0)
+    center_freq = result['x']
+
+    Is, Js = np.mgrid[:im.shape[0],:im.shape[1]]
+    phase_ramp = np.exp(2j * np.pi * (center_freq[0] * Is + center_freq[1] * Js))
+    im = im * phase_ramp
+    
+    if probe is not None:
+        Is, Js = np.mgrid[:probe.shape[-2],:probe.shape[-1]]
+        phase_ramp = np.exp(-2j * np.pi * (center_freq[0] * Is + center_freq[1] * Js))
+        probe = probe * phase_ramp
+        return im, probe
+    else:
+        return im
+
+
+def remove_amplitude_exponent(im, window, probe=None, weights=None, translations=None, basis=None):
+    window = np.abs(im[window])
+    
+    Is, Js = np.mgrid[:window.shape[0],:window.shape[1]]
+    def rms_error(x):
+        constant = x[0]
+        growth_rate = x[1:]
+        exponential_decay = constant * np.exp((growth_rate[0] * Is + growth_rate[1] * Js))
+        return np.sum((window - exponential_decay)**2)
+    
+    x0 = np.array([1,0,0])
+    result = opt.minimize(rms_error, x0, method='Nelder-Mead')
+    growth_rate = result['x'][1:]
+
+    Is, Js = np.mgrid[:im.shape[0],:im.shape[1]]
+    exponential_decay = np.exp(-(growth_rate[0] * Is + growth_rate[1] * Js))
+    im = im * exponential_decay
+    to_return = (im,)
+    
+    if probe is not None:
+        Is, Js = np.mgrid[:probe.shape[-2],:probe.shape[-1]]
+        exponential_decay = np.exp((growth_rate[0] * Is + growth_rate[1] * Js))
+        probe = probe * exponential_decay
+        to_return = to_return + (probe,)
+        
+    if weights is not None:
+        pix_translations = cdtools.tools.interactions.translations_to_pixel(t.as_tensor(basis), t.as_tensor(translations)).numpy()
+        pix_translations -= np.min(pix_translations,axis=0)
+        weights = weights * np.exp(growth_rate[0] * pix_translations[:,0] + growth_rate[1] * pix_translations[:,1])
+        to_return = to_return + (weights,)
+    
+    if len(to_return) == 1:
+        return to_return[0]
+    else:
+        return to_return
+
+def make_illumination_map(results, total_probe_intensity=None, padding=200):
+    
+    probe_intensity = np.sum(np.abs(results['probe'])**2, axis=0)
+    if total_probe_intensity is not None:
+        probe_intensity = probe_intensity / np.sum(probe_intensity) * total_probe_intensity
+    
+    illumination_map = np.zeros_like(results['obj'], dtype=np.float32)
+    translations = t.as_tensor(results['translations'])
+    pix_translations = cdtools.tools.interactions.translations_to_pixel(
+        t.as_tensor(results['basis']), translations)
+    
+    # We use the min_translation stored in the model, which was calculated
+    # from the uncorrected translations and therefore may be different from
+    # what it is if we recalculate it on the corrected translations
+    min_translation = t.as_tensor(results['state_dict']['min_translation'])
+    pix_translations = np.round((pix_translations - min_translation).numpy()).astype(int)
+
+    for translation in pix_translations:
+        illumination_map[translation[0]:translation[0]+probe_intensity.shape[0],
+                         translation[1]:translation[1]+probe_intensity.shape[1]] += probe_intensity
+    
+    return illumination_map
+
+
+def standardize_reconstruction_set(
+        half_1,
+        half_2,
+        full,
+        correct_phase_offset=True,
+        remove_phase_ramp=True,
+        remove_amplitude_exponent=False,
+        window=np.s_[:,:],
+        nbins=50
+):
+    """Normalizes and analyses a set of 50/50/100% reconstructions
+    
+    It's very common to split a ptychography dataset into two sub-datasets,
+    each with 50% of the exposures, so that the difference between the two
+    sub-datasets can be used to estimate the quality and resolution of the
+    final, full reconstruction. But to do that analysis, first the
+    reconstructions need to be aligned with respect to each other and
+    normalized in a few ways.
+
+    This function takes the results (as output by model.save_results) of
+    a set of 50/50/100% reconstructions and:
+
+    - Aligns the object reconstructions with one another
+    - Corrects for the global phase offset (by default)
+    - Sets a sensible value for the object/probe phase ramp (by default)
+    - Sets a sensible value for the object/probe exponential decay (off by
+        default)
+    - Calculates the FRC and derived SSNR.
+
+    Then, these results are packaged into an output dictionary. The output
+    does not retain all the information from the inputs, so if full traceability
+    is desired, do not delete the files containing the individual
+    reconstructions
+
+    Parameters
+    ----------
+    half_1 : dict
+        The result of the first half dataset, as returned by model.save_results
+    half_2 : dict
+        The result of the second half dataset, as returned by model.save_results
+    full : dict
+        The result of the full dataset, as returned by model.save_results
+
+    Returns
+    -------
+    results : dict
+        A dictionary containing the synthesized results
+    """
+   # We get the two half-data reconstructions
+    obj_1, probe_1, weights_1 = half_1['obj'],half_1['probe'],half_1['weights']
+    obj_2, probe_2, weights_2 = half_2['obj'],half_2['probe'],half_2['weights']
+    obj, probe, weights = full['obj'], full['probe'], full['weights']
+
+
+    if remove_phase_ramp:
+        obj_1, probe_1 = remove_phase_ramp(
+            half_1['obj'], window, probe=half_1['probe'])
+        obj_2, probe_2 = remove_phase_ramp(
+            half_2['obj'], window, probe=half_2['probe'])
+        obj, probe = remove_phase_ramp(
+            full['obj'], window, probe=full['probe'])
+
+    if remove_amplitude_exponent:
+        obj_1, probe_1, weights_1 = remove_amplitude_exponent(
+            obj_1, window, probe=probe_1,
+            weights=half_1['weights'],
+            basis=half_1['basis'],
+            translations=half_1['translations'])
+        obj_2, probe_2, weights_2 = remove_amplitude_exponent(
+            obj_2, window, probe=probe_2,
+            weights=half_2['weights'],
+            basis=half_2['basis'],
+            translations=half_2['translations'])
+        obj, probe, weights = remove_amplitude_exponent(
+            obj, window, probe=probe,
+            weights=full['weights'],
+            basis=full['basis'],
+            translations=full['translations'])
+
+    if correct_phase_offset:
+        obj_1 = np.exp(-1j* np.angle(np.sum(obj_1[window]))) * obj_1
+        obj_2 = np.exp(-1j* np.angle(np.sum(obj_2))) * obj_2
+        obj = np.exp(-1j* np.angle(np.sum(obj))) * obj
+
+        
+    # TODO calculate the illumination map using the corrected probes and
+    # the appropriately shifted translations, so that all the maps are
+    # directly comparable
+    illumination_map_1 = make_illumination_map(half_1, total_probe_intensity=total_probe_intensity)
+    illumination_map_2 = make_illumination_map(half_2, total_probe_intensity=total_probe_intensity)
+    illumination_map = make_illumination_map(full, total_probe_intensity=total_probe_intensity)
+
+    # Todo update the translations to account for the determined shift
+    shift_1 = cdtools.tools.image_processing.find_shift(
+        t.as_tensor(ip.hann_window(np.abs(obj[window]))),
+        t.as_tensor(ip.hann_window(np.abs(obj_1[window]))))
+    obj_1  = cdtools.tools.image_processing.sinc_subpixel_shift(
+        t.as_tensor(obj_1), shift_1).numpy()
+
+    shift_2 = cdtools.tools.image_processing.find_shift(
+        t.as_tensor(ip.hann_window(np.abs(obj[window]))),
+        t.as_tensor(ip.hann_window(np.abs(obj_2[window]))))
+    obj_2  = cdtools.tools.image_processing.sinc_subpixel_shift(
+        t.as_tensor(obj_2), shift_2).numpy()
+
+    freqs, frc, threshold = cdtools.tools.analysis.calc_frc(
+        ip.hann_window(obj_1[window]),
+        ip.hann_window(obj_2[window]),
+        half_1['basis'], nbins=nbins, limit='corner')
+
+    # The correct formulation when the final output is the full reconstruction
+    ssnr = 2 * frc / (1 - frc)
+
+    results = {
+        'obj_half_1': obj_1,
+        'probe_half_1': probe_1,
+        'weights_half_1': weights_1,
+        'translations_half_1': half_1['translations'],
+        'background_1': half_1['background'],
+        'illumination_map_1': illumination_map_1,
+        'obj_half_2': obj_2,
+        'probe_half_2': probe_2,
+        'weights_half_2': weights_2,
+        'translations_half_2': half_2['translations'],
+        'background_2': half_2['background'],
+        'illumination_map_2': illumination_map_2,
+        'obj_full': obj,
+        'probe_full': probe,
+        'weights_full': weights,
+        'translations_full': full['translations'],
+        'background_full': full['background'],
+        'illumination_map_full': illumination_map,
+        'wavelength': full['wavelength'],
+        'basis': full['basis'],
+        'frc_freqs': freqs,
+        'frc': frc,
+        'frc_threshold': threshold,
+        'ssnr': ssnr}
+    
+    return results
 

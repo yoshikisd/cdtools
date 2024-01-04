@@ -517,6 +517,18 @@ class FancyPtycho(CDIModel):
             return np.array([np.eye(self.probe.shape[0])]*self.weights.shape[0],
                             dtype=np.complex64)
 
+    def center_probes(self, iterations=4):
+        """Centers the probes
+        
+        Note that this does not compensate for the centering by adjusting
+        the object, so it's a good idea to reset the object after centering
+        the probes
+        """
+        centered_probe = tools.image_processing.center(
+            self.probe.data.cpu(), iterations=iterations)
+        self.probe.data = centered_probe.to(device=self.probe.data.device)
+
+
     def tidy_probes(self, normalization=1, normalize=False):
         """Tidies up the probes
         
@@ -703,14 +715,18 @@ class FancyPtycho(CDIModel):
         ('Background',
          lambda self, fig: plt.figure(fig.number) and plt.imshow(self.background.detach().cpu().numpy()**2))
     ]
-
-#    def plot_errors(self, dataset):
-        
     
     
     def save_results(self, dataset):
+        # This will save out everything needed to recreate the object
+        # in the same state, but it's not the best formatted. For example,
+        # "background" stores the square root of the background, etc.
+        state_dict = super().save_results()
+
+        # So, we also save out the main results in a more readable format
         basis = self.probe_basis.detach().cpu().numpy()
-        translations = self.corrected_translations(dataset).detach().cpu().numpy()
+        translations=self.corrected_translations(dataset).detach().cpu().numpy()
+        original_translations = dataset.translations.detach().cpu().numpy()
         probe = self.probe.detach().cpu().numpy()
         probe = probe * self.probe_norm.detach().cpu().numpy()
         obj = self.obj.detach().cpu().numpy()
@@ -719,8 +735,16 @@ class FancyPtycho(CDIModel):
         oversampling = self.oversampling
         wavelength = self.wavelength.cpu().numpy()
 
-        return {'basis': basis, 'translation': translations,
-                'probe': probe, 'obj': obj,
-                'background': background,
-                'oversampling': oversampling,
-                'weights': weights, 'wavelength': wavelength}
+        return {
+            'basis': basis,
+            'translations': translations,
+            'original_translations': original_translations,
+            'probe': probe,
+            'obj': obj,
+            'background': background,
+            'oversampling': oversampling,
+            'weights': weights,
+            'wavelength': wavelength,
+            'state_dict': state_dict,
+        }
+        

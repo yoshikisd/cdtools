@@ -13,7 +13,7 @@ from cdtools.tools import propagators
 
 __all__ = ['hann_window', 'centroid', 'centroid_sq', 'sinc_subpixel_shift',
            'find_subpixel_shift', 'find_pixel_shift', 'find_shift',
-           'convolve_1d', 'fourier_upsample']
+           'convolve_1d', 'fourier_upsample', 'center']
 
 def hann_window(im):
     """ Applies a hann window to a 2D image to apodize it
@@ -337,3 +337,74 @@ def fourier_upsample(ims, preserve_mean=False):
     return propagators.inverse_far_field(upsampled)
 
 
+def center(image, image_dims=2, use_power=True, iterations=4):
+    """Automatically centers an image or stack of images
+    
+    This function is designed with probes for ptychography in mind, so the
+    default centering method is to place the centroid of the magnitude-squared
+    of the input image on the central pixel.
+
+    # TODO I should place the centroid actually at the zero-frequency
+    # pixel, rather than the center of the array, so this can be used in
+    # Fourier space also.
+    
+    Because it's intended for probes, the function will sum over all extra
+    dimensions beyond <image_dims> when calculating the centroid, and shift
+    all the images by the same amount. It does *not* calculate a separate
+    shift for each image in the stack
+
+    It also centers by using circular shifts. This means that, after calculating
+    the centroid position and shifting by that amount, the centroid will not
+    be perfectly centered. To counteract this, multiple iterations are run,
+    by default 4
+
+    
+    Parameters
+    ----------
+    image : torch.Tensor
+        The ... x N x M image to center
+    image_dims : int
+        Default 2, the number of dimensions to center along
+    use_power : bool
+        Default True, whether to use the square of the magnitude
+    iterations : int
+        Default 4, the number of iterations to do
+    
+    Returns
+    -------
+    centered_im : torch.Tensor
+        The centered image
+    
+    """
+    # Make sure we dont screw with the input image
+    image = t.clone(image)
+
+    if image_dims !=2:
+        raise NotImplementedError('Implementing centerings with dimension != '
+                                  '2 requires modifying some other functions '
+                                  'and is not yet implemented.')
+    
+    if image_dims > image.ndim:
+        raise IndexError('Number of image dimensions cannot exceed the '
+                         'dimensionality of the input')
+
+    im_shape = image.shape
+    # This adds an extra dimension if the image dimensionality is equal to
+    # image_dims, and ravels any extra dimensions
+    reshaped_im = image.reshape([-1, ] + list(im_shape[-image_dims:]))
+
+    for i in range(iterations):
+        if use_power:
+            to_center = t.sum(t.abs(reshaped_im)**2, dim=0)
+        else:
+            to_center = t.sum(t.abs(reshaped_im), dim=0)
+        
+        im_centroid = centroid(to_center)
+        
+        for i in range(reshaped_im.shape[0]):
+            reshaped_im[i] = sinc_subpixel_shift(
+                reshaped_im[i],
+                (-im_centroid[0] + im_shape[-2] / 2,
+                 -im_centroid[1] + im_shape[-1] / 2))
+            
+    return reshaped_im.reshape(im_shape)
