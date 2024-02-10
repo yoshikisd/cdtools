@@ -200,7 +200,7 @@ class Bragg2DPtycho(CDIModel):
         # This propagator should be able to be multiplied by the propagation
         # distance each time to get a propagator
         self.universal_propagator = t.angle(ggasp(
-            self.probe.shape[1:],
+            self.background.shape,#background in case of a fourier cropped probe
             self.probe_basis, self.wavelength,
             t.tensor([0, 0, self.wavelength/(2*np.pi)], dtype=t.float32),
             propagation_vector=self.prop_dir,
@@ -209,7 +209,24 @@ class Bragg2DPtycho(CDIModel):
 
 
     @classmethod
-    def from_dataset(cls, dataset, probe_size=None, randomize_ang=0, padding=0, n_modes=1, translation_scale = 1, saturation=None, probe_support_radius=None, propagation_distance=None, scattering_mode=None, oversampling=1, auto_center=True, propagate_probe=True, correct_tilt=True, lens=False):
+    def from_dataset(
+            cls,
+            dataset,
+            probe_size=None,
+            randomize_ang=0,
+            padding=0,
+            n_modes=1,
+            translation_scale = 1,
+            saturation=None,
+            probe_support_radius=None,
+            propagation_distance=None,
+            scattering_mode=None,
+            oversampling=1,
+            auto_center=False,
+            probe_fourier_crop=None,
+            propagate_probe=True,
+            correct_tilt=True,
+            lens=False):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -289,11 +306,6 @@ class Bragg2DPtycho(CDIModel):
 
         median_propagation = t.median(propagations)
 
-        if hasattr(dataset, 'background') and dataset.background is not None:
-            background = t.sqrt(dataset.background)
-        else:
-            background = None
-
         # Finally, initialize the probe and  object using this information
         # Because the grid we defined on the sample is projected from the
         # detector conjugate space, we can pretend that the grid is just in
@@ -304,11 +316,29 @@ class Bragg2DPtycho(CDIModel):
         else:
             probe = tools.initializers.gaussian_probe(dataset, ew_basis, ew_shape, probe_size, propagation_distance=propagation_distance)
 
+            
+        if hasattr(dataset, 'background') and dataset.background is not None:
+            background = t.sqrt(dataset.background)
+        elif det_slice is not None:
+            background = 1e-6 * t.ones(
+                probe[det_slice].shape,
+                dtype=t.float32)
+        else:
+            background = 1e-6 * t.ones(probe.shape[-2:],
+                                       dtype=t.float32)
+
+        if probe_fourier_crop is not None:
+            probe = tools.propagators.far_field(probe)
+            probe = probe[...,
+                          probe_fourier_crop[0]:-probe_fourier_crop[0],
+                          probe_fourier_crop[1]:-probe_fourier_crop[1]]
+            probe = tools.propagators.inverse_far_field(probe)
 
         # Now we initialize all the subdominant probe modes
         probe_max = t.max(t.abs(probe))
         probe_stack = [0.01 * probe_max * t.rand(probe.shape,dtype=probe.dtype) for i in range(n_modes - 1)]
         probe = t.stack([probe,] + probe_stack)
+
 
         obj = t.exp(1j*(randomize_ang * (t.rand(obj_size)-0.5)))
                               
@@ -375,6 +405,24 @@ class Bragg2DPtycho(CDIModel):
         prs = Ws[...,None,None,None] * self.probe * self.probe_support[...,:,:]
         # Now we need to propagate each of the probes
 
+
+        # We automatically rescale the probe to match the background size,
+        # which allows us to do stuff like let the object be super-resolution,
+        # while restricting the probe to the detector resolution but still
+        # doing an explicit real-space limitation of the probe
+        padding = [self.oversampling * self.background.shape[-2] - prs.shape[-2],
+                   self.oversampling * self.background.shape[-1] - prs.shape[-1]]
+
+        if any([p != 0 for p in padding]): # For probe_fourier_crop != 0.
+            padding = [padding[-1]//2, padding[-1]-padding[-1]//2,
+                       padding[-2]//2, padding[-2]-padding[-2]//2]
+            prs = tools.propagators.far_field(prs)
+            prs = t.nn.functional.pad(prs, padding)
+            prs = tools.propagators.inverse_far_field(prs)
+
+        # we do the upscaling before the propagation because the propagator
+        # is currently calculated based on the object pixel pitch, not the
+        # probe one
 
         if self.propagate_probe:
             for j in range(prs.shape[0]):

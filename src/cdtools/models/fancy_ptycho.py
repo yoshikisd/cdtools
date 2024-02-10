@@ -241,17 +241,19 @@ class FancyPtycho(CDIModel):
 
         obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=obj_padding)
 
-        if hasattr(dataset, 'background') and dataset.background is not None:
-            background = t.sqrt(dataset.background)
-        else:
-            background = None
-
         # Finally, initialize the probe and  object using this information
         if probe_size is None:
             probe = tools.initializers.SHARP_style_probe(dataset, probe_shape, det_slice, propagation_distance=propagation_distance, oversampling=oversampling)
         else:
             probe = tools.initializers.gaussian_probe(dataset, probe_basis, probe_shape, probe_size, propagation_distance=propagation_distance)
 
+        if hasattr(dataset, 'background') and dataset.background is not None:
+            background = t.sqrt(dataset.background)
+        else:
+            shape = [s//oversampling 
+                     for s in probe.shape[-2:]]
+            background = 1e-6 * t.ones(shape, dtype=t.float32)
+            
         if probe_fourier_crop is not None:
             probe = tools.propagators.far_field(probe)
             probe = probe[probe_fourier_crop:-probe_fourier_crop,
@@ -396,6 +398,7 @@ class FancyPtycho(CDIModel):
                                      self.J_phase[None,...]))
             prs = prs * probe_masks[...,None,:,:]
 
+
         # We automatically rescale the probe to match the background size,
         # which allows us to do stuff like let the object be super-resolution,
         # while restricting the probe to the detector resolution but still
@@ -409,7 +412,7 @@ class FancyPtycho(CDIModel):
             prs = tools.propagators.far_field(prs)
             prs = t.nn.functional.pad(prs, padding)
             prs = tools.propagators.inverse_far_field(prs)
-            
+        
         # Now we actually do the interaction, using the sinc subpixel
         # translation model as per usual
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
