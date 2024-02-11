@@ -37,6 +37,8 @@ import numpy as np
 import threading
 import queue
 import time
+from scipy import io
+from contextlib import contextmanager
 from .complex_lbfgs import MyLBFGS
 
 __all__ = ['CDIModel']
@@ -169,7 +171,50 @@ class CDIModel(t.nn.Module):
         results : dict
             A dictionary containing all the parameters and buffers of the model, i.e. the result of self.state_dict(), converted to numpy.
         """
-        return {k: v.cpu().numpy() for k, v in self.state_dict().items()}
+        state_dict = {k: v.cpu().numpy() for k, v in self.state_dict().items()}
+        return {
+            'state_dict': state_dict,
+            'loss_train': np.array(self.loss_train),
+        }
+
+
+    def save_to_mat(self, filename, *args):
+        """Saves the results to a .mat file
+
+        Parameters
+        ----------
+        filename : str
+            The filename to save under
+        *args
+            Accepts any additional args that model.save_results needs, for this model
+        """
+        return io.savemat(filename, self.save_results(*args))
+
+    @contextmanager
+    def save_on_exit(self, filename, *args, exception_filename=None):
+        """Saves the results of the model when the context is exited
+
+        If you wrap the main body of your code in this context manager,
+        it will either save the results to a .mat file upon completion,
+        or when any exception is raised during execution.
+
+        Parameters
+        ----------
+        filename : str
+            The filename to save under, upon completion
+        *args
+            Accepts any additional args that model.save_results needs, for this model
+        exception_filename : str
+            Optional, a separate filename to use if an exception is raised during execution. Default is equal to filename
+        """
+        try:
+            yield
+            self.save_to_mat(filename, *args)
+        except Exception as e:
+            if exception_filename is None:
+                exception_filename = filename
+            self.save_to_mat(exception_filename, *args)
+            raise e
 
     
     def AD_optimize(self, iterations, data_loader,  optimizer,\

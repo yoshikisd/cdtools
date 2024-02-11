@@ -4,8 +4,10 @@ from copy import copy
 import h5py
 import pathlib
 from cdtools.datasets import CDataset
+from cdtools.datasets.random_selection import random_selection
 from cdtools.tools import data as cdtdata
 from cdtools.tools import plotting
+from copy import deepcopy
 
 __all__ = ['Ptycho2DDataset']
 
@@ -252,4 +254,33 @@ class Ptycho2DDataset(CDataset):
             cbar_title = 'Diffraction Intensity'
         
         return plotting.plot_nanomap_with_images(self.translations.detach().cpu(), get_images, values=nanomap_values, nanomap_units=units, image_title='Diffraction Pattern', image_colorbar_title=cbar_title)
+
+
+    def split(self):
+        """Splits a dataset into two pseudorandomly selected sub-datasets
+        """
+
+        # the selection is only 5,000 items long, so we repeat it to be long
+        # enough for the dataset
+        repeated_random_selection = (random_selection
+                            * int(np.ceil(len(self) / len(random_selection))))
+
+        repeated_random_selection = np.array(repeated_random_selection)
+        # Here, I use a fixed random selection for reproducibility
+        cut_random_selection =repeated_random_selection.astype(bool)[:len(self)]
+        
+        dataset_1 = deepcopy(self)
+        dataset_1.translations = self.translations[cut_random_selection]
+        dataset_1.patterns = self.patterns[cut_random_selection]
+        if hasattr(self, 'intensities') and self.intensities is not None:
+            dataset_1.intensities = self.intensities[cut_random_selection]
+            
+        dataset_2 = deepcopy(self)
+        dataset_2.translations = self.translations[~cut_random_selection]
+        dataset_2.patterns = self.patterns[~cut_random_selection]
+        if hasattr(self, 'intensities') and self.intensities is not None:
+            dataset_2.intensities = self.intensities[~cut_random_selection]
+
+        return dataset_1, dataset_2
+
 

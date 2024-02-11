@@ -11,21 +11,18 @@ dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 model = cdtools.models.FancyPtycho.from_dataset(dataset, n_modes=2)
 
 # Let's do this reconstruction on the GPU, shall we? 
-model.to(device='cuda')
-dataset.get_as(device='cuda')
+#model.to(device='cuda')
+#dataset.get_as(device='cuda')
 
-# Now, we run a short reconstruction from the dataset
-for loss in model.Adam_optimize(10, dataset, batch_size=50, schedule=True):
-    # And we liveplot the updates to the model as they happen
-    print(model.report())
-    model.inspect(dataset)
+with model.save_on_exit('example_reconstructions/gold_balls.mat', dataset):
+    # Now, we run a short reconstruction from the dataset
+    for loss in model.Adam_optimize(10, dataset, batch_size=50):
+        # And we liveplot the updates to the model as they happen
+        print(model.report())
+        model.inspect(dataset)
 
-# This orthogonalizes the incoherent probe modes
-model.tidy_probes()
-
-# And we save out the results as a .mat file
-io.savemat('example_reconstructions/gold_balls.mat',
-           model.save_results(dataset))
+    # This orthogonalizes the incoherent probe modes
+    model.tidy_probes()
 
 # Finally, we plot the results
 model.inspect(dataset)

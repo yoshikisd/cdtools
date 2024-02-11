@@ -564,17 +564,33 @@ class Bragg2DPtycho(CDIModel):
 
     
     def save_results(self, dataset):
+        # This will save out everything needed to recreate the object
+        # in the same state, but it's not the best formatted. For example,
+        # "background" stores the square root of the background, etc.
+        base_results = super().save_results()
+
+        # We also save out the main results in a more readable format
         basis = self.probe_basis.detach().cpu().numpy()
-        translations = self.corrected_translations(dataset).detach().cpu().numpy()
+        translations=self.corrected_translations(dataset).detach().cpu().numpy()
+        original_translations = dataset.translations.detach().cpu().numpy()
         probe = self.probe.detach().cpu().numpy()
         probe = probe * self.probe_norm.detach().cpu().numpy()
         obj = self.obj.detach().cpu().numpy()
         background = self.background.detach().cpu().numpy()**2
         weights = self.weights.detach().cpu().numpy()
-        losses = np.array(self.loss_train)
-        
-        return {'basis':basis, 'translation':translations,
-                'probe':probe,'obj':obj,
-                'background':background,
-                'weights':weights,
-                'losses':losses}
+        oversampling = self.oversampling
+        wavelength = self.wavelength.cpu().numpy()
+
+        results = {
+            'basis': basis,
+            'translations': translations,
+            'original_translations': original_translations,
+            'probe': probe,
+            'obj': obj,
+            'background': background,
+            'oversampling': oversampling,
+            'weights': weights,
+            'wavelength': wavelength,
+        }
+
+        return {**base_results, **results}

@@ -724,9 +724,9 @@ class FancyPtycho(CDIModel):
         # This will save out everything needed to recreate the object
         # in the same state, but it's not the best formatted. For example,
         # "background" stores the square root of the background, etc.
-        state_dict = super().save_results()
+        base_results = super().save_results()
 
-        # So, we also save out the main results in a more readable format
+        # We also save out the main results in a more readable format
         basis = self.probe_basis.detach().cpu().numpy()
         translations=self.corrected_translations(dataset).detach().cpu().numpy()
         original_translations = dataset.translations.detach().cpu().numpy()
@@ -738,7 +738,7 @@ class FancyPtycho(CDIModel):
         oversampling = self.oversampling
         wavelength = self.wavelength.cpu().numpy()
 
-        return {
+        results = {
             'basis': basis,
             'translations': translations,
             'original_translations': original_translations,
@@ -748,6 +748,6 @@ class FancyPtycho(CDIModel):
             'oversampling': oversampling,
             'weights': weights,
             'wavelength': wavelength,
-            'state_dict': state_dict,
         }
-        
+
+        return {**base_results, **results}
