@@ -13,6 +13,9 @@ import datetime
 import dateutil.parser
 import torch as t
 from contextlib import contextmanager
+import numbers
+from collections.abc import Mapping
+import pathlib
 
 __all__ = ['get_entry_info',
            'get_sample_info',
@@ -32,7 +35,10 @@ __all__ = ['get_entry_info',
            'add_dark',
            'add_data',
            'add_shot_to_shot_info',
-           'add_ptycho_translations']
+           'add_ptycho_translations',
+           'nested_dict_to_h5',
+           'h5_to_nested_dict',
+           ]
 
 
 #
@@ -785,3 +791,76 @@ def add_ptycho_translations(cxi_file, translations):
     translations = -translations
 
     add_shot_to_shot_info(cxi_file, translations, 'translation')
+
+
+def nested_dict_to_h5(h5_file, d):
+    """saves a nested dictionary to an h5 file object
+
+    Parameters
+    ----------
+    h5_file : h5py.File
+        A file object, or path to a file, to write the dictionary to
+    d : dict
+        A mapping whose keys are all strings and whose values are only numpy arrays, pytorch tensors, scalars, or other mappings meeting the same conditions
+    """
+    
+    # If a bare string is passed
+    if isinstance(h5_file, str) or isinstance(h5_file, pathlib.Path):
+        with h5py.File(h5_file,'w') as f:
+            return nested_dict_to_h5(f, d)
+    
+    for key in d.keys():
+        value = d[key]
+        if isinstance(value, numbers.Number):
+            arr = np.array(value)
+            h5_file.create_dataset(key, data=arr)
+        elif isinstance(value, np.ndarray):
+            h5_file.create_dataset(key, data=value)
+        elif t.is_tensor(value):
+            h5_file.create_dataset(key, data=value.detach().cpu().numpy())
+        elif isinstance(value, str):
+            h5_file.create_dataset(key, data=value, dtype=h5py.string_dtype())
+        elif isinstance(value, Mapping):
+            group = h5_file.create_group(key)
+            nested_dict_to_h5(group, value)
+        else:
+            raise ValueError(f'{value} is not a number, numpy array or mapping')
+
+    return
+
+
+def h5_to_nested_dict(h5_file):
+    """saves a nested dictionary to an h5 file object
+
+    Parameters
+    ----------
+    h5_file : h5py.File
+        A file object, or path to a file, to load from
+    d : dict
+        A mapping whose keys are all strings and whose values are only numpy arrays, pytorch tensors, scalars, python strings, or other mappings meeting the same conditions
+    """
+    
+    # If a bare string is passed
+    if isinstance(h5_file, str) or isinstance(h5_file, pathlib.Path):
+        with h5py.File(h5_file,'r') as f:
+            return h5_to_nested_dict(f)
+
+    d = {}
+    for key in h5_file.keys():
+        value = h5_file[key]
+        if isinstance(value, h5py.Dataset):
+            arr = np.array(value)
+            if arr.dtype == object:
+                d[key] = arr.ravel()[0].decode('utf-8')
+            elif arr.ndim == 0:
+                d[key] = arr.ravel()[0]
+            else:
+                d[key] = arr
+            
+        elif isinstance(value, h5py.Group):
+            sub_d = h5_to_nested_dict(value)
+            d[key] = sub_d            
+        else:
+            raise ValueError(f'{value} could not be interpreted sensibly')
+
+    return d

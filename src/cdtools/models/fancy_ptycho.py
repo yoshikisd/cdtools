@@ -18,14 +18,16 @@ __all__ = ['FancyPtycho']
 
 class FancyPtycho(CDIModel):
 
-    def __init__(self, wavelength, detector_geometry,
-                 probe_basis,
+    def __init__(self,
+                 wavelength,
+                 detector_geometry,
+                 obj_basis,
                  probe_guess,
                  obj_guess,
-                 detector_slice=None,
                  surface_normal=t.tensor([0., 0., 1.], dtype=t.float32),
                  min_translation=t.tensor([0, 0], dtype=t.float32),
                  background=None,
+                 probe_basis=None,
                  translation_offsets=None,
                  mask=None,
                  weights=None,
@@ -51,10 +53,15 @@ class FancyPtycho(CDIModel):
         self.register_buffer('min_translation',
                              t.tensor(min_translation, dtype=dtype))
 
-        self.register_buffer('probe_basis',
-                             t.tensor(probe_basis, dtype=dtype))
-        
-        self.detector_slice = copy(detector_slice)
+        self.register_buffer('obj_basis',
+                             t.tensor(obj_basis, dtype=dtype))
+        if probe_basis is None:
+            self.register_buffer('probe_basis',
+                                 t.tensor(obj_basis, dtype=dtype))
+        else:
+            self.register_buffer('probe_basis',
+                                 t.tensor(probe_basis, dtype=dtype))
+            
         self.register_buffer('surface_normal',
                              t.tensor(surface_normal, dtype=dtype))
         if saturation is None:
@@ -62,10 +69,12 @@ class FancyPtycho(CDIModel):
         else:
             self.register_buffer('saturation',
                                  t.tensor(saturation, dtype=dtype))
+
+        self.register_buffer('fourier_probe',
+                             t.tensor(fourier_probe, dtype=bool))
+
         # Not sure how to make this a buffer...
         self.units = units
-
-        self.fourier_probe = fourier_probe
 
         if mask is None:
             self.mask = None
@@ -92,13 +101,7 @@ class FancyPtycho(CDIModel):
                                     obj_view_crop:-obj_view_crop]
         
         if background is None:
-            if detector_slice is not None:
-                dummy_det = t.empty([s//oversampling
-                                     for s in self.probe[0].shape])
-                shape = dummy_det[self.detector_slice].shape
-                #shape = self.probe[0][self.detector_slice].shape
-            else:
-                shape = [s//oversampling for s in self.probe[0]]
+            shape = [s//oversampling for s in self.probe[0]]
             background = 1e-6 * t.ones(shape, dtype=t.float32)
             
         self.background = t.nn.Parameter(background)
@@ -132,9 +135,11 @@ class FancyPtycho(CDIModel):
         self.register_buffer('probe_support',
                              t.tensor(probe_support, dtype=t.bool))
             
-        self.oversampling = oversampling
+        self.register_buffer('oversampling',
+                             t.tensor(oversampling, dtype=int))
 
-        self.simulate_probe_translation = simulate_probe_translation
+        self.register_buffer('simulate_probe_translation',
+                             t.tensor(simulate_probe_translation, dtype=bool))
 
         if simulate_probe_translation:
             Is = t.arange(self.probe.shape[-2], dtype=dtype)
@@ -147,7 +152,8 @@ class FancyPtycho(CDIModel):
             self.register_buffer('J_phase', J_phase)
             
 
-        self.simulate_finite_pixels = simulate_finite_pixels
+        self.register_buffer('simulate_finite_pixels',
+                             t.tensor(simulate_finite_pixels, dtype=bool))
             
         # Here we set the appropriate loss function
         if (loss.lower().strip() == 'amplitude mse'
@@ -165,7 +171,6 @@ class FancyPtycho(CDIModel):
                      dataset,
                      probe_size=None,
                      randomize_ang=0,
-                     padding=0,
                      n_modes=1,
                      n_obj_modes=1,
                      dm_rank=None,
@@ -176,14 +181,13 @@ class FancyPtycho(CDIModel):
                      propagation_distance=None,
                      scattering_mode=None,
                      oversampling=1,
-                     auto_center=False,
                      fourier_probe=False,
                      loss='amplitude mse',
                      units='um',
                      simulate_probe_translation=False,
                      simulate_finite_pixels=False,
                      obj_view_crop=None,
-                     obj_padding=200
+                     obj_padding=200,
                      ):
 
         wavelength = dataset.wavelength
@@ -201,21 +205,15 @@ class FancyPtycho(CDIModel):
 
         dataset.get_as(*get_as_args[0], **get_as_args[1])
 
-        # Set to none to avoid issues with things outside the detector
-        if auto_center:
-            center = tools.image_processing.centroid(t.sum(patterns, dim=0))
-        else:
-            center = None
-
         # Then, generate the probe geometry from the dataset
         ewg = tools.initializers.exit_wave_geometry
-        probe_basis, probe_shape, det_slice = ewg(det_basis,
-                                                  det_shape,
-                                                  wavelength,
-                                                  distance,
-                                                  center=center,
-                                                  padding=padding,
-                                                  oversampling=oversampling)
+        obj_basis = ewg(
+            det_basis,
+            det_shape,
+            wavelength,
+            distance,
+            oversampling=oversampling,
+        )
 
         if hasattr(dataset, 'sample_info') and \
            dataset.sample_info is not None and \
@@ -237,15 +235,33 @@ class FancyPtycho(CDIModel):
         # Next generate the object geometry from the probe geometry and
         # the translations
 
-        pix_translations = tools.interactions.translations_to_pixel(probe_basis, translations, surface_normal=surface_normal)
+        pix_translations = tools.interactions.translations_to_pixel(
+            obj_basis,
+            translations,
+            surface_normal=surface_normal,
+        )
 
-        obj_size, min_translation = tools.initializers.calc_object_setup(probe_shape, pix_translations, padding=obj_padding)
+        obj_size, min_translation = tools.initializers.calc_object_setup(
+            det_shape,
+            pix_translations,
+            padding=obj_padding,
+        )
 
         # Finally, initialize the probe and  object using this information
         if probe_size is None:
-            probe = tools.initializers.SHARP_style_probe(dataset, probe_shape, det_slice, propagation_distance=propagation_distance, oversampling=oversampling)
+            probe = tools.initializers.SHARP_style_probe(
+                dataset,
+                propagation_distance=propagation_distance,
+                oversampling=oversampling,
+            )
         else:
-            probe = tools.initializers.gaussian_probe(dataset, probe_basis, probe_shape, probe_size, propagation_distance=propagation_distance)
+            probe = tools.initializers.gaussian_probe(
+                dataset,
+                obj_basis,
+                probe_shape,
+                probe_size,
+                propagation_distance=propagation_distance,
+            )
 
         if hasattr(dataset, 'background') and dataset.background is not None:
             background = t.sqrt(dataset.background)
@@ -256,9 +272,16 @@ class FancyPtycho(CDIModel):
             
         if probe_fourier_crop is not None:
             probe = tools.propagators.far_field(probe)
-            probe = probe[probe_fourier_crop:-probe_fourier_crop,
-                          probe_fourier_crop:-probe_fourier_crop]
+            probe = probe[probe_fourier_crop : probe.shape[-2]
+                          - probe_fourier_crop,
+                          probe_fourier_crop : probe.shape[-1]
+                          - probe_fourier_crop]
             probe = tools.propagators.inverse_far_field(probe)
+
+            scale_factor = np.array(det_shape) / np.array(probe.shape)
+            probe_basis = obj_basis * scale_factor[None,:]
+        else:
+            probe_basis = obj_basis.clone()
             
         # Now we initialize all the subdominant probe modes
         probe_max = t.max(t.abs(probe))
@@ -325,14 +348,14 @@ class FancyPtycho(CDIModel):
         else:
             probe_support = None
 
-        return cls(wavelength, det_geo, probe_basis, probe, obj,
-                   detector_slice=det_slice,
+        return cls(wavelength, det_geo, obj_basis, probe, obj,
                    surface_normal=surface_normal,
                    min_translation=min_translation,
                    translation_offsets=translation_offsets,
                    weights=Ws, mask=mask, background=background,
                    translation_scale=translation_scale,
                    saturation=saturation,
+                   probe_basis=probe_basis,
                    probe_support=probe_support,
                    fourier_probe=fourier_probe,
                    oversampling=oversampling,
@@ -350,7 +373,7 @@ class FancyPtycho(CDIModel):
         # Step 1 is to convert the translations for each position into a
         # value in pixels
         pix_trans = tools.interactions.translations_to_pixel(
-            self.probe_basis,
+            self.obj_basis,
             translations,
             surface_normal=self.surface_normal)
         pix_trans -= self.min_translation
@@ -433,7 +456,6 @@ class FancyPtycho(CDIModel):
         return tools.measurements.quadratic_background(
             wavefields,
             self.background,
-            detector_slice=self.detector_slice,
             measurement=tools.measurements.incoherent_sum,
             saturation=self.saturation,
             oversampling=self.oversampling,
@@ -501,7 +523,7 @@ class FancyPtycho(CDIModel):
         if (hasattr(self, 'translation_offsets') and
             self.translation_offsets is not None):
             t_offset = tools.interactions.pixel_to_translations(
-                self.probe_basis,
+                self.obj_basis,
                 self.translation_offsets * self.translation_scale,
                 surface_normal=self.surface_normal)
             return translations + t_offset
@@ -637,7 +659,16 @@ class FancyPtycho(CDIModel):
         else:
             cmap = 'twilight'
 
-        p.plot_nanomap_with_images(self.corrected_translations(dataset), get_probes, values=values, fig=fig, units=self.units, basis=self.probe_basis, nanomap_colorbar_title='Total Probe Intensity', cmap=cmap, **kwargs),
+        p.plot_nanomap_with_images(
+            self.corrected_translations(dataset),
+            get_probes,
+            values=values,
+            fig=fig,
+            units=self.units,
+            basis=self.obj_basis,
+            nanomap_colorbar_title='Total Probe Intensity',
+            cmap=cmap,
+            **kwargs),
 
         
     plot_list = [
@@ -705,13 +736,13 @@ class FancyPtycho(CDIModel):
          lambda self, fig: p.plot_amplitude(
              self.obj[self.obj_view_slice],
              fig=fig,
-             basis=self.probe_basis,
+             basis=self.obj_basis,
              units=self.units)),
         ('Object Phase',
          lambda self, fig: p.plot_phase(
              self.obj[self.obj_view_slice],
              fig=fig,
-             basis=self.probe_basis,
+             basis=self.obj_basis,
              units=self.units)),
         ('Corrected Translations',
          lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig, units=self.units)),
@@ -727,7 +758,8 @@ class FancyPtycho(CDIModel):
         base_results = super().save_results()
 
         # We also save out the main results in a more readable format
-        basis = self.probe_basis.detach().cpu().numpy()
+        obj_basis = self.obj_basis.detach().cpu().numpy()
+        probe_basis = self.obj_basis.detach().cpu().numpy()
         translations=self.corrected_translations(dataset).detach().cpu().numpy()
         original_translations = dataset.translations.detach().cpu().numpy()
         probe = self.probe.detach().cpu().numpy()
@@ -739,7 +771,8 @@ class FancyPtycho(CDIModel):
         wavelength = self.wavelength.cpu().numpy()
 
         results = {
-            'basis': basis,
+            'obj_basis': obj_basis,
+            'probe_basis': probe_basis,
             'translations': translations,
             'original_translations': original_translations,
             'probe': probe,

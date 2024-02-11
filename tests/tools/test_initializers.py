@@ -10,18 +10,14 @@ def test_exit_wave_geometry():
     shape = t.Size([73,56])
     wavelength = 1e-9
     distance = 1.
-    rs_basis, full_shape, det_slice = \
-        initializers.exit_wave_geometry(basis, shape, wavelength,
-                                        distance)
-    assert full_shape == shape
-    assert t.ones(full_shape)[det_slice].shape ==  shape
+    rs_basis = initializers.exit_wave_geometry(basis, shape, wavelength, distance)
+    
     assert t.allclose(rs_basis[0,1],t.Tensor([-8.928571428571428e-07]))
     assert t.allclose(rs_basis[1,0],t.Tensor([-4.5662100456621004e-07]))
     
     # Then test it's padding function
-    rs_basis, full_shape, det_slice = \
-        initializers.exit_wave_geometry(basis, shape, wavelength,
-                                        distance, padding=2)
+    rs_basis = initializers.exit_wave_geometry(basis, shape, wavelength,
+                                               distance, padding=2)
     exp_shape = t.Size([77,60])
     assert full_shape == exp_shape
     assert t.ones(full_shape)[det_slice].shape ==  shape

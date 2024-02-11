@@ -7,4 +7,4 @@
 docs/build
 build/*
 dist
-example_data/*
+*/example_data/*

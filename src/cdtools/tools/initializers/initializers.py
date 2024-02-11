@@ -41,10 +41,6 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
         The wavelength of light for the experiment, in m
     distance : float
         The sample-detector distance, in m
-    center : torch.Tensor
-        If defined, the location of the zero frequency pixel
-    padding : int
-        Default is 0, the size of an extra border of nonphysical pixels around the detector
     oversampling : int
         Default is 1, the amount to multiply the exit wave shape by.
     
@@ -52,66 +48,32 @@ def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, 
     -------
     basis : torch.Tensor
         The exit wave basis
-    shape : torch.Tensor
-        The exit wave's shape
-    slice : slice
-        The slice corresponding to the physical detector
     """
     
     det_shape = t.as_tensor(tuple(det_shape), dtype=t.int32)
     det_basis = t.as_tensor(det_basis)
-    # First, set the center if it's not already specified
-    # This definition matches the center pixel of an fftshifted array
-    if center is None:
-        # this is center//2, but in pytorch 1.9.0 it throws a warning
-        # if you just do that
 
-        center = t.div(det_shape,2,rounding_mode='floor')# // 2
-    else:
-        center = t.as_tensor(center, dtype=t.int32)
-        
-    # Then, calculate the required detector size from the centering
-    # This is a bit opaque but was worth doing accurately
-    min_left = center * 2
-    min_right = (det_shape - center) * 2 - 1
-    full_shape = t.max(min_left,min_right).to(t.int32) + 2 * padding
+    # Generate the basis for the exit wave in real space
 
-    # In some edge cases this shape can be smaller than the detector shape
-    full_shape = t.max(full_shape, det_shape)
-    
-    # Then, generate a slice that pops the actual detector from the full
-    # detector shape
-    # this is full_center//2, but in pytorch 1.9.0 it throws a warning
-    # if you just do that
-    full_center = t.div(full_shape,2, rounding_mode='floor')# // 2
-    det_slice = np.s_[int(full_center[0]-center[0]):
-                      int(full_center[0]-center[0]+det_shape[0]),
-                      int(full_center[1]-center[1]):
-                      int(full_center[1]-center[1]+det_shape[1])]
-
-    
-    # Finally, generate the basis for the exit wave in real space
-
-    # This method should work for a general parallelogram
-    # shaped detector
-    det_shape = det_basis * full_shape.to(t.float32)
+    # This method should work for a general parallelogram-shaped detector
+    det_shape = det_basis * det_shape.to(t.float32)
     pinv_basis = t.tensor(np.linalg.pinv(det_shape).transpose()).to(t.float32)
     real_space_basis = pinv_basis * wavelength * distance
 
-    # This is definitely correct, but less simple. Included here
+    return real_space_basis
+
+    # Below is definitely correct, but less simple. Included here
     # So future me can check that both versions are consistent.
-    #oop_dir = np.cross(det_basis[:,0],det_basis[:,1])
-    #oop_dir /= np.linalg.norm(oop_dir)
-    #full_basis = np.array([np.array(det_basis[:,0]),np.array(det_basis[:,1]),oop_dir]).transpose()
-    #inv_basis = t.tensor(np.linalg.inv(full_basis)[:2,:].transpose()).to(t.float32)
-    #real_space_basis = inv_basis*wavelength * distance / \
+    
+    # oop_dir = np.cross(det_basis[:,0],det_basis[:,1])
+    # oop_dir /= np.linalg.norm(oop_dir)
+    # full_basis = np.array([np.array(det_basis[:,0]),
+    #                        np.array(det_basis[:,1]),oop_dir]).transpose()
+    # inv_basis = \
+    #     t.tensor(np.linalg.inv(full_basis)[:2,:].transpose()).to(t.float32)
+    # real_space_basis = inv_basis*wavelength * distance / \
     #    full_shape.to(t.float32)
 
-    # Finally, convert the shape back to a torch.Size
-    full_shape = t.Size([dim * oversampling for dim in full_shape]) 
-
-
-    return real_space_basis, full_shape, det_slice
 
 
 def calc_object_setup(probe_shape, translations, padding=0):
@@ -291,7 +253,7 @@ def gaussian_probe(dataset, basis, shape, sigma, propagation_distance=0, polariz
 
 
 
-def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, oversampling=1, polarized=False, left_polarized=True):
+def SHARP_style_probe(dataset, propagation_distance=None, oversampling=1):
     """Generates a SHARP style probe guess from a dataset
 
     What we call the "SHARP" style probe guess is to take a mean of all
@@ -313,10 +275,6 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, over
     ----------
     dataset : Ptycho_2D_Dataset
         The dataset to work from
-    shape : torch.Size
-        The size of the probe array to simulate
-    det_slice : slice
-        A slice or tuple of slices corresponding to the detector region in Fourier space
     propagation_distance : float
         Default is no propagation, an amount to propagate the guessed probe from it's focal point
     oversampling : int 
@@ -331,43 +289,33 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, over
     # NOTE: I don't love the way np and torch are mixed here, I think this
     # function deserves some love.
 
+    shape = dataset.patterns.shape[-2:]
+    
     # to use the mask or not?
     intensities = np.zeros([dim // oversampling for dim in shape])
-    
-    if polarized:
-        factors = [(math.cos(math.radians(polarizer[idx] - analyzer[idx])))**2 for idx in range(len(dataset)) if abs(polarizer[idx] - analyzer[idx]) > 5]
-    else:
-        factors = [1 for idx in range(len(dataset))]
 
+    # Eventually, do something with the recorded intensities, if they exist
+    factors = [1 for idx in range(len(dataset))]
 
     for params, im in dataset:
         if hasattr(dataset,'mask') and dataset.mask is not None:
-            intensities[det_slice] += dataset.mask.cpu().numpy() * im.cpu().numpy() / factors[params[0]]
+            intensities += (dataset.mask.cpu().numpy() * im.cpu().numpy()
+                            / factors[params[0]])
         else:
-            intensities[det_slice] += im.cpu().numpy() / params[factors[0]]       
+            intensities += im.cpu().numpy() / params[factors[0]]
+            
     intensities /= len(dataset)
-
-
 
     # Subtract off a known background if it's stored
     if hasattr(dataset, 'background') and dataset.background is not None:
-        intensities[det_slice] = np.clip(intensities[det_slice] - dataset.background.cpu().numpy(), a_min=0,a_max=None)
+        intensities = np.clip(
+            intensities - dataset.background.cpu().numpy(),
+            a_min=0,
+            a_max=None,
+        )
     
     probe_fft = t.tensor(np.sqrt(intensities)).to(dtype=t.complex64)
-
-    probe_guess = inverse_far_field(probe_fft).numpy()
-    # Now we remove the central pixel
-    #center = np.array(probe_guess.shape) // 2
-    
-    # I'm always unsure whether to use this modification:
-    
-    #probe_guess[center[0], center[1]]=np.mean([
-    #    probe_guess[center[0]-1, center[1]],
-    #    probe_guess[center[0]+1, center[1]],
-    #    probe_guess[center[0], center[1]-1],
-    #    probe_guess[center[0], center[1]+1]])
-
-    probe_guess = t.as_tensor(probe_guess, dtype=t.complex64)
+    probe_guess = inverse_far_field(probe_fft)
 
     if propagation_distance is not None:
         # First generate the propagation array
@@ -386,7 +334,11 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, over
         probe_shape = probe_shape.numpy().astype(np.int32)
 
         # And generate the propagator
-        AS_prop = generate_angular_spectrum_propagator(probe_shape, probe_spacing, dataset.wavelength, propagation_distance)
+        AS_prop = generate_angular_spectrum_propagator(
+            probe_shape,
+            probe_spacing,
+            dataset.wavelength,
+            propagation_distance)
 
         probe_guess = near_field(probe_guess,AS_prop)
     
@@ -396,14 +348,6 @@ def SHARP_style_probe(dataset, shape, det_slice, propagation_distance=None, over
     top = shape[1]//2 - probe_guess.shape[1] // 2 
     final_probe[left:left+probe_guess.shape[0],
                 top:top+probe_guess.shape[1]] = probe_guess
-
-    if polarized:
-        if left_polarized:
-            x = 1j
-        else:
-            x = -1j
-        final_probe = t.stack((final_probe.to(dtype=t.cfloat), final_probe.to(dtype=t.cfloat)), dim=-4)
-        final_probe = final_probe[..., None, :, :]
     
     return final_probe
 

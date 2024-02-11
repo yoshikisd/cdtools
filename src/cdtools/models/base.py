@@ -40,6 +40,7 @@ import time
 from scipy import io
 from contextlib import contextmanager
 from .complex_lbfgs import MyLBFGS
+from cdtools.tools.data import nested_dict_to_h5
 
 __all__ = ['CDIModel']
 
@@ -55,9 +56,10 @@ class CDIModel(t.nn.Module):
     """
 
     def __init__(self):
-        super(CDIModel,self).__init__()
+        super(CDIModel, self).__init__()
 
-        self.loss_train = []
+        self.loss_history = []
+        self.training_history = ''
         self.iteration_count = 0
 
     def from_dataset(self, dataset):
@@ -172,13 +174,16 @@ class CDIModel(t.nn.Module):
             A dictionary containing all the parameters and buffers of the model, i.e. the result of self.state_dict(), converted to numpy.
         """
         state_dict = {k: v.cpu().numpy() for k, v in self.state_dict().items()}
+
         return {
             'state_dict': state_dict,
-            'loss_train': np.array(self.loss_train),
+            'loss_history': np.array(self.loss_history),
+            'training_history': self.training_history,
+            'loss_function': self.loss.__name__,
         }
 
 
-    def save_to_mat(self, filename, *args):
+    def save_to_h5(self, filename, *args):
         """Saves the results to a .mat file
 
         Parameters
@@ -188,7 +193,7 @@ class CDIModel(t.nn.Module):
         *args
             Accepts any additional args that model.save_results needs, for this model
         """
-        return io.savemat(filename, self.save_results(*args))
+        return nested_dict_to_h5(filename, self.save_results(*args))
 
     @contextmanager
     def save_on_exit(self, filename, *args, exception_filename=None):
@@ -209,11 +214,11 @@ class CDIModel(t.nn.Module):
         """
         try:
             yield
-            self.save_to_mat(filename, *args)
+            self.save_to_h5(filename, *args)
         except Exception as e:
             if exception_filename is None:
                 exception_filename = filename
-            self.save_to_mat(exception_filename, *args)
+            self.save_to_h5(exception_filename, *args)
             raise e
 
     
@@ -322,8 +327,10 @@ class CDIModel(t.nn.Module):
             if scheduler is not None:
                 scheduler.step(loss)
 
-            self.loss_train.append(loss)
+            self.loss_history.append(loss)
+            epoch_idx = len(self.loss_history)
             self.latest_iteration_time = time.time() - t0
+            self.training_history += self.report() + '\n'
             return loss
 
         # If we don't want to run in a different thread, this is easy
@@ -403,6 +410,13 @@ class CDIModel(t.nn.Module):
             Default 10, how many translations to pass through at once for each round of gradient accumulation. Does not affect the result, only the calculation speed
 
         """
+
+        self.training_history += (
+            f'Planning {iterations} epochs of Adam, with a learning rate = '
+            f'{lr}, batch size = {batch_size}, regularization_factor = '
+            f'{regularization_factor}, and schedule = {schedule}.\n'
+        )
+        
 
         if subset is not None:
             # if subset is just one pattern, turn into a list for convenience
@@ -555,9 +569,9 @@ class CDIModel(t.nn.Module):
             A string with basic info on the latest iteration
         """
         if hasattr(self, 'latest_iteration_time'):
-            return 'Iteration ' + str(len(self.loss_train)) + \
+            return 'Epoch ' + str(len(self.loss_history)) + \
                   ' completed in %0.2f s with loss ' %\
-                  self.latest_iteration_time + str(self.loss_train[-1])
+                  self.latest_iteration_time + str(self.loss_history[-1])
         else:
             return 'No reconstruction iterations performed yet!'
 
