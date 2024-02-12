@@ -223,6 +223,7 @@ class Bragg2DPtycho(CDIModel):
             correct_tilt=True,
             lens=False,
             obj_padding=200,
+            units='um',
     ):
         
         wavelength = dataset.wavelength
@@ -249,7 +250,7 @@ class Bragg2DPtycho(CDIModel):
                         wavelength,
                         distance,
                         oversampling=oversampling)
-
+        
         # now we grab the sample surface normal
         if hasattr(dataset, 'sample_info') and \
            dataset.sample_info is not None and \
@@ -288,7 +289,7 @@ class Bragg2DPtycho(CDIModel):
 
         projector = np.linalg.pinv(mat)[:, :3]
         obj_basis = t.Tensor(np.dot(projector, ew_basis))
-
+        
         # Now we need a much better way to handle the translations here
         # than translations_to_pixel
         
@@ -385,8 +386,7 @@ class Bragg2DPtycho(CDIModel):
 
         if not(correct_tilt is True or correct_tilt is False):
             raise NotImplementedError('No auto option implemented yet')
-
-            
+        
         return cls(wavelength, det_geo, obj_basis, probe, obj,
                    min_translation=min_translation,
                    probe_basis=probe_basis,
@@ -399,7 +399,9 @@ class Bragg2DPtycho(CDIModel):
                    oversampling=oversampling,
                    propagate_probe=propagate_probe,
                    correct_tilt=correct_tilt,
-                   lens=lens)
+                   lens=lens,
+                   units=units,
+                   )
                    
     
     def interaction(self, index, translations):
@@ -427,17 +429,7 @@ class Bragg2DPtycho(CDIModel):
         padding = [self.oversampling * self.background.shape[-2] - prs.shape[-2],
                    self.oversampling * self.background.shape[-1] - prs.shape[-1]]
 
-        if any([p != 0 for p in padding]): # For probe_fourier_crop != 0.
-            padding = [padding[-1]//2, padding[-1]-padding[-1]//2,
-                       padding[-2]//2, padding[-2]-padding[-2]//2]
-            prs = tools.propagators.far_field(prs)
-            prs = t.nn.functional.pad(prs, padding)
-            prs = tools.propagators.inverse_far_field(prs)
-
-        # we do the upscaling before the propagation because the propagator
-        # is currently calculated based on the object pixel pitch, not the
-        # probe one
-
+        # probe propagation
         if self.propagate_probe:
             for j in range(prs.shape[0]):
                 # I believe this -1 sign is in error, but I need a dataset with
@@ -446,6 +438,15 @@ class Bragg2DPtycho(CDIModel):
                     1j*(props[j]*(2*np.pi)/self.wavelength)
                     * self.universal_propagator)
                 prs[j] = tools.propagators.near_field(prs[j], propagator)
+
+        # we do the upscaling after the propagation because the propagator
+        # is calculated based on the probe basis (before upsampling)
+        if any([p != 0 for p in padding]): # For probe_fourier_crop != 0.
+            padding = [padding[-1]//2, padding[-1]-padding[-1]//2,
+                       padding[-2]//2, padding[-2]-padding[-2]//2]
+            prs = tools.propagators.far_field(prs)
+            prs = t.nn.functional.pad(prs, padding)
+            prs = tools.propagators.inverse_far_field(prs)
 
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
             prs, self.obj,pix_trans,
@@ -566,29 +567,31 @@ class Bragg2DPtycho(CDIModel):
              self.probe,
              fig=fig,
              basis=self.probe_basis,
-             units=self.units
+             units=self.units,
          )),
         ('Basis Probe Real Space Phases',
          lambda self, fig: p.plot_phase(
              self.probe,
              fig=fig,
              basis=self.probe_basis,
-             units=self.units
+             units=self.units,
          )),
-        ('Object Amplitude', 
+        ('Object Amplitude, Surface Normal View', 
          lambda self, fig: p.plot_amplitude(
              self.obj,
              fig=fig,
-             basis=self.obj_basis
+             basis=self.obj_basis,
+             units=self.units,
          )),
-        ('Object Phase',
+        ('Object Phase, Surface Normal View',
          lambda self, fig: p.plot_phase(
              self.obj,
              fig=fig,
-             basis=self.obj_basis
+             basis=self.obj_basis,
+             units=self.units,
          )),
         ('Corrected Translations',
-         lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig)),
+         lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig, units=self.units)),
         ('Background',
          lambda self, fig: plt.figure(fig.number) and plt.imshow(self.background.detach().cpu().numpy()**2))
     ]

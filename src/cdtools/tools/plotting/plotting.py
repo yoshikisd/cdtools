@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import hsv_to_rgb
 from matplotlib.widgets import Slider
 from matplotlib import ticker, patheffects
+from matplotlib import transforms as mtransforms
 
 
 __all__ = ['colorize', 'plot_amplitude', 'plot_phase',
@@ -82,14 +83,15 @@ def get_units_factor(units):
     return factor
 
 
-def plot_image(im, plot_func=lambda x: x, fig=None, basis=None, units='$\\mu$m', cmap='viridis', cmap_label=None, interpolation=None, **kwargs):
+def plot_image(im, plot_func=lambda x: x, fig=None, basis=None, view_basis=None, units='$\\mu$m', cmap='viridis', cmap_label=None, interpolation=None, **kwargs):
     """Plots an image with a colorbar and on an appropriate spatial grid
 
     If a figure is given explicitly, it will clear that existing figure and
     plot over it. Otherwise, it will generate a new figure.
 
     If a basis is explicitly passed, the image will be plotted in real-space
-    coordinates
+    coordinates. If the optional view_basis is passed as well, then the
+    image will be projected into the plane of the view basis.
 
     Finally, if a function is passed to the plot_func argument, this function
     will be called on each slice of data before it is plotted. This is used
@@ -162,16 +164,55 @@ def plot_image(im, plot_func=lambda x: x, fig=None, basis=None, units='$\\mu$m',
                 np_basis = basis.detach().cpu().numpy()
             else:
                 np_basis = basis
-            # This fails if the basis is not rectangular
-            basis_norm = np.linalg.norm(np_basis, axis = 0)
-            basis_norm = basis_norm * get_units_factor(units)
 
-            extent = [0, im.shape[-1]*basis_norm[1], 0,
-                      im.shape[-2]*basis_norm[0]]
+                
+            np_basis = np_basis * get_units_factor(units)
+            basis_norm = np.linalg.norm(np_basis, axis = 0)
+            
+            normed_basis = np_basis / basis_norm
+            normed_z = np.cross(normed_basis[:,1], normed_basis[:,0])
+            normed_z /= np.linalg.norm(normed_z)
+            normed_yprime = np.cross(normed_z, normed_basis[:,1])
+            normed_yprime /= np.linalg.norm(normed_yprime)
+            
+            extent = [0, im.shape[-1], 0, im.shape[-2]]
+
         else:
             extent=None
 
-        plt.imshow(to_plot, cmap = cmap, extent = extent, interpolation=interpolation)
+        mpl_im = plt.imshow(
+            to_plot,
+            cmap = cmap,
+            extent = extent,
+            interpolation = interpolation
+        )
+        plt.gca().set_facecolor('k')
+        if basis is not None:
+            normed_ortho_basis = np.stack(
+                 [normed_basis[:,1], normed_yprime], axis=1)
+
+            coeffs = np.matmul(normed_ortho_basis.transpose(),
+                               np_basis[:,::-1])
+            [[a,c],[b,d]] = coeffs
+
+            transform = mtransforms.Affine2D.from_values(a,b,c,d,0,0)
+
+            trans_data = transform + plt.gca().transData
+
+            mpl_im.set_transform(trans_data)
+            corners = np.array([[0,0],
+                                [im.shape[-1],0],
+                                [0, im.shape[-2]],
+                                [im.shape[-1], im.shape[-2]]])
+            corners = np.matmul(
+                normed_ortho_basis.transpose(),
+                np.matmul(np_basis[:,::-1], corners.transpose()))
+            mins = np.min(corners, axis=1)
+            maxes = np.max(corners, axis=1)
+            plt.gca().set_xlim([mins[0], maxes[0]])
+            plt.gca().set_ylim([mins[1], maxes[1]])
+            
+        
         cbar = plt.colorbar()
         if cmap_label is not None:
             cbar.set_label(cmap_label)

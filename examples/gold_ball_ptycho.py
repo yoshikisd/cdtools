@@ -7,6 +7,8 @@ import torch as t
 filename = 'example_data/AuBalls_700ms_30nmStep_3_6SS_filter.cxi'
 dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
+dataset.inspect()
+
 # Next, we create a ptychography model from the dataset
 # Note that we explicitly ask for two incoherent probe modes
 model = cdtools.models.FancyPtycho.from_dataset(
@@ -20,10 +22,10 @@ model = cdtools.models.FancyPtycho.from_dataset(
 
 with model.save_on_exit('example_reconstructions/gold_balls.h5', dataset):
     # Now, we run a short reconstruction from the dataset
-    for loss in model.Adam_optimize(1, dataset, batch_size=50):
+    for loss in model.Adam_optimize(10, dataset, batch_size=50):
         # And we liveplot the updates to the model as they happen
         print(model.report())
-        model.inspect(dataset)
+        #model.inspect(dataset)
 
     # This orthogonalizes the incoherent probe modes
     model.tidy_probes()
