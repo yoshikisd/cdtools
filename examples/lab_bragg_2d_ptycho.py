@@ -25,9 +25,7 @@ model = cdtools.models.Bragg2DPtycho.from_dataset(
 #model.to(device='cuda')
 #dataset.get_as(device='cuda')
 
-model.inspect(dataset)
-plt.show()
-exit()
+
 model.translation_offsets.requires_grad = False
 for loss in model.Adam_optimize(100, dataset):
     model.inspect(dataset)

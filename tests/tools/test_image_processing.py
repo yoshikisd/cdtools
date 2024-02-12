@@ -138,6 +138,3 @@ def test_convolve_1d():
     np_result = np.fft.ifft(np.fft.fft(test_image,axis=0) * np.fft.fft(np.fft.ifftshift(kernel))[:,None], axis=0)
     assert np.allclose(convolved,np_result)
 
-
-def test_center():
-    raise Exception('Not yet tested')

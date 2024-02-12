@@ -15,23 +15,6 @@ def test_exit_wave_geometry():
     assert t.allclose(rs_basis[0,1],t.Tensor([-8.928571428571428e-07]))
     assert t.allclose(rs_basis[1,0],t.Tensor([-4.5662100456621004e-07]))
     
-    # Then test it's padding function
-    rs_basis = initializers.exit_wave_geometry(basis, shape, wavelength,
-                                               distance, padding=2)
-    exp_shape = t.Size([77,60])
-    assert full_shape == exp_shape
-    assert t.ones(full_shape)[det_slice].shape ==  shape
-
-    
-    # Finally test it off-center, without expanding
-    center = t.Tensor([20,42])
-    rs_basis, full_shape, det_slice = \
-        initializers.exit_wave_geometry(basis, shape, wavelength,
-                                        distance, center=center)
-    exp_shape = t.Size([105,84])
-    assert full_shape == exp_shape
-    assert t.ones(full_shape)[det_slice].shape ==  shape
-
 
 
 def test_calc_object_setup():
@@ -100,10 +83,10 @@ def test_gaussian_probe(ptycho_cxi_1):
     wavelength = dataset.wavelength
     distance = dataset.detector_geometry['distance']
     
-    basis, shape, s = initializers.exit_wave_geometry(det_basis,
-                                                      det_shape,
-                                                      wavelength,
-                                                      distance)
+    basis = initializers.exit_wave_geometry(det_basis,
+                                             det_shape,
+                                             wavelength,
+                                             distance)
     # Basis is around 60nm in the i(y) direction, 85nm in the j(x) direction
     # Full window is therefore about 15 um in i(y) and 20 um in the j(x) dir
 
@@ -128,7 +111,8 @@ def test_gaussian_probe(ptycho_cxi_1):
 
     normalization_1 = np.sqrt(normalization / np.sum(np.abs(np_probe)**2))
     
-    probe = initializers.gaussian_probe(dataset, basis, shape, sigma).numpy()
+    probe = initializers.gaussian_probe(
+        dataset, basis, det_shape, sigma).numpy()
  
     assert np.allclose(probe, normalization_1*np_probe)
 
@@ -143,7 +127,7 @@ def test_gaussian_probe(ptycho_cxi_1):
 
     normalization_2 = np.sqrt(normalization /  np.sum(np.abs(np_probe)**2))
     
-    probe = initializers.gaussian_probe(dataset, basis, shape, sigma,
+    probe = initializers.gaussian_probe(dataset, basis, det_shape, sigma,
                                         propagation_distance=z).numpy()
     
     assert np.allclose(probe, normalization_2*np_probe)
@@ -159,15 +143,15 @@ def test_SHARP_style_probe(ptycho_cxi_1):
     wavelength = dataset.wavelength
     distance = dataset.detector_geometry['distance']
 
-    basis, shape, det_slice = initializers.exit_wave_geometry(det_basis,
-                                                              det_shape,
-                                                              wavelength,
-                                                              distance)
+    basis = initializers.exit_wave_geometry(det_basis,
+                                            det_shape,
+                                            wavelength,
+                                            distance)
 
-    probe = initializers.SHARP_style_probe(dataset, shape, det_slice)
+    probe = initializers.SHARP_style_probe(dataset)
     assert probe.shape == t.Size([256,256])
 
-    probe = initializers.SHARP_style_probe(dataset, shape, det_slice, propagation_distance=20e-6)
+    probe = initializers.SHARP_style_probe(dataset, propagation_distance=20e-6)
     assert probe.shape == t.Size([256,256])
 
 

@@ -21,7 +21,7 @@ __all__ = ['exit_wave_geometry', 'calc_object_setup', 'gaussian',
            'RPI_spectral_init',
            'generate_subdominant_modes']
 
-def exit_wave_geometry(det_basis, det_shape, wavelength, distance, center=None, padding=0, oversampling=1):
+def exit_wave_geometry(det_basis, det_shape, wavelength, distance, oversampling=1):
     """Returns an exit wave basis and shape, as well as a detector slice for the given detector geometry
     
     It takes in the parameters for a given detector - the basis defining

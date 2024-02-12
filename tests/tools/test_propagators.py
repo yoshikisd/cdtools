@@ -48,12 +48,10 @@ def test_generate_high_NA_k_intensity_map():
     basis = t.Tensor([[0,-30e-6,0],
                       [-20e-6,0,0]]).transpose(0,1)
     shape = t.Size([478,573])
-    #shape = t.Size([3,5])
     wavelength = 1e-9
-    distance = 1#6e-3
-    rs_basis, full_shape, det_slice = \
-        initializers.exit_wave_geometry(basis, shape, wavelength,
-                                        distance)
+    distance = 1
+    rs_basis = \
+        initializers.exit_wave_geometry(basis, shape, wavelength, distance)
 
     k_map, intensity_map = propagators.generate_high_NA_k_intensity_map(
         rs_basis, basis, shape, distance, wavelength,
@@ -82,9 +80,8 @@ def test_generate_high_NA_k_intensity_map():
     #print(rs_basis)
     #print(rs_basis_tilted)
     distance = 0.01#6e-3
-    rs_basis, full_shape, det_slice = \
-        initializers.exit_wave_geometry(basis, shape, wavelength,
-                                        distance)
+    rs_basis = \
+        initializers.exit_wave_geometry(basis, shape, wavelength, distance)
     rs_basis_tilted = rs_basis.clone()
     rs_basis_tilted[2,1] = rs_basis_tilted[0,1]
 
