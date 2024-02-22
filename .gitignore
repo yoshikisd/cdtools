@@ -8,3 +8,4 @@ docs/build
 build/*
 dist
 */example_data/*
+*.h5

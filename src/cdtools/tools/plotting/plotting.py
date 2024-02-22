@@ -83,7 +83,7 @@ def get_units_factor(units):
     return factor
 
 
-def plot_image(im, plot_func=lambda x: x, fig=None, basis=None, view_basis=None, units='$\\mu$m', cmap='viridis', cmap_label=None, interpolation=None, **kwargs):
+def plot_image(im, plot_func=lambda x: x, fig=None, basis=None, view_basis='ortho', units='$\\mu$m', cmap='viridis', cmap_label=None, interpolation=None, **kwargs):
     """Plots an image with a colorbar and on an appropriate spatial grid
 
     If a figure is given explicitly, it will clear that existing figure and
@@ -158,60 +158,71 @@ def plot_image(im, plot_func=lambda x: x, fig=None, basis=None, view_basis=None,
 
         to_plot = plot_func(reshaped_im[fig.plot_idx])
 
-        #Plot in a basis if it exists, otherwise dont
+        mpl_im = plt.imshow(
+            to_plot,
+            cmap = cmap,
+            interpolation = interpolation
+        )
+        plt.gca().set_facecolor('k')
+        
         if basis is not None:
+            # we've closed over basis, so we can't edit it
             if isinstance(basis,t.Tensor):
                 np_basis = basis.detach().cpu().numpy()
             else:
                 np_basis = basis
-
                 
             np_basis = np_basis * get_units_factor(units)
-            basis_norm = np.linalg.norm(np_basis, axis = 0)
-            
-            normed_basis = np_basis / basis_norm
-            normed_z = np.cross(normed_basis[:,1], normed_basis[:,0])
-            normed_z /= np.linalg.norm(normed_z)
-            normed_yprime = np.cross(normed_z, normed_basis[:,1])
-            normed_yprime /= np.linalg.norm(normed_yprime)
-            
-            extent = [0, im.shape[-1], 0, im.shape[-2]]
 
-        else:
-            extent=None
+            if isinstance(view_basis, str) and view_basis.lower() == 'ortho':
 
-        mpl_im = plt.imshow(
-            to_plot,
-            cmap = cmap,
-            extent = extent,
-            interpolation = interpolation
-        )
-        plt.gca().set_facecolor('k')
-        if basis is not None:
-            normed_ortho_basis = np.stack(
-                 [normed_basis[:,1], normed_yprime], axis=1)
+                # In this case, we construct a basis whose x-axis is
+                # parallel with the x-axis of the image basis, and whose
+                # y-axis lies in the x-y plane of the basis, perpendicular
+                # to the x-axis
 
-            coeffs = np.matmul(normed_ortho_basis.transpose(),
-                               np_basis[:,::-1])
-            [[a,c],[b,d]] = coeffs
+                basis_norm = np.linalg.norm(np_basis, axis = 0)
+                
+                normed_basis = np_basis / basis_norm
+                normed_z = np.cross(normed_basis[:,1], normed_basis[:,0])
+                normed_z /= np.linalg.norm(normed_z)
+                normed_yprime = np.cross(normed_z, normed_basis[:,1])
+                normed_yprime /= np.linalg.norm(normed_yprime)
+                
+                np_view_basis = np.stack(
+                    [normed_yprime, normed_basis[:,1]], axis=1)
+
+            else:
+                # We've also closed over view_basis, so we can't update it
+                if isinstance(view_basis,t.Tensor):
+                    np_view_basis = view_basis.detach().cpu().numpy()
+                else:
+                    np_view_basis = view_basis
+                    
+                # We always normalize the view basis
+                view_basis_norm = np.linalg.norm(np_view_basis, axis = 0)
+                np_view_basis = np_view_basis / view_basis_norm
+
+            # Holy cow, this works!
+            transform_matrix = \
+                np.linalg.lstsq(np_view_basis[:,::-1], np_basis[:,::-1])[0]
+            [[a,c],[b,d]] = transform_matrix
 
             transform = mtransforms.Affine2D.from_values(a,b,c,d,0,0)
 
             trans_data = transform + plt.gca().transData
 
             mpl_im.set_transform(trans_data)
-            corners = np.array([[0,0],
-                                [im.shape[-1],0],
-                                [0, im.shape[-2]],
-                                [im.shape[-1], im.shape[-2]]])
-            corners = np.matmul(
-                normed_ortho_basis.transpose(),
-                np.matmul(np_basis[:,::-1], corners.transpose()))
+            corners = np.array([[-0.5,-0.5],
+                                [im.shape[-1]-0.5,-0.5],
+                                [-0.5, im.shape[-2]-0.5],
+                                [im.shape[-1]-0.5, im.shape[-2]-0.5]])
+            corners = np.matmul(transform_matrix,corners.transpose())
             mins = np.min(corners, axis=1)
             maxes = np.max(corners, axis=1)
             plt.gca().set_xlim([mins[0], maxes[0]])
             plt.gca().set_ylim([mins[1], maxes[1]])
-            
+            plt.gca().invert_yaxis()
         
         cbar = plt.colorbar()
         if cmap_label is not None:

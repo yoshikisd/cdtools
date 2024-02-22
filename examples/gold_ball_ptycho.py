@@ -25,7 +25,7 @@ with model.save_on_exit('example_reconstructions/gold_balls.h5', dataset):
     for loss in model.Adam_optimize(10, dataset, batch_size=50):
         # And we liveplot the updates to the model as they happen
         print(model.report())
-        #model.inspect(dataset)
+        model.inspect(dataset)
 
     # This orthogonalizes the incoherent probe modes
     model.tidy_probes()

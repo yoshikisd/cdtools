@@ -52,6 +52,10 @@ __all__ = ['Bragg2DPtycho']
 # in ggasp. So I believe this should not be a problem
 #
 
+beam_basis = np.array([[0,-1],
+                       [-1,0],
+                       [0,0]])
+
 class Bragg2DPtycho(CDIModel):
 
     def __init__(
@@ -537,18 +541,34 @@ class Bragg2DPtycho(CDIModel):
          lambda self, fig: p.plot_amplitude(tools.propagators.inverse_far_field(self.probe), fig=fig)),
         ('Basis Probe Fourier Space Phases',
          lambda self, fig: p.plot_phase(tools.propagators.inverse_far_field(self.probe), fig=fig)),
-        ('Basis Probe Real Space Amplitudes',
+        ('Basis Probe Real Space Amplitudes, Surface Normal View',
          lambda self, fig: p.plot_amplitude(
              self.probe,
              fig=fig,
              basis=self.probe_basis,
              units=self.units,
          )),
-        ('Basis Probe Real Space Phases',
+        ('Basis Probe Real Space Phases, Surface Normal View',
          lambda self, fig: p.plot_phase(
              self.probe,
              fig=fig,
              basis=self.probe_basis,
+             units=self.units,
+         )),
+        ('Basis Probe Real Space Amplitudes, Beam View',
+         lambda self, fig: p.plot_amplitude(
+             self.probe,
+             fig=fig,
+             basis=self.probe_basis,
+             view_basis=beam_basis,
+             units=self.units,
+         )),
+        ('Basis Probe Real Space Phases, Beam View',
+         lambda self, fig: p.plot_phase(
+             self.probe,
+             fig=fig,
+             basis=self.probe_basis,
+             view_basis=beam_basis,
              units=self.units,
          )),
         ('Object Amplitude, Surface Normal View', 
@@ -563,6 +583,38 @@ class Bragg2DPtycho(CDIModel):
              self.obj,
              fig=fig,
              basis=self.obj_basis,
+             units=self.units,
+         )),
+        ('Object Amplitude, Beam View', 
+         lambda self, fig: p.plot_amplitude(
+             self.obj,
+             fig=fig,
+             basis=self.obj_basis,
+             view_basis=beam_basis,
+             units=self.units,
+         )),
+        ('Object Phase, Beam View',
+         lambda self, fig: p.plot_phase(
+             self.obj,
+             fig=fig,
+             basis=self.obj_basis,
+             view_basis=beam_basis,
+             units=self.units,
+         )),
+        ('Object Amplitude, Detector View', 
+         lambda self, fig: p.plot_amplitude(
+             self.obj,
+             fig=fig,
+             basis=self.obj_basis,
+             view_basis=self.det_basis,
+             units=self.units,
+         )),
+        ('Object Phase, Detector View',
+         lambda self, fig: p.plot_phase(
+             self.obj,
+             fig=fig,
+             basis=self.obj_basis,
+             view_basis=self.det_basis,
              units=self.units,
          )),
         ('Corrected Translations',
