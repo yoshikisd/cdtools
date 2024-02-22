@@ -64,6 +64,7 @@ class FancyPtycho(CDIModel):
             
         self.register_buffer('surface_normal',
                              t.tensor(surface_normal, dtype=dtype))
+
         if saturation is None:
             self.saturation = None
         else:
@@ -100,7 +101,9 @@ class FancyPtycho(CDIModel):
         self.obj_view_slice = np.s_[obj_view_crop:-obj_view_crop,
                                     obj_view_crop:-obj_view_crop]
         
+        # TODO: perhaps not working anymore for fourier cropped probes
         if background is None:
+            raise NotImplementedError('Issues with this due to probe fourier padding')
             shape = [s//oversampling for s in self.probe[0]]
             background = 1e-6 * t.ones(shape, dtype=t.float32)
             
@@ -134,6 +137,7 @@ class FancyPtycho(CDIModel):
             probe_support = t.ones_like(self.probe[0], dtype=t.bool)
         self.register_buffer('probe_support',
                              t.tensor(probe_support, dtype=t.bool))
+        self.probe.data *= self.probe_support
             
         self.register_buffer('oversampling',
                              t.tensor(oversampling, dtype=int))
@@ -759,7 +763,7 @@ class FancyPtycho(CDIModel):
 
         # We also save out the main results in a more readable format
         obj_basis = self.obj_basis.detach().cpu().numpy()
-        probe_basis = self.obj_basis.detach().cpu().numpy()
+        probe_basis = self.probe_basis.detach().cpu().numpy()
         translations=self.corrected_translations(dataset).detach().cpu().numpy()
         original_translations = dataset.translations.detach().cpu().numpy()
         probe = self.probe.detach().cpu().numpy()
@@ -767,7 +771,7 @@ class FancyPtycho(CDIModel):
         obj = self.obj.detach().cpu().numpy()
         background = self.background.detach().cpu().numpy()**2
         weights = self.weights.detach().cpu().numpy()
-        oversampling = self.oversampling
+        oversampling = self.oversampling.cpu().numpy()
         wavelength = self.wavelength.cpu().numpy()
 
         results = {

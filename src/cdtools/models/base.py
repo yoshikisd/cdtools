@@ -200,7 +200,7 @@ class CDIModel(t.nn.Module):
         """Saves the results of the model when the context is exited
 
         If you wrap the main body of your code in this context manager,
-        it will either save the results to a .mat file upon completion,
+        it will either save the results to a .h5 file upon completion,
         or when any exception is raised during execution.
 
         Parameters
@@ -215,11 +215,35 @@ class CDIModel(t.nn.Module):
         try:
             yield
             self.save_to_h5(filename, *args)
-        except Exception as e:
+        except:
             if exception_filename is None:
                 exception_filename = filename
             self.save_to_h5(exception_filename, *args)
-            raise e
+            raise
+
+    @contextmanager
+    def save_on_exception(self, filename, *args):
+        """Saves the results of the model if an exception occurs
+
+        If you wrap the main body of your code in this context manager,
+        it will save the results to a .h5 file if an exception is thrown.
+        If the code completes without an exception, it will not save the
+        results, expecting that the results are explicitly saved later
+
+        Parameters
+        ----------
+        filename : str
+            The filename to save under, in case of an exception
+        *args
+            Accepts any additional args that model.save_results needs, for this model
+        """
+        try:
+            yield
+        except:
+            self.save_to_h5(filename, *args)
+            print('Intermediate results saved under name:')
+            print(filename, flush=True)
+            raise
 
     
     def AD_optimize(self, iterations, data_loader,  optimizer,\

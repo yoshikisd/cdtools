@@ -87,19 +87,15 @@ class Bragg2DPtycho(CDIModel):
         # propagate_probe and correct_tilt are important!
 
         super(Bragg2DPtycho, self).__init__()
-        self.units = units
-        self.wavelength = t.tensor(wavelength)
-        self.detector_geometry = copy(detector_geometry)
-        det_geo = self.detector_geometry
-        if hasattr(det_geo, 'distance'):
-            det_geo['distance'] = t.tensor(det_geo['distance'])
-        if hasattr(det_geo, 'basis'):
-            det_geo['basis'] = t.tensor(det_geo['basis'])
-        if hasattr(det_geo, 'corner'):
-            det_geo['corner'] = t.tensor(det_geo['corner'])
+        self.register_buffer('wavelength',
+                             t.tensor(wavelength, dtype=dtype))
+        self.store_detector_geometry(detector_geometry,
+                                     dtype=dtype)
 
-        self.min_translation = t.tensor(min_translation)
-        self.median_propagation = t.tensor(median_propagation)
+        self.register_buffer('min_translation',
+                             t.tensor(min_translation, dtype=dtype))
+        self.register_buffer('median_propagation',
+                             t.tensor(median_propagation, dtype=dtype))
 
         self.register_buffer('obj_basis',
                              t.tensor(obj_basis, dtype=dtype))
@@ -110,18 +106,28 @@ class Bragg2DPtycho(CDIModel):
             self.register_buffer('probe_basis',
                                  t.tensor(probe_basis, dtype=dtype))        
 
-        # calculate the surface normal from the probe basis
+            self.units = units
+
+        # calculate the surface normal from the object basis. Reminder
+        # that for this model, the object basis should be defined in the
+        # plane of the object.
         surface_normal =  np.cross(np.array(obj_basis)[:,1],
                            np.array(obj_basis)[:,0])
         surface_normal /= np.linalg.norm(surface_normal)
-        self.surface_normal = t.tensor(surface_normal)
-        
-        self.saturation = saturation
-        
-        if mask is None:
-            self.mask = mask
+        self.register_buffer('surface_normal',
+                             t.tensor(surface_normal, dtype=dtype))
+
+        if saturation is None:
+            self.saturation = None
         else:
-            self.mask = t.tensor(mask, dtype=t.bool)
+            self.register_buffer('saturation',
+                                 t.tensor(saturation, dtype=dtype))
+
+        if mask is None:
+            self.mask = None
+        else:
+            self.register_buffer('mask',
+                                 t.tensor(mask, dtype=t.bool))
 
         probe_guess = t.tensor(probe_guess, dtype=t.complex64)
         obj_guess = t.tensor(obj_guess, dtype=t.complex64)
@@ -129,25 +135,19 @@ class Bragg2DPtycho(CDIModel):
         # We rescale the probe here so it learns at the same rate as the
         # object
         if probe_guess.dim() > 2:
-            self.probe_norm = 1 * t.max(t.abs(probe_guess[0]))
+            probe_norm = 1 * t.max(t.abs(probe_guess[0]))
         else:
-            self.probe_norm = 1 * t.max(t.abs(probe_guess))        
-
-        # Not strictly necessary but otherwise it will return
-        # a probe with the stuff outside of the support unchanged after
-        # optimization
-        if probe_support is not None:
-            self.probe_support = t.tensor(probe_support, dtype=t.bool)
-            probe_guess = probe_guess * probe_support
-            # This seems dumb, but otherwise it winds up with a mixture
-            # of negative and positive zeros and it's super annoying when
-            # you look at the phase map
-            probe_guess[probe_guess == 0] = 0
-        else:
-            self.probe_support = t.ones(probe_guess[0].shape, dtype=t.bool)
-
+            probe_norm = 1 * t.max(t.abs(probe_guess))        
+        self.register_buffer('probe_norm', probe_norm.to(dtype))
+        
         self.probe = t.nn.Parameter(probe_guess / self.probe_norm)
         self.obj = t.nn.Parameter(obj_guess)
+
+        if probe_support is None:
+            probe_support = t.ones_like(self.probe[0], dtype=t.bool)
+        self.register_buffer('probe_support',
+                             t.tensor(probe_support, dtype=t.bool))
+        self.probe.data *= self.probe_support
 
         if background is None:
             raise NotImplementedError('Issues with this due to probe fourier padding')
@@ -170,44 +170,59 @@ class Bragg2DPtycho(CDIModel):
             t_o = t_o / translation_scale
             self.translation_offsets = t.nn.Parameter(t_o)
 
-        self.translation_scale = translation_scale
+        self.register_buffer('translation_scale',
+                             t.tensor(translation_scale, dtype=dtype))
 
-        self.oversampling = oversampling
+        self.register_buffer('oversampling',
+                             t.tensor(oversampling, dtype=int))
 
-        self.propagate_probe = propagate_probe
-        self.correct_tilt = correct_tilt
+        self.register_buffer('propagate_probe',
+                             t.tensor(propagate_probe, dtype=bool))
+        self.register_buffer('correct_tilt',
+                             t.tensor(correct_tilt, dtype=bool))
+
         if correct_tilt:
-
-            self.k_map, self.intensity_map = \
+            k_map, intensity_map = \
                 tools.propagators.generate_high_NA_k_intensity_map(
                     self.obj_basis,
-                    self.detector_geometry['basis'] / oversampling,
+                    self.get_detector_geometry()['basis'] / oversampling,
                     self.background.shape,
-                    self.detector_geometry['distance'],
+                    self.get_detector_geometry()['distance'],
                     self.wavelength,dtype=t.float32,
                     lens=lens)
+            self.register_buffer('k_map',
+                                 t.tensor(k_map, dtype=dtype))
+            self.register_buffer('intensity_map',
+                                 t.tensor(intensity_map, dtype=dtype))
+
         else:
             self.k_map = None
             self.intensity_map = None
 
-        self.prop_dir = t.tensor([0, 0, 1], dtype=t.float32)
+        # The propagation direction of the probe 
+        self.register_buffer('prop_dir',
+                             t.tensor([0, 0, 1], dtype=dtype))
 
         # This propagator should be able to be multiplied by the propagation
         # distance each time to get a propagator
-        self.universal_propagator = t.angle(ggasp(
-            self.background.shape,
+        universal_propagator = t.angle(ggasp(
+            self.probe.shape[-2:],
             self.probe_basis, self.wavelength,
             t.tensor([0, 0, self.wavelength/(2*np.pi)], dtype=t.float32),
             propagation_vector=self.prop_dir,
             dtype=t.complex64,
             propagate_along_offset=True))
-
+        
+        # TODO: probably doesn't support non-float-32 dtypes
+        self.register_buffer('universal_propagator',
+                             universal_propagator)
+                            
+        
 
     @classmethod
     def from_dataset(
             cls,
             dataset,
-            probe_size=None,
             randomize_ang=0,
             padding=0,
             n_modes=1,
@@ -225,7 +240,6 @@ class Bragg2DPtycho(CDIModel):
             obj_padding=200,
             units='um',
     ):
-        
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
         det_shape = dataset[0][1].shape
@@ -311,21 +325,11 @@ class Bragg2DPtycho(CDIModel):
         # Because the grid we defined on the sample is projected from the
         # detector conjugate space, we can pretend that the grid is just in
         # that space and use the standard initializations anyway
-        
-        if probe_size is None:
-            probe = tools.initializers.SHARP_style_probe(
-                dataset,
-                propagation_distance=propagation_distance,
-                oversampling=oversampling
-            )
-        else:
-            probe = tools.initializers.gaussian_probe(
-                dataset,
-                ew_basis,
-                det_shape,
-                probe_size,
-                propagation_distance=propagation_distance
-            )
+        probe = tools.initializers.SHARP_style_probe(
+            dataset,
+            propagation_distance=propagation_distance,
+            oversampling=oversampling
+        )
 
             
         if hasattr(dataset, 'background') and dataset.background is not None:
@@ -406,7 +410,7 @@ class Bragg2DPtycho(CDIModel):
     
     def interaction(self, index, translations):
         pix_trans, props = tools.interactions.project_translations_to_sample(
-            self.probe_basis, translations)
+            self.obj_basis, translations)
 
         
         pix_trans -= self.min_translation
@@ -448,8 +452,9 @@ class Bragg2DPtycho(CDIModel):
             prs = t.nn.functional.pad(prs, padding)
             prs = tools.propagators.inverse_far_field(prs)
 
+        
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
-            prs, self.obj,pix_trans,
+            prs, self.obj, pix_trans,
             shift_probe=True, multiple_modes=True)
 
         return exit_waves
@@ -482,36 +487,6 @@ class Bragg2DPtycho(CDIModel):
         return tools.losses.amplitude_mse(real_data, sim_data, mask=mask)
 
     
-    def to(self, *args, **kwargs):
-        super(Bragg2DPtycho, self).to(*args, **kwargs)
-        self.wavelength = self.wavelength.to(*args,**kwargs)
-        # move the detector geometry too
-        det_geo = self.detector_geometry
-        if hasattr(det_geo, 'distance'):
-            det_geo['distance'] = det_geo['distance'].to(*args,**kwargs)
-        if hasattr(det_geo, 'basis'):
-            det_geo['basis'] = det_geo['basis'].to(*args,**kwargs)
-        if hasattr(det_geo, 'corner'):
-            det_geo['corner'] = det_geo['corner'].to(*args,**kwargs)
-
-        if self.mask is not None:
-            self.mask = self.mask.to(*args, **kwargs)
-
-        if self.k_map is not None:
-            self.k_map = self.k_map.to(*args,**kwargs)
-        if self.intensity_map is not None:
-            self.intensity_map = self.intensity_map.to(*args,**kwargs)
-            
-        self.min_translation = self.min_translation.to(*args,**kwargs)
-        self.probe_basis = self.probe_basis.to(*args,**kwargs)
-        self.probe_norm = self.probe_norm.to(*args,**kwargs)
-        self.probe_support = self.probe_support.to(*args,**kwargs)
-        self.surface_normal = self.surface_normal.to(*args, **kwargs)
-        self.prop_dir = self.prop_dir.to(*args, **kwargs)
-        self.universal_propagator = self.universal_propagator.to(*args,**kwargs)
-
-
-        
     def sim_to_dataset(self, args_list):
         # In the future, potentially add more control
         # over what metadata is saved (names, etc.)
@@ -546,14 +521,14 @@ class Bragg2DPtycho(CDIModel):
                                  entry_info = entry_info,
                                  sample_info = sample_info,
                                  wavelength=wavelength,
-                                 detector_geometry=detector_geometry,
+                                 detector_geometry=self.get_detector_geometry(),
                                  mask=mask)
 
     
     def corrected_translations(self,dataset):
         translations = dataset.translations.to(dtype=self.probe.real.dtype,
                                                device=self.probe.device)
-        t_offset = tools.interactions.pixel_to_translations(self.probe_basis,self.translation_offsets*self.translation_scale,surface_normal=self.surface_normal)
+        t_offset = tools.interactions.pixel_to_translations(self.obj_basis,self.translation_offsets*self.translation_scale,surface_normal=self.surface_normal)
         return translations + t_offset
 
 
@@ -604,7 +579,8 @@ class Bragg2DPtycho(CDIModel):
         base_results = super().save_results()
 
         # We also save out the main results in a more readable format
-        basis = self.probe_basis.detach().cpu().numpy()
+        obj_basis = self.obj_basis.detach().cpu().numpy()
+        probe_basis = self.probe_basis.detach().cpu().numpy()
         translations=self.corrected_translations(dataset).detach().cpu().numpy()
         original_translations = dataset.translations.detach().cpu().numpy()
         probe = self.probe.detach().cpu().numpy()
@@ -612,11 +588,12 @@ class Bragg2DPtycho(CDIModel):
         obj = self.obj.detach().cpu().numpy()
         background = self.background.detach().cpu().numpy()**2
         weights = self.weights.detach().cpu().numpy()
-        oversampling = self.oversampling
+        oversampling = self.oversampling.cpu().numpy()
         wavelength = self.wavelength.cpu().numpy()
 
         results = {
-            'basis': basis,
+            'obj_basis': obj_basis,
+            'probe_basis': probe_basis,
             'translations': translations,
             'original_translations': original_translations,
             'probe': probe,
