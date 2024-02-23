@@ -8,7 +8,7 @@ setuptools.setup(
     version="0.2.0",
     python_requires='>3.7', # recommended minimum version for pytorch
     author="Abe Levitan",
-    author_email="alevitan@mit.edu",
+    author_email="abraham.levitan@psi.ch",
     description="Tools for coherent diffractive imaging and ptychography",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -21,8 +21,15 @@ setuptools.setup(
         "torch>=1.9.0", #1.9.0 supports autograd on indexed complex tensors
         "h5py>=2.1"],
     extras_require={
-        'tests': ["pytest"],
-        'docs': ["sphinx","sphinx-argparse","sphinx_rtd_theme"]
+        'tests': [
+            "pytest",
+            "pooch",
+        ],
+        'docs': [
+            "sphinx>=4.3.0",
+            "sphinx-argparse",
+            "sphinx_rtd_theme>=0.5.1"
+        ]
     },
     package_dir={"": "src"},
     packages=setuptools.find_packages("src"),

@@ -205,7 +205,8 @@ def plot_image(im, plot_func=lambda x: x, fig=None, basis=None, view_basis='orth
 
             # Holy cow, this works!
             transform_matrix = \
-                np.linalg.lstsq(np_view_basis[:,::-1], np_basis[:,::-1])[0]
+                np.linalg.lstsq(np_view_basis[:,::-1], np_basis[:,::-1],
+                                rcond=None)[0]
             [[a,c],[b,d]] = transform_matrix
 
             transform = mtransforms.Affine2D.from_values(a,b,c,d,0,0)

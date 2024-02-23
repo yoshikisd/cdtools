@@ -5,6 +5,7 @@ pytorch>=1.9.0 #1.9.0 implements support for autograd on indexed complex tensors
 h5py>=2.1
 python-dateutil
 pytest
-sphinx
+pooch
+sphinx>=4.3.0 # Fixes a bug with bulleted lists
 sphinx-argparse
-sphinx_rtd_theme
+sphinx_rtd_theme>=0.5.1 # Fixes a bug with bulleted lists

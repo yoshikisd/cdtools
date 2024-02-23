@@ -3,27 +3,32 @@
 CDTools is a python library for ptychography and CDI reconstructions, using an Automatic Differentiation based approach.
 
 ```python
-# imports
 from matplotlib import pyplot as plt
 from cdtools.datasets import Ptycho2DDataset
 from cdtools.models import FancyPtycho
 
-# Load the file
+# Load a data file
 dataset = Ptycho2DDataset.from_cxi('ptycho_data.cxi')
 
-# Generate a model from the data
+# Initialize a model from the data
 model = FancyPtycho.from_dataset(dataset)
 
 # Run a reconstruction
 for loss in model.Adam_optimize(10, dataset):
     print(model.report())
 
-# And look at the results!
+# Save the results
+model.save_to_h5('ptycho_results.h5', dataset)
+
+# And look at them!
 model.inspect(dataset) # See the reconstructed object, probe, etc.
 model.compare(dataset) # See how the simulated and measured patterns compare
 plt.show()
 ```
 
-Full installation instructions and documentation can be found [here](https://github.mit.edu/pages/Scattering/cdtools/).
+Full installation instructions and documentation can be found [here](https://allevitan.github.io/cdtools-docs/).
+
+
+CDTools was developed in the [photon scattering lab](https://scattering.mit.edu/) at MIT, and further development took place within the [computational x-ray imaging group](https://www.psi.ch/en/cxi) at PSI. If you would like to publish any work that uses CDTools, please contact [Abe Levitan](mailto:abraham.levitan@psi.ch).
 
 Have a wonderful day!

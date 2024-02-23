@@ -12,10 +12,6 @@ from copy import copy
 
 __all__ = ['FancyPtycho']
 
-# TODO The information on bases is all wrong when the probe_fourier_crop is
-# used, this affects display but also saveout of data and maybe even stuff
-# like the probe translation simulation
-
 class FancyPtycho(CDIModel):
 
     def __init__(self,

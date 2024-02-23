@@ -507,7 +507,7 @@ def generate_generalized_angular_spectrum_propagator(shape, basis, wavelength, o
     # which was a real problem that showed up for electron ptycho
     b1_dir = basis[:,0] / t.linalg.norm(basis[:,0])
     b2_dir = basis[:,1] / t.linalg.norm(basis[:,1])
-    perpendicular_dir = t.cross(b1_dir,b2_dir)
+    perpendicular_dir = t.cross(b1_dir, b2_dir, dim=-1)
     # Note that we cannot use in-place operations if we want to be able to
     # use automatic differentiation successfully
     perpendicular_dir = perpendicular_dir / t.linalg.norm(perpendicular_dir)

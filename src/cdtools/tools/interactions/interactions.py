@@ -170,7 +170,7 @@ def project_translations_to_sample(sample_basis, translations):
 
     # Must do this all in pytorch unfortunately
     # First we calculate the surface normal for the projection onto the sample
-    surface_normal =  t.cross(sample_basis[:,1],sample_basis[:,0])
+    surface_normal =  t.cross(sample_basis[:,1],sample_basis[:,0], dim=-1)
     surface_normal /= t.norm(surface_normal)
 
 
