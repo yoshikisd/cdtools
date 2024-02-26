@@ -297,9 +297,11 @@ class FancyPtycho(CDIModel):
             obj = t.stack([obj,] + [0.05*t.ones_like(obj),]*(n_obj_modes-1))
 
         if obj_view_crop is None:
-            obj_view_crop = min(probe.shape[-2], probe.shape[-1]) // 2
+            obj_view_crop = (min(probe.shape[-2], probe.shape[-1]) // 2
+                             + probe_fourier_crop)
         if obj_view_crop < 0:
-            obj_view_crop += min(probe.shape[-2], probe.shape[-1]) // 2
+            obj_view_crop += (min(probe.shape[-2], probe.shape[-1]) // 2
+                              + probe_fourier_crop)
         obj_view_crop += obj_padding
             
         det_geo = dataset.detector_geometry
@@ -747,7 +749,7 @@ class FancyPtycho(CDIModel):
         ('Corrected Translations',
          lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig, units=self.units)),
         ('Background',
-         lambda self, fig: plt.figure(fig.number) and plt.imshow(self.background.detach().cpu().numpy()**2))
+         lambda self, fig: p.plot_amplitude(self.background**2, fig=fig))
     ]
     
     

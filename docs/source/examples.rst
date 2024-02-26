@@ -1,98 +1,100 @@
 Examples
 ========
 
-Included with the repository are a number of example scripts that demonstrate how various aspects of CDTools work. It is recommended to read through at least a few of them before continuing to the tutorial, to get a feel for how the ptychography scripts work.
+Included with the repository are a number of example scripts that demonstrate how various aspects of CDTools work. It is recommended to read through at least a few of them before continuing to the tutorial.
+
+All the datasets used in these example scripts are included in the repository, and the scripts should be runnable as soon as CDTools is installed
 
 
 Inspect Dataset
 ---------------
 
-We have some ptychography data in a .cxi file. How do we look at it, confirm that it looks like you expect, hasn't been corrupted, etc? This script demonstrates how to load and look at your data, if it's stored as a compliant .cxi file.
+The first example loads and visualizes ptychography data stored in a .cxi file.
 
 .. literalinclude:: ../../examples/inspect_dataset.py
 
-First, data is read into a Ptycho2DDataset object, which is a subclass of a pytorch dataset. This dataset, unsurprisingly, is for 2D ptycho scan data. Calling :code:`dataset.inspect` generates a plot showing an overview of the ptychography scan data, with a nanomap of integrated detector intensity on the left and detector images on the right.
+First, data is read into a Ptycho2DDataset object, which is a subclass of a pytorch dataset that knows a bit about the structure of ptychography data. Calling :code:`dataset.inspect` generates a plot showing an overview of the ptychography scan data. On the left is a scatter plot showing the integrated detector intensity at each probe location. On the right, raw detector images are shown. The dataset can be navigated by clicking around the scatter plot on the left.
 
 		    
 Simple Ptycho
 -------------
 
-This script runs a ptychography reconstruction using the SimplePtycho model. This model implements a straightforward transmission ptychography geometry, with no position refinement, incoherent modes, or other doodads (only a background model). 
+This script runs a ptychography reconstruction using the SimplePtycho model, a bare-bones ptychography model for the transmission geometry.
+
+The purpose of the SimplePtycho model is pedagogical: there are very few situations where it would preferred to the FancyPtycho model which will be introduced later.
+
+Because of it's simplicity, the definition of this model is much simpler than the definition of FancyPtycho, and it is therefore a good first model to look at to learn how to implement a custom ptychography model in CDTools.
 
 .. literalinclude:: ../../examples/simple_ptycho.py
 
-Because this script only runs ten iterations, the quality of the reconstruction is relatively poor - however, on this particular dataset, running 75 or so iterations will lead to a surprisingly good reconstruction. On other datasets, however, it will often fail to converge, even in some cases where there is little error in the data.
+When reading this script, note the basic workflow. After the data is loaded, a model is created to match the geometry stored in the dataset with a sensible default initialization for all the parameters.
 
-When reading this script, note the basic workflow. After the data is loaded, a model is created to match the geometry stored in the dataset, with a default initialization for all the parameters. Next, a reconstruction is run (and the progress reported out). Finally, the finished reconstruction is plotted.
+Next, the model is moved to the GPU using the :code:`model.to` function. Any device understood by :code:`torch.Tensor.to` can be specified here. The next line is a bit more subtle - the dataset is told to move patterns to the GPU before passing them to the model using the :code:`dataset.get_as` function. This function does not move the stored patterns to the GPU. If there is sufficient GPU memory, the patterns can also be pre-moved to the GPU using :code:`dataset.to`, but the speedup is empirically quite small.
+
+Once the device is selected, a reconstruction is run using :code:`model.Adam_optimize`. This is a generator function which will yield at every epoch, to allow some monitoring code to be run.
+
+Finally, the results can be studied using :code:`model.inspect(dataet)`, which creates or updates a set of plots showing the current state of the model parameters. :code:`model.compare(dataset)` is also called, which shows how the simulated diffraction patterns compare to the measured diffraction patterns in the dataset.
 
 
-Gold Balls Ptycho
------------------
+Fancy Ptycho
+------------
 
-This script uses the FancyPtycho model to perform a reconstruction from the classic `gold balls <http://www.cxidb.org/id-65.html>`_ dataset. The FancyPtycho model is the workhorse model for 2D Ptychographic reconstructions, and has the option to enable correction for a variety of potential sources of error.
+This script runs a reconstruction on the same data, but using the workhorse FancyPtycho model, demonstrating some of it's more commonly used features
+
+.. literalinclude:: ../../examples/fancy_ptycho.py
+
+The :code:`FancyPtycho.from_dataset` factory function has many keyword arguments which can turn on or modify various mixins. In this case, we perform a reconstruction with:
+
+- 3 incoherently mixing probe modes (in the vein of doi:10.1038/nature11806)
+- A probe array expanded by a factor of 2 in real space, i.e. simulated on a 2x2 upsampled grid in Fourier space (in the vein of doi:10.1103/PhysRevA.87.053850)
+- A circular finite support constraint applied to the probe
+- An initial guess for the probe which has been propagated from its focus position
+
+By default, FancyPtycho will also optimize over the following model parameters, each of which corrects for a specific source of errror:
+
+:code:`model.background`
+      A frame-independent detector background
+
+:code:`model.weights`
+      A frame-to-frame variation in the incoming probe intensity
+
+:code:`model.translation_offsets`
+      A frame-independent detector background
+
+These corrections can be turned off (on) by calling :code:`model.<parameter>.requires_grad = False #(True)`.
+
+
+Gold Ball Ptycho
+----------------
+
+This script shows how the FancyPtycho model might be used in a realistic situation, to perform a reconstruction on the classic `gold balls <http://www.cxidb.org/id-65.html>`_ dataset. This script also shows how to save results!
 
 .. literalinclude:: ../../examples/gold_ball_ptycho.py
 
-A number of things are changed about this script. The first difference is the section where we transfer the data and the model to the GPU. This is an important step if we would like to get a reconstruction anytime soon!
+Note, in particular, the use of :code:`model.save_on_exception` and :code:`model.save_to_h5` to save the results of the reconstruction. If a different file format is required, :code:`model.save_results` will save to a pure-python dictionary.
 
-Next, note that we can liveplot the results by calling :code:`model.inspect` within the reconstruction loop. In fact, we could put any code we wanted here to look at the state of the model, and it would be executed after each epoch.
-
-Finally, note that we take the time to save the results of this reconstruction. This is handled by pickling the dictionary produced by :code:`model.save_results`, which contains all the parameters which were reconstructed by the model.
-
-There are a number of things going on behind the scenes as well, just because we decided to use the FancyPtycho model. This reconstruction, in addition to using two incoherently mixing modes, is also performing position annealing and reconstructing any instabilities in the probe flux that might have occured.
+Finally, note that there are several small adjustments made to the script to counteract particular sources of error that are present in this dataset, for example the raster grid pathology caused by the scan pattern used. Also note that not every mixin is needed every time - in this case, we turn off optimization of the :code:`weights` parameter.
 
 
-MIT BNL Logo
-------------
-
-Next, we look at an example showing a more involved reconstruction from a dataset that has some serious errors in it. This is a dataset we collected at the CSX beamline of NSLS-II in 2016 from a target that said "MIT BNL" on it, using a defocused zone plate.
-
-.. literalinclude:: ../../examples/MIT_BNL_logo.py
-
-The first new thing that pops out at us is the choice to remove part of the diffraction patterns stored in the dataset. In this case, that data is noisy, and in any case, it's masked off with the mask stored in the .cxi file. We can simply edit all the patterns like we would any other pytorch or numpy array, taking care to crop the mask as well to match.
-
-The next thing we note is that a few more options are being taken advantage of during the model construction. First of all, we introduce the :code:`translation_scale` option, which sets the aggressiveness of the position reconstruction. A small number like 1 (the default) is often too mild when there are large errors, whereas numbers above 10 are often too agressive to lead to convergence.
-
-In this case, the :code:`propagation_distance` option tells us how far to propagate the naive initial guess of the probe. This data was taken from a very defocused zone plate, which is a classic difficult-to-reconstruct probe. The standard probe initialization, however, is generally quite good at generating a good guess of the focal point of any zone-plate-like optics. This option lets us start with a guess of that probe, which has already been propagated from it's focal point by a known distance.
-
-Next, note that we can start to play a bit with the reconstruction procedure in response to the kinds of error that exist in the data. In this case, we actually perform three rounds of reconstruction, in serial, with different parameters! First, we we turn off the position reconstruction, and run the reconstruction with an explicitly chosen batch size which was found to work well with this dataset. Next, we turn position reconstruction back on, and continue the reconstruction. Finally, we improve the reconstruction quality by running ten iterations at a smaller learning rate (the default is set to a sensible 0.005).
-
-
-Specular Ptycho
+Gold Ball Split
 ---------------
 
-This file demonstrates a reconstruction from an experiment in the specular reflection geometry.
+It is very common to run reconstructions on two disjoint subsets of the same dataset, as well as the full dataset. This is primarily done to estimate the resolution of a reconstruction via the Fourier ring correlation (FRC).
 
-.. literalinclude:: ../../examples/specular_ptycho.py
+.. literalinclude:: ../../examples/gold_ball_split.py
 
-While the reconstruction itself is simple this time, a few new parameters have been set in the model definition. First, the :code:`randomize_ang` parameter was set. This seeds the object with phase noise spanning a given angular range, rather than a constant. Second, the :code:`scattering_mode` parameter is set. When set, it will override any information in the .cxi file about the sample orientation, and define the orientation based on the detector geometry.
-
-In this case, the 'reflection' geometry knows to set the sample normal parallel to the scattering vector defined by an outgoing ray which intersects the detector at a perpendicular, and an incoming ray along the positive z-direction (as defined in the cxi specification). The other options, 'transmision', assumes that the surface normal of your sample is parallel to the incoming light ray. If this is left unset, it will use any information stored in the .cxi file, and will default to a transmission geometry if no data exists.
+This script simply divides the dataset in two, and then performs the same reconstruction on both halves of the dataset, as well as the full dataset.
 
 
-Ensemble Reconstruction
------------------------
+Gold Ball Synthesize
+--------------------
 
-One important check when working with ptychography is performing multiple independently seeded reconstructions from the same data, to understand to what extent they converge to the same solution. This script demonstrates how to run an ensemble of reconstructions
+Once we have a set of three reconstructions - two half data reconstructions and a full data reconstruction, we need to calculate the resolution metrics. This script shows how that is done.
 
-.. literalinclude:: ../../examples/ensemble_reconstruction.py
-
-Note that essentially all that's different here is that the reconstructions are performed within a loop, with each reconstruction added to a list. Importantly, the :code:`randomize_ang` parameter is set, so that the reconstructions are seeded with a different pattern of noise.
+.. literalinclude:: ../../examples/gold_ball_synthesize.py
 
 
+Transmission RPI
+----------------
 
-Ensemble Analysis
------------------
-
-This file inspects the results from the ensemble reconstruction
-
-.. literalinclude:: ../../examples/ensemble_analysis.py
-
-After loading the results and manipulating them a bit using regular python, two analysis functions from CDTools are used to glean information from the ensemble.
-
-First is :code:`analysis.synthesize_reconstructions`. This function takes a stack of reconstructed probes and objects, corrects each reconstruction to account for the various ambiguities (phase ramps, translation offsets, etc.), and sums them into a single synthesized probe and object. Once the reconstructions are synthesized, this final synthesized probe and object can be plotted
-
-Second is :code:`analysis.calc_consistency_prtf`. This function compares the power into various spatial frequencies between a stack of individual reconstructions and a synthesized reconstruction, in analogy with the phase retrieval transfer function. It then outputs a curve analogous to the PRTF, that shows at what spatial frequencies the reconstructions have converged consistently. This result is then plotted as well.
-
-
-
+CDTools also contains a forward model for randomized probe imaging (RPI, doi:10.1364/OE.397421). This is currently not documented fully, but hopefully will be soon

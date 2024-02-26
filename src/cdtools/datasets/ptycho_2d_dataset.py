@@ -284,3 +284,47 @@ class Ptycho2DDataset(CDataset):
         return dataset_1, dataset_2
 
 
+    def pad(self, to_pad, value=0, mask=True):
+        """Pads all the diffraction patterns by a speficied amount
+
+        This is useful for scenarios where the diffraction is strong, even
+        near the edge of the detector. In this scenario, the discrete version
+        of the ptychography model will alias. Padding the diffraction patterns
+        to increase their size and masking off the outer region can account
+        for this effect.
+
+        If to_pad is an integer, the patterns will be padded on all sides by
+        this value. If it is a tuple of length 2, then the patterns will be
+        padded (left/right, top/bottom, left/right). If a tuple of length 4,
+        the padding is done as (left, right, top, bottom), following the
+        convention for torch.nn.functional.pad
+
+        Any mask and background data which is stored with the dataset will be
+        padded along with the diffraction patterns
+        
+        Parameters
+        ----------
+        to_pad : int or tuple(int)
+            The number of pixels to pad by.
+        value : float
+            Optional, the fill value to pad with. Default is 0
+        mask : bool
+            Optional, whether to mask off the new pixels. Default is True
+        """
+        
+        # Convert the padding to a common format
+        if not hasattr(to_pad, "__len__"):
+            to_pad = (to_pad,) * 4
+        elif len(to_pad) == 2:
+            to_pad = ((to_pad[0],) * 2) + ((to_pad[1],) * 2)
+
+        self.patterns = t.nn.functional.pad(self.patterns, to_pad, value=value)
+        if self.mask is not None:
+            if mask:
+                self.mask = t.nn.functional.pad(self.mask, to_pad, value=False)
+            else:
+                self.mask = t.nn.functional.pad(self.mask, to_pad, value=True)
+        if self.background is not None:
+            self.background = t.nn.functional.pad(self.background, to_pad)
+        
+

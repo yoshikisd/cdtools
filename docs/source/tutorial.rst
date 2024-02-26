@@ -1,6 +1,8 @@
 Tutorial
 ========
 
+WARNING: THE FOLLOWING TUTORIAL IS OUT OF DATE! It has some helpful information, but it is not trustworthy. Please rely on the examples, which are current as of February 2024.
+
 This tutorial builds on the examples, leading to a more complete understanding of how to use CDTools and - importantly - how to extend it. First, we will cover the details of writing a useful reconstruction script for a particular experiment. Next, we will discuss how to implement a new dataset type for different kinds of coherent diffraction. Finally, we will go over how to make new models to cover specific types of ptychography which aren't described by any of the built-in models.
 
 

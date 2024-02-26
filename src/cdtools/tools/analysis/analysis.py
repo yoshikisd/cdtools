@@ -11,6 +11,7 @@ import numpy as np
 from cdtools.tools import image_processing as ip
 from scipy import linalg as sla
 from scipy import special
+from scipy import optimize as opt
 
 __all__ = ['orthogonalize_probes', 'standardize', 'synthesize_reconstructions',
            'calc_consistency_prtf', 'calc_deconvolved_cross_correlation',
@@ -476,7 +477,7 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1., limit='side'):
     basis : array
         The basis for the images, defined as is standard for datasets
     im_slice : slice
-        Default is from 3/8 to 5/8 across the image, a slice to use in the processing.
+        Default is the full image
     nbins : int
         Number of bins to break the FRC up into
     snr : float
@@ -507,8 +508,7 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1., limit='side'):
         basis = t.tensor(basis)
 
     if im_slice is None:
-        im_slice = np.s_[(im1.shape[0]//8)*3:(im1.shape[0]//8)*5,
-                          (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
+        im_slice = np.s_[:,:]
 
     if nbins is None:
         nbins = np.max(im1[im_slice].shape) // 8
@@ -1053,12 +1053,13 @@ def standardize_reconstruction_set(
         half_2,
         full,
         correct_phase_offset=True,
-        remove_phase_ramp=True,
-        remove_amplitude_exponent=False,
+        correct_phase_ramp=True,
+        correct_amplitude_exponent=False,
         window=np.s_[:,:],
-        nbins=50
+        nbins=50,
+        frc_limit='side',
 ):
-    """Normalizes and analyses a set of 50/50/100% reconstructions
+    """Standardizes and analyses a set of 50/50/100% reconstructions
     
     It's very common to split a ptychography dataset into two sub-datasets,
     each with 50% of the exposures, so that the difference between the two
@@ -1102,7 +1103,7 @@ def standardize_reconstruction_set(
     obj, probe, weights = full['obj'], full['probe'], full['weights']
 
 
-    if remove_phase_ramp:
+    if correct_phase_ramp:
         obj_1, probe_1 = remove_phase_ramp(
             half_1['obj'], window, probe=half_1['probe'])
         obj_2, probe_2 = remove_phase_ramp(
@@ -1110,7 +1111,7 @@ def standardize_reconstruction_set(
         obj, probe = remove_phase_ramp(
             full['obj'], window, probe=full['probe'])
 
-    if remove_amplitude_exponent:
+    if correct_amplitude_exponent:
         obj_1, probe_1, weights_1 = remove_amplitude_exponent(
             obj_1, window, probe=probe_1,
             weights=half_1['weights'],
@@ -1127,36 +1128,30 @@ def standardize_reconstruction_set(
             basis=full['basis'],
             translations=full['translations'])
 
+    
     if correct_phase_offset:
         obj_1 = np.exp(-1j* np.angle(np.sum(obj_1[window]))) * obj_1
         obj_2 = np.exp(-1j* np.angle(np.sum(obj_2))) * obj_2
         obj = np.exp(-1j* np.angle(np.sum(obj))) * obj
 
-        
-    # TODO calculate the illumination map using the corrected probes and
-    # the appropriately shifted translations, so that all the maps are
-    # directly comparable
-    illumination_map_1 = make_illumination_map(half_1, total_probe_intensity=total_probe_intensity)
-    illumination_map_2 = make_illumination_map(half_2, total_probe_intensity=total_probe_intensity)
-    illumination_map = make_illumination_map(full, total_probe_intensity=total_probe_intensity)
 
     # Todo update the translations to account for the determined shift
-    shift_1 = cdtools.tools.image_processing.find_shift(
+    shift_1 = ip.find_shift(
         t.as_tensor(ip.hann_window(np.abs(obj[window]))),
         t.as_tensor(ip.hann_window(np.abs(obj_1[window]))))
-    obj_1  = cdtools.tools.image_processing.sinc_subpixel_shift(
+    obj_1  = ip.sinc_subpixel_shift(
         t.as_tensor(obj_1), shift_1).numpy()
 
-    shift_2 = cdtools.tools.image_processing.find_shift(
+    shift_2 = ip.find_shift(
         t.as_tensor(ip.hann_window(np.abs(obj[window]))),
         t.as_tensor(ip.hann_window(np.abs(obj_2[window]))))
-    obj_2  = cdtools.tools.image_processing.sinc_subpixel_shift(
+    obj_2  = ip.sinc_subpixel_shift(
         t.as_tensor(obj_2), shift_2).numpy()
 
-    freqs, frc, threshold = cdtools.tools.analysis.calc_frc(
+    freqs, frc, threshold = calc_frc(
         ip.hann_window(obj_1[window]),
         ip.hann_window(obj_2[window]),
-        half_1['basis'], nbins=nbins, limit='corner')
+        full['obj_basis'], nbins=nbins, limit=frc_limit)
 
     # The correct formulation when the final output is the full reconstruction
     ssnr = 2 * frc / (1 - frc)
@@ -1167,21 +1162,19 @@ def standardize_reconstruction_set(
         'weights_half_1': weights_1,
         'translations_half_1': half_1['translations'],
         'background_1': half_1['background'],
-        'illumination_map_1': illumination_map_1,
         'obj_half_2': obj_2,
         'probe_half_2': probe_2,
         'weights_half_2': weights_2,
         'translations_half_2': half_2['translations'],
         'background_2': half_2['background'],
-        'illumination_map_2': illumination_map_2,
         'obj_full': obj,
         'probe_full': probe,
         'weights_full': weights,
         'translations_full': full['translations'],
         'background_full': full['background'],
-        'illumination_map_full': illumination_map,
         'wavelength': full['wavelength'],
-        'basis': full['basis'],
+        'obj_basis': full['obj_basis'],
+        'probe_basis': full['probe_basis'],
         'frc_freqs': freqs,
         'frc': frc,
         'frc_threshold': threshold,

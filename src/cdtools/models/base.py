@@ -60,7 +60,7 @@ class CDIModel(t.nn.Module):
 
         self.loss_history = []
         self.training_history = ''
-        self.iteration_count = 0
+        self.epoch = 0
 
     def from_dataset(self, dataset):
         raise NotImplementedError()
@@ -178,6 +178,7 @@ class CDIModel(t.nn.Module):
         return {
             'state_dict': state_dict,
             'loss_history': np.array(self.loss_history),
+            'epoch': self.epoch,
             'training_history': self.training_history,
             'loss_function': self.loss.__name__,
         }
@@ -352,7 +353,7 @@ class CDIModel(t.nn.Module):
                 scheduler.step(loss)
 
             self.loss_history.append(loss)
-            epoch_idx = len(self.loss_history)
+            self.epoch = len(self.loss_history)
             self.latest_iteration_time = time.time() - t0
             self.training_history += self.report() + '\n'
             return loss
