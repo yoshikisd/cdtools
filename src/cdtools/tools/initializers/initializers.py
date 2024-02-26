@@ -292,7 +292,7 @@ def SHARP_style_probe(dataset, propagation_distance=None, oversampling=1):
     shape = dataset.patterns.shape[-2:]
     
     # to use the mask or not?
-    intensities = np.zeros([dim // oversampling for dim in shape])
+    intensities = np.zeros([dim for dim in shape])
 
     # Eventually, do something with the recorded intensities, if they exist
     factors = [1 for idx in range(len(dataset))]
@@ -341,13 +341,14 @@ def SHARP_style_probe(dataset, propagation_distance=None, oversampling=1):
             propagation_distance)
 
         probe_guess = near_field(probe_guess,AS_prop)
-    
+
     # Finally, place this probe in a full-sized array if there is oversampling
-    final_probe = t.zeros(shape,dtype=t.complex64)
-    left = shape[0]//2 - probe_guess.shape[0] // 2
-    top = shape[1]//2 - probe_guess.shape[1] // 2 
-    final_probe[left:left+probe_guess.shape[0],
-                top:top+probe_guess.shape[1]] = probe_guess
+    full_shape = [oversampling * s for s in shape]
+    final_probe = t.zeros(full_shape, dtype=t.complex64)
+    left = full_shape[0]//2 - shape[0] // 2
+    top = full_shape[1]//2 - shape[1] // 2 
+    final_probe[left : left + shape[0],
+                top : top + shape[1]] = probe_guess
     
     return final_probe
 

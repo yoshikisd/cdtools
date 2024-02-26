@@ -401,10 +401,20 @@ class CDIModel(t.nn.Module):
                 yield res
 
 
-    def Adam_optimize(self, iterations, dataset, batch_size=15, lr=0.005,
-                      schedule=False, amsgrad=False, subset=None,
-                      regularization_factor=None, thread=True,
-                      calculation_width=10):
+    def Adam_optimize(
+            self,
+            iterations,
+            dataset,
+            batch_size=15,
+            lr=0.005,
+            betas=(0.9, 0.999),
+            schedule=False,
+            amsgrad=False,
+            subset=None,
+            regularization_factor=None,
+            thread=True,
+            calculation_width=10
+    ):
         """Runs a round of reconstruction using the Adam optimizer
 
         This is generally accepted to be the most robust algorithm for use
@@ -421,7 +431,9 @@ class CDIModel(t.nn.Module):
         batch_size : int
             Optional, the size of the minibatches to use
         lr : float
-            Optional, The learning rate (alpha) to use. 0.05 is typically the highest value with any chance of being stable
+            Optional, The learning rate (alpha) to use. Defaultis 0.005. 0.05 is typically the highest possible value with any chance of being stable
+        betas : tuple
+            Optional, the beta_1 and beta_2 to use. Default is (0.9, 0.999).
         schedule : float
             Optional, whether to use the ReduceLROnPlateau scheduler
         subset : list(int) or int
@@ -454,7 +466,11 @@ class CDIModel(t.nn.Module):
                                            shuffle=True)
 
         # Define the optimizer
-        optimizer = t.optim.Adam(self.parameters(), lr = lr, amsgrad=amsgrad)
+        optimizer = t.optim.Adam(
+            self.parameters(),
+            lr = lr,
+            betas=betas,
+            amsgrad=amsgrad)
 
         # Define the scheduler
         if schedule:

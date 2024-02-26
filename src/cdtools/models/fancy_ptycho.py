@@ -242,7 +242,7 @@ class FancyPtycho(CDIModel):
         )
 
         obj_size, min_translation = tools.initializers.calc_object_setup(
-            det_shape,
+            [s * oversampling for s in det_shape],
             pix_translations,
             padding=obj_padding,
         )
@@ -266,9 +266,8 @@ class FancyPtycho(CDIModel):
         if hasattr(dataset, 'background') and dataset.background is not None:
             background = t.sqrt(dataset.background)
         else:
-            shape = [s//oversampling 
-                     for s in probe.shape[-2:]]
-            background = 1e-6 * t.ones(shape, dtype=t.float32)
+            background = 1e-6 * t.ones(
+                dataset.patterns.shape[-2:], dtype=t.float32)
             
         if probe_fourier_crop is not None:
             probe = tools.propagators.far_field(probe)
@@ -458,8 +457,9 @@ class FancyPtycho(CDIModel):
             self.background,
             measurement=tools.measurements.incoherent_sum,
             saturation=self.saturation,
-            oversampling=self.oversampling,
-            simulate_finite_pixels=self.simulate_finite_pixels)
+            oversampling=int(self.oversampling),
+            simulate_finite_pixels=self.simulate_finite_pixels,
+        )
 
 
     # Note: No "loss" function is defined here, because it is added

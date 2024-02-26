@@ -74,24 +74,20 @@ class SimplePtycho(CDIModel):
         pix_translations = tools.interactions.translations_to_pixel(
             probe_basis,
             translations,
-            surface_normal=surface_normal)
+        )
         obj_size, min_translation = tools.initializers.calc_object_setup(
-            probe_shape,
-            pix_translations)
+            det_shape,
+            pix_translations,
+        )
 
         # Finally, initialize the probe and object using this information
-        probe = tools.initializers.SHARP_style_probe(
-            dataset,
-            probe_shape,
-            det_slice
-        )
+        probe = tools.initializers.SHARP_style_probe(dataset)
         obj = t.ones(obj_size).to(dtype=t.complex64)
 
         return cls(
             wavelength,
             dataset.detector_geometry,
             probe_basis,
-            det_slice,
             probe,
             obj,
             min_translation=min_translation
@@ -103,7 +99,7 @@ class SimplePtycho(CDIModel):
         # We map from real-space to pixel-space units
         pix_trans = tools.interactions.translations_to_pixel(
             self.probe_basis,
-            translation)
+            translations)
         pix_trans -= self.min_translation
 
         # This function gets the proper, pixel-accurate crops of the
@@ -124,8 +120,7 @@ class SimplePtycho(CDIModel):
 
 
     def measurement(self, wavefields):
-        return tools.measurements.intensity(wavefields,
-                                            detector_slice=self.detector_slice)
+        return tools.measurements.intensity(wavefields)
 
 
     def loss(self, real_data, sim_data):
