@@ -36,6 +36,8 @@ __all__ = ['get_entry_info',
            'add_data',
            'add_shot_to_shot_info',
            'add_ptycho_translations',
+           'nested_dict_to_numpy',
+           'nested_dict_to_torch',
            'nested_dict_to_h5',
            'h5_to_nested_dict',
            ]
@@ -864,3 +866,50 @@ def h5_to_nested_dict(h5_file):
             raise ValueError(f'{value} could not be interpreted sensibly')
 
     return d
+
+
+def nested_dict_to_numpy(d):
+
+    new_dict = {}
+    for key in d.keys():
+        value = d[key]
+        if isinstance(value, numbers.Number):
+            new_dict[key] = value
+        # bools are an instance of number, but not np.bool_...
+        elif isinstance(value, np.bool_):
+            new_dict[key] = value
+        elif isinstance(value, np.ndarray):
+            new_dict[key] = value
+        elif t.is_tensor(value):
+            new_dict[key] = value.cpu().numpy()
+        elif isinstance(value, str):
+            new_dict[key] = value
+        elif isinstance(value, Mapping):
+            new_dict[key] = nested_dict_to_numpy(value)
+        else:
+            raise ValueError(f'{value} is not a number, numpy array, torch tensor, or mapping')
+
+    return new_dict
+
+def nested_dict_to_torch(d):
+    
+    new_dict = {}
+    for key in d.keys():
+        value = d[key]
+        if isinstance(value, numbers.Number):
+            new_dict[key] = t.as_tensor(value)
+        # bools are an instance of number, but not np.bool_...
+        elif isinstance(value, np.bool_):
+            new_dict[key] = t.as_tensor(value)
+        elif isinstance(value, np.ndarray):
+            new_dict[key] = t.as_tensor(value)
+        elif t.is_tensor(value):
+            new_dict[key] = value
+        elif isinstance(value, str):
+            new_dict[key] = value
+        elif isinstance(value, Mapping):
+            new_dict[key] = nested_dict_to_numpy(value)
+        else:
+            raise ValueError(f'{value} is not a number, numpy array, torch tensor, or mapping')
+
+    return new_dict

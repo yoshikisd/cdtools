@@ -40,7 +40,7 @@ import time
 from scipy import io
 from contextlib import contextmanager
 from .complex_lbfgs import MyLBFGS
-from cdtools.tools.data import nested_dict_to_h5
+from cdtools.tools.data import nested_dict_to_h5, h5_to_nested_dict, nested_dict_to_numpy, nested_dict_to_torch
 
 __all__ = ['CDIModel']
 
@@ -173,7 +173,7 @@ class CDIModel(t.nn.Module):
         results : dict
             A dictionary containing all the parameters and buffers of the model, i.e. the result of self.state_dict(), converted to numpy.
         """
-        state_dict = {k: v.cpu().numpy() for k, v in self.state_dict().items()}
+        state_dict = nested_dict_to_numpy(self.state_dict())
 
         return {
             'state_dict': state_dict,
@@ -195,6 +195,7 @@ class CDIModel(t.nn.Module):
             Accepts any additional args that model.save_results needs, for this model
         """
         return nested_dict_to_h5(filename, self.save_results(*args))
+    
 
     @contextmanager
     def save_on_exit(self, filename, *args, exception_filename=None):
@@ -246,7 +247,78 @@ class CDIModel(t.nn.Module):
             print(filename, flush=True)
             raise
 
+
+    def use_checkpoints(self, job_id, checkpoint_file_stem):
+        self.current_checkpoint_id = 0
+        self.job_id = job_id
+        self.checkpoint_file_stem = checkpoint_file_stem
+
+    def skip_computation(self):
+        """Returns true if computations should be skipped due to checkpointing
+
+        This is used internally by model.AD_optimize to make the checkpointing
+        system work, but it is also useful to suppress printing when
+        computations are being skipped
+        """
+        if (hasattr(self, 'current_checkpoint_id')
+            and self.current_checkpoint_id != self.job_id):
+            return True
+        else:
+            return False
+
+    def save_checkpoint(self, *args, checkpoint_file=None):
+        checkpoint = self.save_results(*args)
+        if (hasattr(self, 'current_optimizer')
+            and self.current_optimizer is not None):
+            checkpoint['optimizer_state_dict'] = \
+            self.current_optimizer.state_dict()
+
+        if checkpoint_file is None:
+            checkpoint_file = (
+                self.checkpoint_file_stem
+                + '_' + str(self.current_checkpoint_id) + '.pt'
+            )
+
+        t.save(checkpoint, checkpoint_file)
+        #nested_dict_to_h5(checkpoint_file, checkpoint)
+            
     
+    def load_checkpoint(self, checkpoint_file=None):
+        if checkpoint_file is None:
+            checkpoint_file = (
+                self.checkpoint_file_stem
+                + '_' + str(self.current_checkpoint_id) + '.pt'
+            )
+
+        checkpoint = t.load(checkpoint_file)
+        
+        state_dict = nested_dict_to_torch(checkpoint['state_dict'])
+        self.load_state_dict(state_dict)
+
+        self.loss_history = list(checkpoint['loss_history'])
+        self.training_history = checkpoint['training_history']
+        self.epoch = checkpoint['epoch']
+
+        if (hasattr(self, 'current_optimizer')
+            and self.current_optimizer is not None):
+            self.current_optimizer.load_state_dict(
+                checkpoint['optimizer_state_dict'])
+
+    
+    def checkpoint(self, *args):
+        if not hasattr(self, 'current_checkpoint_id'):
+            raise Exception('You must initialize checkpoints with model.use_checkpoints() before calling model.checkpoint()')
+
+        if self.current_checkpoint_id == self.job_id:
+            self.save_checkpoint(*args)
+            exit()
+        elif self.current_checkpoint_id + 1 == self.job_id:
+            self.load_checkpoint()
+
+        self.current_checkpoint_id += 1
+
+
+        
     def AD_optimize(self, iterations, data_loader,  optimizer,\
                     scheduler=None, regularization_factor=None, thread=True,
                     calculation_width=10):
@@ -358,11 +430,24 @@ class CDIModel(t.nn.Module):
             self.training_history += self.report() + '\n'
             return loss
 
+        # We store the current optimizer as a model parameter so that
+        # it can be saved and loaded for checkpointing
+        self.current_optimizer = optimizer
+        
         # If we don't want to run in a different thread, this is easy
         if not thread:
             for it in range(iterations):
+                if self.skip_computation():
+                    self.epoch = self.epoch + 1
+                    if len(self.loss_history) >= 1:
+                        yield self.loss_history[-1]
+                    else:
+                        yield float('nan')
+                    continue
+                
                 yield run_epoch()
-
+                    
+                
         # But if we do want to thread, it's annoying:
         else:
             # Here we set up the communication with the computation thread
@@ -378,6 +463,14 @@ class CDIModel(t.nn.Module):
 
             # And this actually starts and monitors the thread
             for it in range(iterations):
+                if self.skip_computation():
+                    self.epoch = self.epoch + 1                    
+                    if len(self.loss_history) >= 1:
+                        yield self.loss_history[-1]
+                    else:
+                        yield float('nan')
+                    continue
+                
                 calc = threading.Thread(target=target, name='calculator', daemon=True)
                 try:
                     calc.start()
@@ -401,7 +494,10 @@ class CDIModel(t.nn.Module):
 
                 yield res
 
+        # And finally, we unset the current optimizer:
+        self.current_optimizer = None
 
+    
     def Adam_optimize(
             self,
             iterations,
