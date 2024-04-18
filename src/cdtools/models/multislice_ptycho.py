@@ -10,9 +10,9 @@ import numpy as np
 from scipy import linalg as sla
 from copy import copy
 
-__all__ = ['FancyPtycho']
+__all__ = ['MultislicePtycho']
 
-class FancyPtycho(CDIModel):
+class MultislicePtycho(CDIModel):
 
     def __init__(self,
                  wavelength,
@@ -20,6 +20,7 @@ class FancyPtycho(CDIModel):
                  obj_basis,
                  probe_guess,
                  obj_guess,
+                 interslice_propagator, 
                  surface_normal=t.tensor([0., 0., 1.], dtype=t.float32),
                  min_translation=t.tensor([0, 0], dtype=t.float32),
                  background=None,
@@ -37,10 +38,11 @@ class FancyPtycho(CDIModel):
                  simulate_probe_translation=False,
                  simulate_finite_pixels=False,
                  dtype=t.float32,
+                 exponentiate_obj=False,
                  obj_view_crop=0
                  ):
 
-        super(FancyPtycho, self).__init__()
+        super(MultislicePtycho, self).__init__()
         self.register_buffer('wavelength',
                              t.tensor(wavelength, dtype=dtype))
         self.store_detector_geometry(detector_geometry,
@@ -51,6 +53,13 @@ class FancyPtycho(CDIModel):
 
         self.register_buffer('obj_basis',
                              t.tensor(obj_basis, dtype=dtype))
+
+        self.register_buffer('exponentiate_obj',
+                             t.tensor(exponentiate_obj, dtype=bool))
+        
+        self.register_buffer('interslice_propagator',
+                             t.tensor(interslice_propagator, dtype=t.complex64))
+        
         if probe_basis is None:
             self.register_buffer('probe_basis',
                                  t.tensor(obj_basis, dtype=dtype))
@@ -150,7 +159,14 @@ class FancyPtycho(CDIModel):
             J_phase = 2 * np.pi* Js * self.oversampling
             self.register_buffer('I_phase', I_phase)
             self.register_buffer('J_phase', J_phase)
-            
+
+        #from matplotlib import pyplot as plt
+        #p.plot_real(
+        #     self.obj[(np.s_[:],) + self.obj_view_slice],
+        #     fig=fig,
+        #     basis=self.obj_basis,
+        #     units=self.units)
+        #plt.show()
 
         self.register_buffer('simulate_finite_pixels',
                              t.tensor(simulate_finite_pixels, dtype=bool))
@@ -169,6 +185,8 @@ class FancyPtycho(CDIModel):
     @classmethod
     def from_dataset(cls,
                      dataset,
+                     dz,
+                     nz,
                      probe_size=None,
                      randomize_ang=0,
                      n_modes=1,
@@ -178,6 +196,7 @@ class FancyPtycho(CDIModel):
                      saturation=None,
                      probe_support_radius=None,
                      probe_fourier_crop=None,
+                     propagator_fourier_crop=None,
                      propagation_distance=None,
                      scattering_mode=None,
                      oversampling=1,
@@ -188,6 +207,7 @@ class FancyPtycho(CDIModel):
                      simulate_finite_pixels=False,
                      obj_view_crop=None,
                      obj_padding=200,
+                     exponentiate_obj=False,
                      ):
 
         wavelength = dataset.wavelength
@@ -276,7 +296,7 @@ class FancyPtycho(CDIModel):
                           probe_fourier_crop : probe.shape[-1]
                           - probe_fourier_crop]
             probe = tools.propagators.inverse_far_field(probe)
-
+            # TODO: This may fail with oversampling != 1
             scale_factor = np.array(det_shape) / np.array(probe.shape)
             probe_basis = obj_basis * scale_factor[None,:]
         else:
@@ -292,9 +312,14 @@ class FancyPtycho(CDIModel):
 
         probe = t.stack([probe, ] + probe_stack)
 
-        obj = t.exp(1j * randomize_ang * (t.rand(obj_size)-0.5))
-        if n_obj_modes != 1:
-            obj = t.stack([obj,] + [0.05*t.ones_like(obj),]*(n_obj_modes-1))
+        # If exponentiate_obj, we're basically recovering the transmission
+        # matrix T - so, we don't exponentiate the initialization
+        if not exponentiate_obj:
+            obj = t.stack([t.exp(1j * randomize_ang * (t.rand(obj_size)-0.5))
+                           for idx in range(nz)])
+        else:
+            obj = t.stack([randomize_ang * (t.rand(obj_size)-0.5)
+                           for idx in range(nz)])
 
         pfc = (probe_fourier_crop if probe_fourier_crop else 0)
         if obj_view_crop is None:
@@ -349,21 +374,49 @@ class FancyPtycho(CDIModel):
         else:
             probe_support = None
 
-        return cls(wavelength, det_geo, obj_basis, probe, obj,
-                   surface_normal=surface_normal,
-                   min_translation=min_translation,
-                   translation_offsets=translation_offsets,
-                   weights=Ws, mask=mask, background=background,
-                   translation_scale=translation_scale,
-                   saturation=saturation,
-                   probe_basis=probe_basis,
-                   probe_support=probe_support,
-                   fourier_probe=fourier_probe,
-                   oversampling=oversampling,
-                   loss=loss, units=units,
-                   simulate_probe_translation=simulate_probe_translation,
-                   simulate_finite_pixels=simulate_finite_pixels,
-                   obj_view_crop=obj_view_crop)
+        # Here we define the inter-slice propagator
+        # TODO: this will probably fail for oversampling != 1 and
+        # for any non-square spacing (I didn't check if this was the
+        # correct ordering)
+        spacing = [np.abs(obj_basis[0,1]), np.abs(obj_basis[1,0])]
+        
+        interslice_propagator = \
+            tools.propagators.generate_angular_spectrum_propagator(
+                det_shape, spacing, wavelength, dz)
+
+        if ((propagator_fourier_crop is not None)
+            and (propagator_fourier_crop != 0)):
+            interslice_propagator = t.fft.fftshift(interslice_propagator)
+            interslice_propagator[:propagator_fourier_crop,:] = 0
+            interslice_propagator[:,:propagator_fourier_crop] = 0
+            interslice_propagator[-propagator_fourier_crop:,:] = 0
+            interslice_propagator[:,-propagator_fourier_crop:] = 0
+            interslice_propagator = t.fft.ifftshift(interslice_propagator)
+
+            
+        return cls(
+            wavelength,
+            det_geo,
+            obj_basis,
+            probe,
+            obj,
+            interslice_propagator,
+            surface_normal=surface_normal,
+            min_translation=min_translation,
+            translation_offsets=translation_offsets,
+            weights=Ws, mask=mask, background=background,
+            translation_scale=translation_scale,
+            saturation=saturation,
+            probe_basis=probe_basis,
+            probe_support=probe_support,
+            fourier_probe=fourier_probe,
+            oversampling=oversampling,
+            loss=loss, units=units,
+            simulate_probe_translation=simulate_probe_translation,
+            simulate_finite_pixels=simulate_finite_pixels,
+            exponentiate_obj=exponentiate_obj,
+            obj_view_crop=obj_view_crop,
+        )
 
 
     def interaction(self, index, translations, *args):
@@ -436,14 +489,28 @@ class FancyPtycho(CDIModel):
             prs = tools.propagators.far_field(prs)
             prs = t.nn.functional.pad(prs, padding)
             prs = tools.propagators.inverse_far_field(prs)
-
-
+        
         # Now we actually do the interaction, using the sinc subpixel
         # translation model as per usual
-        exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
-            prs, self.obj, pix_trans,
-            shift_probe=True, multiple_modes=True)
+        exit_waves = self.probe_norm * prs
+
+        # Exponentiate the obj if we have to
+        obj = (self.obj if not self.exponentiate_obj
+               else t.exp(1j * self.obj))
+        
+        for idx in range(self.obj.shape[0]):
+            # Interact with the object
+            exit_waves =  tools.interactions.ptycho_2D_sinc(
+                exit_waves, obj[idx], pix_trans,
+                shift_probe=True, multiple_modes=True)
+
+            # For all but the last slice
+            if idx <= (self.obj.shape[0] - 1):
+                exit_waves = tools.propagators.near_field(
+                    exit_waves, self.interslice_propagator)
+
         return exit_waves
+            
 
 
     def forward_propagator(self, wavefields):
@@ -751,16 +818,62 @@ class FancyPtycho(CDIModel):
          lambda self: len(self.weights.shape) >= 2),
         ('Object Amplitude',
          lambda self, fig: p.plot_amplitude(
-             self.obj[self.obj_view_slice],
+             self.obj[(np.s_[:],) + self.obj_view_slice],
              fig=fig,
              basis=self.obj_basis,
-             units=self.units)),
+             units=self.units),
+         lambda self: not self.exponentiate_obj),
+        ('Object (T) Imaginary Part',
+         lambda self, fig: p.plot_imag(
+             self.obj[(np.s_[:],) + self.obj_view_slice],
+             fig=fig,
+             basis=self.obj_basis,
+             units=self.units),
+         lambda self: self.exponentiate_obj),
         ('Object Phase',
          lambda self, fig: p.plot_phase(
-             self.obj[self.obj_view_slice],
+             self.obj[(np.s_[:],) + self.obj_view_slice],
              fig=fig,
              basis=self.obj_basis,
-             units=self.units)),
+             units=self.units),
+         lambda self: not self.exponentiate_obj),
+        ('Object (T) Real Part',
+         lambda self, fig: p.plot_real(
+             self.obj[(np.s_[:],) + self.obj_view_slice],
+             fig=fig,
+             basis=self.obj_basis,
+             units=self.units,
+             cmap='cividis'),
+         lambda self: self.exponentiate_obj),
+        ('Object Product Amplitude',
+         lambda self, fig: p.plot_amplitude(
+             t.prod(self.obj, dim=0)[self.obj_view_slice],
+             fig=fig,
+             basis=self.obj_basis,
+             units=self.units),
+         lambda self: not self.exponentiate_obj),
+        ('Object (T) Sum Imaginary Part',
+         lambda self, fig: p.plot_imag(
+             t.sum(self.obj, dim=0)[self.obj_view_slice],
+             fig=fig,
+             basis=self.obj_basis,
+             units=self.units),
+         lambda self: self.exponentiate_obj),
+        ('Object Product Phase',
+         lambda self, fig: p.plot_phase(
+             t.prod(self.obj, dim=0)[self.obj_view_slice],
+             fig=fig,
+             basis=self.obj_basis,
+             units=self.units),
+         lambda self: not self.exponentiate_obj),
+        ('Object (T) Sum Real Part',
+         lambda self, fig: p.plot_real(
+             t.sum(self.obj, dim=0)[self.obj_view_slice],
+             fig=fig,
+             basis=self.obj_basis,
+             units=self.units,
+             cmap='cividis'),
+         lambda self: self.exponentiate_obj),
         ('Corrected Translations',
          lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig, units=self.units)),
         ('Background',

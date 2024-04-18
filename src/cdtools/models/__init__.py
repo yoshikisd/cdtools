@@ -31,6 +31,7 @@ from cdtools.models.polarized_fancy_ptycho import PolarizedFancyPtycho
 from cdtools.models.polarization_swept_ptycho import PolarizationSweptPtycho
 from cdtools.models.bragg_2d_ptycho import Bragg2DPtycho
 from cdtools.models.multislice_2d_ptycho import Multislice2DPtycho
+from cdtools.models.multislice_ptycho import MultislicePtycho
 from cdtools.models.rpi import RPI
 from cdtools.models.multimode_rpi import MultimodeRPI
 from cdtools.models.time_resolved_ptycho_calibration import TimeResolvedPtychoCalibration

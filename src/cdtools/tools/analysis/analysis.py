@@ -21,6 +21,62 @@ __all__ = ['orthogonalize_probes', 'standardize', 'synthesize_reconstructions',
            'standardize_reconstruction_set']
 
 
+def orthogonalize_probes_t(
+        probes,
+        density_matrix=None,
+        keep_transform=False,
+        normalize=False,
+        n_probe_dims=2,
+):
+    """ Orthogonalizes a set of incoherently mixing probes
+
+    TODO: actually make this, and replace ortho_probes with a fully
+    pytorch-based function
+    
+    Any set of probe modes defines a density matrix (a.k.a mutual coherence
+    function) that is the ultimate description of the state of the light
+    field. This function takes any set of probe modes - not necessarily
+    orthogonalized - and returns an orthogonalized set of probe modes.
+    Formally, it returns the eigenbasis of the density matrix, ordered
+    from largest to smallest eigenvalue.
+
+    If normalize is set to True, then it will return the normalized
+    eigenbasis. Otherwise, it will return a scaled version of the eigenbasis,
+    so that the returned probes can be used directly for multi-mode
+    ptychography.
+
+    If a density matrix is explicitly given, it will instead
+    consider the problem of extracting the eigenbasis of the matrix
+    probes * denstity_matrix * probes^dagger, where probes is the
+    column matrix of the given probe functions. This latter problem arises
+    in the generalization of the probe mixing model, and reduces to the
+    simpler case when the density matrix is equal to the identity matrix
+    
+    If the parameter "keep_transform" is set, the function will additionally
+    return the matrix A such that A * ortho_probes^dagger = probes^dagger
+    TODO: is the above right, or are ortho_probes and probes flipped?
+
+    Parameters
+    ----------
+    probes : array
+        An l x (<n_probe_dims>) complex array representing  a stack of probes
+    density_matrix : array
+        An optional l x l density matrix further elaborating on the state
+    keep_transform : bool
+        Default False, whether to return the map from probes to ortho_probes
+    normalize : bool
+        Default False, whether to normalize the probe modes
+    n_probe_dims : int
+        Default 2, the number of trailing dimensions defining each probe
+
+    Returns
+    -------
+    ortho_probes: array
+        An l x (<n_probe_dims>) complex array representing a stack of probes
+    """
+    pass
+
+
 def orthogonalize_probes(probes, density_matrix=None, keep_transform=False, normalize=False):
     """Orthogonalizes a set of incoherently mixing probes
 
@@ -40,6 +96,7 @@ def orthogonalize_probes(probes, density_matrix=None, keep_transform=False, norm
     
     If the parameter "keep_transform" is set, the function will additionally
     return the matrix A such that A * ortho_probes^dagger = probes^dagger
+    TODO: is the above right, or are ortho_probes and probes flipped?
 
     If the parameter "normalize" is False (as is the default), the variation
     in intensities in the probe modes will be kept in the probe modes, as is
