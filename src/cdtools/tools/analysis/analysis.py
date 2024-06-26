@@ -612,7 +612,7 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1., limit='side'):
     
     #n_pix = n_pix / 4 # This is for an apodized image, apodized with a hann window
     
-    frc = np.abs(numerator) / np.sqrt(denominator_F1*denominator_F2)
+    frc = numerator / np.sqrt(denominator_F1*denominator_F2)
 
     # This moves from combined-image SNR to single-image SNR
     snr /= 2
@@ -1210,8 +1210,10 @@ def standardize_reconstruction_set(
         ip.hann_window(obj_2[window]),
         full['obj_basis'], nbins=nbins, limit=frc_limit)
 
+    
+    
     # The correct formulation when the final output is the full reconstruction
-    ssnr = 2 * frc / (1 - frc)
+    ssnr = 2 * np.abs(frc) / (1 - np.abs(frc))
 
     results = {
         'obj_half_1': obj_1,

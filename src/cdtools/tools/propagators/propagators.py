@@ -147,12 +147,12 @@ def generate_high_NA_k_intensity_map(sample_basis, det_basis,det_shape,distance,
     det_shape = np.array(tuple(det_shape))
 
     try:
-        distance = distance.detach().cpu().numpy()[0]
+        distance = distance.detach().cpu().numpy().ravel()[0]
     except:
         pass
 
     try:
-        wavelength = wavelength.detach().cpu().numpy()[0]
+        wavelength = wavelength.detach().cpu().numpy().ravel()[0]
     except:
         pass
 

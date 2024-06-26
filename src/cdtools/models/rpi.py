@@ -60,7 +60,7 @@ class RPI(CDIModel):
 
     
     def __init__(self, wavelength, detector_geometry, probe_basis,
-                 probe, obj_guess, detector_slice=None,
+                 probe, obj_guess, 
                  background=None, mask=None, saturation=None,
                  obj_support=None, oversampling=1, weight_matrix=False,
                  simulate_finite_pixels=False):
@@ -83,7 +83,6 @@ class RPI(CDIModel):
         scale_factor = t.tensor([probe.shape[-1]/obj_guess.shape[-1],
                                  probe.shape[-2]/obj_guess.shape[-2]])
         self.obj_basis = self.probe_basis * scale_factor
-        self.detector_slice = detector_slice
 
         # Maybe something to include in a bit
         # self.surface_normal = t.tensor(surface_normal)
@@ -117,13 +116,8 @@ class RPI(CDIModel):
         # self.obj = t.nn.Parameter(obj_guess.to(t.float32))
 
         if background is None:
-            if detector_slice is not None:
-                background = 1e-6 * t.ones(
-                    self.probe[0][self.detector_slice].shape,
-                    dtype=t.float32)
-            else:
-                background = 1e-6 * t.ones(self.probe[0].shape,
-                                           dtype=t.float32)
+            background = 1e-6 * t.ones(self.probe[0].shape,
+                                       dtype=t.float32)
                 
         self.background = t.tensor(background, dtype=t.float32)
 
@@ -139,7 +133,7 @@ class RPI(CDIModel):
 
 
     @classmethod
-    def from_dataset(cls, dataset, probe, obj_size=None, background=None, mask=None, padding=0, n_modes=1, saturation=None, scattering_mode=None, oversampling=1, auto_center=False, initialization='random', weight_matrix=False, probe_threshold=0, simulate_finite_pixels=False):
+    def from_dataset(cls, dataset, probe, obj_size=None, background=None, mask=None, n_modes=1, saturation=None, scattering_mode=None, oversampling=1, initialization='random', weight_matrix=False, probe_threshold=0, simulate_finite_pixels=False):
         
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -153,21 +147,14 @@ class RPI(CDIModel):
         _, patterns = dataset[:]
         dataset.get_as(*get_as_args[0],**get_as_args[1])
 
-        # Set to none to avoid issues with things outside the detector
-        if auto_center:
-            center = tools.image_processing.centroid(t.sum(patterns,dim=0))
-        else:
-            center = None
             
         # Then, generate the probe geometry from the dataset
         ewg = tools.initializers.exit_wave_geometry
-        probe_basis, probe_shape, det_slice =  ewg(det_basis,
-                                                   det_shape,
-                                                   wavelength,
-                                                   distance,
-                                                   center=center,
-                                                   padding=padding,
-                                                   oversampling=oversampling)
+        ew_basis = ewg(det_basis,
+                       det_shape,
+                       wavelength,
+                       distance,
+                       oversampling=oversampling)
 
         if not isinstance(probe,t.Tensor):
             probe = t.as_tensor(probe)
@@ -248,8 +235,8 @@ class RPI(CDIModel):
         obj_support = probe_lr > t.max(probe_lr) * probe_threshold
         obj_support = t.as_tensor(binary_dilation(obj_support))
 
-        return cls(wavelength, det_geo, probe_basis,
-                   probe, obj_guess, detector_slice=det_slice,
+        return cls(wavelength, det_geo, ew_basis,
+                   probe, obj_guess, 
                    background=background, mask=mask, saturation=saturation,
                    obj_support=obj_support, oversampling=oversampling,
                    weight_matrix=weight_matrix,
@@ -359,7 +346,6 @@ class RPI(CDIModel):
         # a 4D wavefield array as well as a 5D array.
         m = tools.measurements.quadratic_background(wavefields,
                             self.background,
-                            detector_slice=self.detector_slice,
                             measurement=tools.measurements.incoherent_sum,
                             saturation=self.saturation,
                             oversampling=self.oversampling,

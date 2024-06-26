@@ -236,7 +236,6 @@ class Bragg2DPtycho(CDIModel):
             propagation_distance=None,
             scattering_mode=None,
             oversampling=1,
-            auto_center=False,
             probe_fourier_crop=None,
             propagate_probe=True,
             correct_tilt=True,
@@ -255,12 +254,6 @@ class Bragg2DPtycho(CDIModel):
         (indices, translations), patterns = dataset[:]
         dataset.get_as(*get_as_args[0],**get_as_args[1])
 
-        # Set to none to avoid issues with things outside the detector
-        if auto_center:
-            center = tools.image_processing.centroid(t.sum(patterns,dim=0))
-        else:
-            center = None
-            
         # Then, generate the exit wave geometry from the dataset
         ewg = tools.initializers.exit_wave_geometry
         ew_basis =  ewg(det_basis,
