@@ -272,13 +272,13 @@ def test_calc_frc():
     n_pix, bins = np.histogram(Rs,bins=nbins)
     bins = bins[:-1]
     
-    frc = np.abs(numerator / np.sqrt(denominator_F1*denominator_F2))
+    frc = numerator / np.sqrt(denominator_F1*denominator_F2)
         # This moves from combined-image SNR to single-image SNR
     snr /= 2
     
     threshold = (snr + (2 * snr + 1) / np.sqrt(n_pix)) / \
         (1 + snr + (2 * np.sqrt(snr)) / np.sqrt(n_pix))
-
+    
     test_bins, test_frc, test_threshold = analysis.calc_frc(
         obj1, obj2, basis, im_slice=np.s_[10:-10,20:-20],
         nbins=100, snr=2, limit='corner')

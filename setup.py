@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 setuptools.setup(
     name="cdtools",
     version="0.2.0",
-    python_requires='>3.7', # recommended minimum version for pytorch
+    python_requires='>3.8', # recommended minimum version for pytorch 2.3.0
     author="Abe Levitan",
     author_email="abraham.levitan@psi.ch",
     description="Tools for coherent diffractive imaging and ptychography",
@@ -18,7 +18,7 @@ setuptools.setup(
         "scipy>=1.0",
         "matplotlib>=2.0", # 2.0 has better colormaps which are used by default
         "python-dateutil",
-        "torch>=1.9.0", #1.9.0 supports autograd on indexed complex tensors
+        "torch>=2.3.0", #2.3.0 is the earliest release for which L-BFGS works directly on complex-valued leaf tensors
         "h5py>=2.1"],
     extras_require={
         'tests': [

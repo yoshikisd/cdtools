@@ -79,7 +79,7 @@ class FancyPtycho(CDIModel):
             self.register_buffer('mask',
                                  t.tensor(mask, dtype=t.bool))
         
-        probe_guess = t.tensor(probe_guess, dtype=t.complex64)
+        probe_guess = t.tensor(probe_guess, dtype=t.complex4)
         obj_guess = t.tensor(obj_guess, dtype=t.complex64)
 
         # We rescale the probe here so it learns at the same rate as the
