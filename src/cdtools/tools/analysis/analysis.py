@@ -164,11 +164,10 @@ def orthogonalize_probes_t(
         orthogonalized_probes = orthogonalized_probes.numpy()
         reexpressed_weight_matrix = reexpressed_weight_matrix.numpy()
 
-    to_return = (orthogonalized_probes,)
     if return_reexpressed_weights:
-        to_return += (reexpressed_weight_matrix,)
-    
-    return to_return
+        return orthogonalized_probes, reexpressed_weight_matrix
+    else:
+        return orthogonalized_probes
 
         
 
@@ -795,12 +794,12 @@ def calc_mode_power_fractions(
     """
 
     if not assume_preorthogonalized:
-        ortho_probes, reexpressed_weights = \
-            orthogonalize_probes_t(
-                probes,
-                weight_matrix=weight_matrix,
-                n_probe_dims=n_probe_dims,
-            )
+        ortho_probes = orthogonalize_probes_t(
+            probes,
+            weight_matrix=weight_matrix,
+            n_probe_dims=n_probe_dims,
+            return_reexpressed_weights=False
+        )
     else:
         weight_slice = np.s_[...,] + np.s_[None,] * n_probe_dims
         if weight_matrix is None:

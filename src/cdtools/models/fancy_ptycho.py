@@ -635,7 +635,7 @@ class FancyPtycho(CDIModel):
         def get_probes(idx):
             basis_prs = self.probe * self.probe_support[..., :, :]
             prs = t.sum(self.weights[idx, :, :, None, None] * basis_prs,
-                        axis=-4)
+                        axis=-3)
             ortho_probes = analysis.orthogonalize_probes_t(prs)
 
             if mode.lower() == 'amplitude':

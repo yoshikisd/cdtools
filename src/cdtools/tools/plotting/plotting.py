@@ -758,7 +758,9 @@ def plot_nanomap_with_images(translations, get_image_func, values=None, mask=Non
 
         ax_im = axes[1].images[-1]
         ax_im.set_data(im)
+        ax_im.norecurse=False
         update_colorbar(ax_im)
+        #plt.draw()
 
 
     #

@@ -80,7 +80,8 @@ def test_orthogonalize_probes_t():
     ]
     
     for weight_matrix in weight_matrices:
-        ortho_probes_np, rwm_np = op(probes, weight_matrix=weight_matrix)
+        ortho_probes_np, rwm_np = op(probes, weight_matrix=weight_matrix,
+                                     return_reexpressed_weights=True)
         assert isinstance(ortho_probes_np, np.ndarray)
         assert isinstance(rwm_np, np.ndarray)
         
@@ -88,7 +89,8 @@ def test_orthogonalize_probes_t():
         wm_t = (t.as_tensor(weight_matrix) if weight_matrix is not None
                 else weight_matrix)
 
-        ortho_probes_t, rwm_t = op(probes_t, weight_matrix=wm_t)
+        ortho_probes_t, rwm_t = op(probes_t, weight_matrix=wm_t,
+                                   return_reexpressed_weights=True)
         assert t.is_tensor(ortho_probes_t)
         assert t.is_tensor(rwm_t)
 
