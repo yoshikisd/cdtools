@@ -1,11 +1,157 @@
 import numpy as np
 from scipy import linalg as la
+from scipy.sparse import linalg as spla
 import torch as t
 from itertools import combinations
 
 from cdtools.tools import analysis, initializers
 
 
+def test_product_svd():
+
+    rank = 4
+    shape_A = (12, rank)
+    shape_B = (rank, 9)
+    A = np.random.rand(*shape_A) + 1j * np.random.rand(*shape_A)
+    B = np.random.rand(*shape_B) + 1j * np.random.rand(*shape_B)
+
+    AB = np.matmul(A,B)
+    U_1, S_1, Vh_1 = t.linalg.svd(t.as_tensor(AB), full_matrices=False)
+
+    U_2, S_2, Vh_2 = analysis.product_svd(t.as_tensor(A),t.as_tensor(B))
+    check_AB = U_2 @ t.diag_embed(S_2).to(dtype=Vh_2.dtype) @ Vh_2
+
+    # So, at a minimum, U S Vh = AB
+    assert np.allclose(AB, check_AB.numpy())
+
+    # SVD is only defined up to an arbitrary complex valued phase per
+    # singular vector, so all we can ask for in the comparison is that the
+    # magnitudes here are
+    assert np.allclose(S_1[:rank].numpy(), S_2.numpy())
+    prod_U = U_1[:,:rank].transpose(0,1).conj() @ U_2
+    prod_Vh = Vh_1[:rank,:] @ Vh_2.transpose(0,1).conj()
+    assert np.allclose(t.abs(prod_U).numpy(), np.eye(rank))
+    assert np.allclose(t.abs(prod_Vh).numpy(), np.eye(rank))
+    # Confirms that the phases are consistent between the two, I think
+    # it's redundant with the first check but I'm not sure
+    assert np.allclose(prod_Vh.numpy(), prod_U.numpy())
+    
+    # test with numpy
+    U_3, S_3, Vh_3 = analysis.product_svd(A,B)
+    assert isinstance(U_3, np.ndarray)
+    assert isinstance(S_3, np.ndarray)
+    assert isinstance(Vh_3, np.ndarray)
+    
+    assert np.allclose(S_1[:rank].numpy(), S_3)
+    prod_U = U_1[:,:rank].transpose(0,1).numpy().conj() @ U_3
+    prod_Vh = Vh_1[:rank,:].numpy() @ Vh_3.transpose().conj()
+    assert np.allclose(np.abs(prod_U), np.eye(rank))
+    assert np.allclose(np.abs(prod_Vh), np.eye(rank))
+    # Confirms that the phases are consistent between the two, I think
+    # it's redundant with the first check but I'm not sure
+    assert np.allclose(prod_Vh, prod_U)
+
+
+def test_orthogonalize_probes_t():
+
+    op = analysis.orthogonalize_probes_t
+    
+    probe_xs = np.arange(64) - 32
+    probe_ys = np.arange(76) - 38
+    probe_Ys, probe_Xs = np.meshgrid(probe_ys, probe_xs)
+    probe_Rs = np.sqrt(probe_Xs**2 + probe_Ys**2)
+
+    probes = np.array([10*np.exp(-probe_Rs**2 / (2 * 10**2 + 1j)),
+                       3*np.exp(-probe_Rs**2 / (2 * 12**2 - 3j)),
+                       1*np.exp(-probe_Rs**2 / (2 * 15**2))])
+
+    weight_matrix_none = None
+    weight_matrix_single = np.random.randn(1,3) + 1j * np.random.randn(1,3)
+    weight_matrix_small = np.random.randn(2,3) + 1j * np.random.randn(2,3)
+    weight_matrix_medium = np.random.randn(3,3) + 1j * np.random.randn(3,3)
+    weight_matrix_large = np.random.randn(7,3) + 1j * np.random.randn(7,3)
+
+    weight_matrices = [
+        weight_matrix_none,
+        weight_matrix_single,
+        weight_matrix_small,
+        weight_matrix_medium,
+        weight_matrix_large
+    ]
+    
+    for weight_matrix in weight_matrices:
+        ortho_probes_np, rwm_np = op(probes, weight_matrix=weight_matrix)
+        assert isinstance(ortho_probes_np, np.ndarray)
+        assert isinstance(rwm_np, np.ndarray)
+        
+        probes_t = t.as_tensor(probes)
+        wm_t = (t.as_tensor(weight_matrix) if weight_matrix is not None
+                else weight_matrix)
+
+        ortho_probes_t, rwm_t = op(probes_t, weight_matrix=wm_t)
+        assert t.is_tensor(ortho_probes_t)
+        assert t.is_tensor(rwm_t)
+
+        assert np.allclose(ortho_probes_np, ortho_probes_t.numpy())
+        assert np.allclose(rwm_np, rwm_t.numpy())
+
+        # Now we test a if wm @ ortho_probes is actually the original
+        # input
+        if weight_matrix is not None:
+            realized_probes = np.tensordot(weight_matrix, probes, axes=1)
+        else:
+            realized_probes = probes
+
+        calculated_probes = np.tensordot(rwm_np, ortho_probes_np, axes=1)
+            
+        assert np.allclose(realized_probes, calculated_probes)
+        
+        # Now we test if the orthogonalized probes are orthogonalized
+        reshaped_probes = ortho_probes_np.reshape(
+            (ortho_probes_np.shape[0],
+             ortho_probes_np.shape[1] * ortho_probes_np.shape[2]))
+        products = np.matmul(reshaped_probes,
+                             reshaped_probes.conj().transpose())
+
+        if weight_matrix is not None:
+            output_nmodes = min(weight_matrix.shape[0], probes.shape[0])
+        else:
+            output_nmodes = probes.shape[0]
+
+        for i in range(output_nmodes):
+            for j in range(i+1, output_nmodes):
+                assert np.isclose(products[i,j], 0)
+
+        # And now we test if they multiply to the same density matrix as
+        # the original probes + weight matrix
+        reshaped_realized_probes = realized_probes.reshape(
+            (realized_probes.shape[0],
+             realized_probes.shape[1] * realized_probes.shape[2]))
+        
+        dm_original = np.matmul(
+            reshaped_realized_probes.conj().transpose(),
+            reshaped_realized_probes
+        )
+        dm_output = np.matmul(
+            reshaped_probes.conj().transpose(),
+            reshaped_probes
+        )
+        assert np.allclose(dm_original, dm_output)
+
+        # And finally, we confirm that what we have are the eigenvectors/values
+        # of that density matrix
+        w, v = spla.eigsh(dm_original, k=output_nmodes)
+        assert np.allclose(w, np.diag(products))
+
+        cross_products = np.matmul(reshaped_probes, np.sqrt(w) * v)
+        # The abs accounts for the fact that the phase of the eigenvectors
+        # is undefined
+        assert np.allclose(np.abs(cross_products), np.abs(products))
+
+            
+        
+
+    
 def test_orthogonalize_probes():
 
     # The test strategy should be to define a few non-orthogonal probes

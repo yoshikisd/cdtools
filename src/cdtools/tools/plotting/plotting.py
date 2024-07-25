@@ -780,11 +780,13 @@ def plot_nanomap_with_images(translations, get_image_func, values=None, mask=Non
             im = im.reshape(-1,im.shape[-2],im.shape[-1])
             im_idx = axes[1].image_idx
 
-            if event.key == 'up' or event.button == 'up' \
-               or event.key == 'left':
+            if (event.key == 'up'
+                or (hasattr(event, 'button') and event.button == 'up') 
+                or event.key == 'left'):
                 im_idx = (im_idx - 1) % im.shape[0]
-            if event.key == 'down' or event.button == 'down' \
-               or event.key == 'right':
+            if (event.key == 'down'
+                or (hasattr(event, 'button') and event.button == 'down')
+                or event.key == 'right'):
                 im_idx = (im_idx + 1) % im.shape[0]
 
             axes[1].image_idx=im_idx

@@ -13,69 +13,164 @@ from scipy import linalg as sla
 from scipy import special
 from scipy import optimize as opt
 
-__all__ = ['orthogonalize_probes', 'standardize', 'synthesize_reconstructions',
+__all__ = ['product_svd', 'orthogonalize_probes_t',
+           'orthogonalize_probes', 'standardize', 'synthesize_reconstructions',
            'calc_consistency_prtf', 'calc_deconvolved_cross_correlation',
            'calc_frc', 'calc_vn_entropy', 'calc_top_mode_fraction',
+           'calc_mode_power_fractions',
            'calc_rms_error', 'calc_fidelity', 'calc_generalized_rms_error',
            'remove_phase_ramp', 'remove_amplitude_exponent',
            'standardize_reconstruction_set']
 
 
+def product_svd(A, B):
+    """ Computes the SVD of A @ B
+
+    This function uses a method which uses a QR decomposition of
+    A and B to calculate the final reduced SVD, without explicitly
+    calculating the full matrix. The output is defined such that
+    A B = U S Vh, and as a reduced SVD
+
+    Parameters
+    ----------
+    A : array
+        An nxr matrix
+    B : array
+        An rxm matrix
+
+    Returns
+    -------
+    U : array
+        An nxr matrix of left singular vectors
+    S : array
+        An length-r array, t.diag(S) is the diagonal matrix of singular values
+    Vh : array
+        And rxm matrix of the conjugate-transposed right singular vectors
+    """
+    # Handle the case of numpy input
+    return_np = False
+    if isinstance(A, np.ndarray):
+        A = t.as_tensor(A)
+        return_np = True
+    if isinstance(B, np.ndarray):
+        B = t.as_tensor(B)
+        return_np = True
+
+    # We take a QR decomposition of the two matrices
+    Qa, Ra = t.linalg.qr(A)
+    Qb, Rb = t.linalg.qr(B.conj().transpose(0,1))
+
+    # And now we take the SVD of the product of the two R matrices
+    U, S, Vh = t.linalg.svd(t.matmul(Ra, Rb.conj().transpose(0,1)),
+                            full_matrices=False)
+
+    # And build back the final SVD of the product matrix
+    U_final = t.matmul(Qa, U)
+    Vh_final = t.matmul(Vh, Qb.conj().transpose(0,1))
+
+    if return_np:
+        U_final = U_final.numpy()
+        S = S.numpy()
+        Vh_final = Vh_final.numpy()
+    
+    return U_final, S, Vh_final
+
+
 def orthogonalize_probes_t(
         probes,
-        density_matrix=None,
-        keep_transform=False,
-        normalize=False,
+        weight_matrix=None,
         n_probe_dims=2,
+        return_reexpressed_weights=False,
 ):
     """ Orthogonalizes a set of incoherently mixing probes
 
-    TODO: actually make this, and replace ortho_probes with a fully
-    pytorch-based function
+    ## TODO fully replace orthogonalize_probes with orthogonalize_probes_t
     
-    Any set of probe modes defines a density matrix (a.k.a mutual coherence
-    function) that is the ultimate description of the state of the light
-    field. This function takes any set of probe modes - not necessarily
-    orthogonalized - and returns an orthogonalized set of probe modes.
-    Formally, it returns the eigenbasis of the density matrix, ordered
-    from largest to smallest eigenvalue.
+    This function takes any set of probe modes for mixed-mode ptychography,
+    which are considered to define a mutual coherence function, and returns
+    an orthogonalized set probe modes which refer to the same mutual coherence
+    function. The orthogonalized modes are extracted via a singular value
+    decomposition and are unique up to a global per-mode phase factor.
 
-    If normalize is set to True, then it will return the normalized
-    eigenbasis. Otherwise, it will return a scaled version of the eigenbasis,
-    so that the returned probes can be used directly for multi-mode
-    ptychography.
+    If a weight matrix is explicitly given, the function will instead
+    orthogonalize the light field defined by weight_matrix @ probes. It
+    accomplishes this via a method which avoids explicitly constructing this
+    potentially large matrix. This can be useful for Orthogonal Probe
+    Relaxation ptychography. In this case, one may have a large stacked
+    matrix of shot-to-shot weights but a small basis set of probes.
 
-    If a density matrix is explicitly given, it will instead
-    consider the problem of extracting the eigenbasis of the matrix
-    probes * denstity_matrix * probes^dagger, where probes is the
-    column matrix of the given probe functions. This latter problem arises
-    in the generalization of the probe mixing model, and reduces to the
-    simpler case when the density matrix is equal to the identity matrix
+    In addition to returning the orthogonalized probe modes, this function
+    also returns a re-expression of the original weight matrix in the basis
+    of the orthogonalized probe modes, such that:
+
+    reexpressed_weight_matrix @ orthogonalized_probes = weight_matrix @ probes.
+
+    This re-expressed weight matrix is guaranteed to have orthonormalized rows,
+    such that:
+
+    reexpressed_weight_matrix^\\dagger @ reexpressed_weight_matrix = I.
+
+    There is usually no reason to use the re-expressed weight matrix.
+    However, it can be useful in situations where the individual rows in the 
+    weight matrix have a specific meaning, such as an exposure number, which
+    should be preserved.
     
-    If the parameter "keep_transform" is set, the function will additionally
-    return the matrix A such that A * ortho_probes^dagger = probes^dagger
-    TODO: is the above right, or are ortho_probes and probes flipped?
+    Warning! The shape of the output orthogonalized_probes may not be equal to
+    the shape of input probes, when a weight matrix is used. If the input
+    weight matrix has m < l rows, where l is the number of probe modes,
+    then the output orthogonalized probes will have length m, not length l.
 
     Parameters
     ----------
     probes : array
-        An l x (<n_probe_dims>) complex array representing  a stack of probes
-    density_matrix : array
-        An optional l x l density matrix further elaborating on the state
-    keep_transform : bool
-        Default False, whether to return the map from probes to ortho_probes
-    normalize : bool
-        Default False, whether to normalize the probe modes
+        An l x (<n_probe_pix>) array representing a stack of l probes
+    weight_matrix : array
+        Optional, an m x l weight matrix further elaborating on the state
     n_probe_dims : int
-        Default 2, the number of trailing dimensions defining each probe
+        Default is 2, the number of trailing dimensions for each probe state
 
     Returns
     -------
-    ortho_probes: array
-        An l x (<n_probe_dims>) complex array representing a stack of probes
+    orthogonalized_probes : array
+        A min(m,l) x (<n_probe_dims>) array representing a stack of probes
+    reexpressed_weight_matrix : array
+        A the original weight matrix, re-expressed to work with the new probes 
     """
-    pass
 
+    return_np = False
+    if isinstance(probes, np.ndarray):
+        probes = t.as_tensor(probes)
+        return_np = True
+    if weight_matrix is not None and isinstance(weight_matrix, np.ndarray):
+        weight_matrix = t.as_tensor(weight_matrix)
+        return_np = True
+    
+    n_probe_pix = np.prod(np.array(probes.shape[-n_probe_dims:]))
+    probes_mat = probes.reshape(probes.shape[:-n_probe_dims] +
+                                (n_probe_pix,))
+    
+    if weight_matrix is None:
+        # We just calculate a straight up SVD of the probes
+        U, S, Vh = t.linalg.svd(probes_mat, full_matrices=False)
+        
+    else:
+        U, S, Vh = product_svd(weight_matrix, probes_mat)
+
+    output_shape = (-1,) + tuple(n for n in probes.shape[1:])
+    orthogonalized_probes = (S[:,None] * Vh).reshape(output_shape)
+    reexpressed_weight_matrix = U
+
+    if return_np:
+        orthogonalized_probes = orthogonalized_probes.numpy()
+        reexpressed_weight_matrix = reexpressed_weight_matrix.numpy()
+
+    to_return = (orthogonalized_probes,)
+    if return_reexpressed_weights:
+        to_return += (reexpressed_weight_matrix,)
+    
+    return to_return
+
+        
 
 def orthogonalize_probes(probes, density_matrix=None, keep_transform=False, normalize=False):
     """Orthogonalizes a set of incoherently mixing probes
@@ -668,7 +763,58 @@ def calc_vn_entropy(matrix):
         entropy = -np.sum(special.xlogy(eig,eig))/np.sum(eig)
         return entropy
 
+
+def calc_mode_power_fractions(
+        probes,
+        weight_matrix=None,
+        n_probe_dims=2,
+        assume_preorthogonalized=False,
+):
+    """Calculates the fraction of total power in each orthogonalized mode
+
+    This code first orthogonalizes the probe modes, so the result of this
+    function are independent of the particular way that the multi-mode
+    breakdown is expressed.
+
+
+    Parameters
+    ----------
+    probes : array
+        An l x (<n_probe_pix>) array representing a stack of l probes
+    weight_matrix : array
+        Optional, an m x l weight matrix further elaborating on the state
+    n_probe_dims : int
+        Default is 2, the number of trailing dimensions for each probe state
+    assume_preorthogonalized : bool
+        Default is False. If True, will not orthogonalize the probes
     
+    Returns
+    -------
+    power_fractions : array
+        The fraction of the total power in each mode
+    """
+
+    if not assume_preorthogonalized:
+        ortho_probes, reexpressed_weights = \
+            orthogonalize_probes_t(
+                probes,
+                weight_matrix=weight_matrix,
+                n_probe_dims=n_probe_dims,
+            )
+    else:
+        weight_slice = np.s_[...,] + np.s_[None,] * n_probe_dims
+        if weight_matrix is None:
+            ortho_probes = probes
+        else:
+            ortho_probes = t.sum(weight_matrix[weight_slice] * probes,
+                                 axis=-(n_probe_dims + 1))
+        
+    dims = [-d-1 for d in range(n_probe_dims)]
+    power = t.sum(t.abs(ortho_probes)**2, dim=dims)
+    power_fractions = power / t.sum(power)
+    return power_fractions
+
+
 def calc_top_mode_fraction(matrix):
     """Calculates the fraction of total power in the top mode of a density matrix
     
@@ -687,6 +833,7 @@ def calc_top_mode_fraction(matrix):
     entropy: float or np.array
         The fraction of power in the top mode of each matrix
     """
+    # TODO depricate
 
     if len(matrix.shape) == 3:
         # Get the eigenvalues
