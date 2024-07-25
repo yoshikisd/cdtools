@@ -408,8 +408,10 @@ class PolarizedFancyPtycho(FancyPtycho):
         to calculate a natural basis for the experiment, and update all the
         density matrices to operate in that updated basis
 
+        NOTE: Not updated with the update to orthogonalize_probes
+        
         """
-
+        raise NotImplementedError('Function is known to be incorrect! Contact Abe Levitan at abraham.levitan@psi.ch to ask him to fix it.')
         # First we treat the purely incoherent case
 
         # I don't love this pattern of using an if statement with a return

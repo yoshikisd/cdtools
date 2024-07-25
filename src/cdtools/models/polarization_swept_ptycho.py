@@ -521,16 +521,11 @@ class PolarizationSweptPtycho(CDIModel):
         to calculate a natural basis for the experiment, and update all the
         density matrices to operate in that updated basis
         """
+        # NOTE: untested, edited when ortho_probes was updated
+        for idx in range(self.probe.shape[0]):
+            oself.probe.data[idx] = analysis.orthogonalize_probes(
+                self.probe.data[idx])
         
-        probe = self.probe.detach().cpu().numpy()
-        ortho_probes = np.empty(probe.shape, dtype=probe.dtype)
-        for idx in range(probe.shape[0]):
-            ortho_probes[idx] = analysis.orthogonalize_probes(probe[idx])
-        
-        self.probe.data = t.as_tensor(
-            ortho_probes,
-            device=self.probe.device,
-            dtype=self.probe.dtype)
 
         
     plot_list = [

@@ -567,7 +567,7 @@ class FancyPtycho(CDIModel):
         # just one per-shot overall weight
         if self.weights.dim() == 1:
             probe = self.probe.detach().cpu().numpy()
-            ortho_probes = analysis.orthogonalize_probes_t(self.probe.detach())
+            ortho_probes = analysis.orthogonalize_probes(self.probe.detach())
             self.probe.data = ortho_probes
             return
 
@@ -584,7 +584,7 @@ class FancyPtycho(CDIModel):
         # We generate the orthogonal probes based on this full-experiment
         # representation of the light field.
         ortho_probes, reexpressed_weights = \
-            analysis.orthogonalize_probes_t(
+            analysis.orthogonalize_probes(
                 self.probe.detach(),
                 weight_matrix=all_weights,
                 return_reexpressed_weights=True
@@ -636,7 +636,7 @@ class FancyPtycho(CDIModel):
             basis_prs = self.probe * self.probe_support[..., :, :]
             prs = t.sum(self.weights[idx, :, :, None, None] * basis_prs,
                         axis=-3)
-            ortho_probes = analysis.orthogonalize_probes_t(prs)
+            ortho_probes = analysis.orthogonalize_probes(prs)
 
             if mode.lower() == 'amplitude':
                 return np.abs(ortho_probes.detach().cpu().numpy())

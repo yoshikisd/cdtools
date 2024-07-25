@@ -13,14 +13,23 @@ from scipy import linalg as sla
 from scipy import special
 from scipy import optimize as opt
 
-__all__ = ['product_svd', 'orthogonalize_probes_t',
-           'orthogonalize_probes', 'standardize', 'synthesize_reconstructions',
-           'calc_consistency_prtf', 'calc_deconvolved_cross_correlation',
-           'calc_frc', 'calc_vn_entropy', 'calc_top_mode_fraction',
-           'calc_mode_power_fractions',
-           'calc_rms_error', 'calc_fidelity', 'calc_generalized_rms_error',
-           'remove_phase_ramp', 'remove_amplitude_exponent',
-           'standardize_reconstruction_set']
+__all__ = [
+    'product_svd',
+    'orthogonalize_probes',
+    'standardize',
+    'synthesize_reconstructions',
+    'calc_consistency_prtf',
+    'calc_deconvolved_cross_correlation',
+    'calc_frc',
+    'calc_vn_entropy',
+    'calc_mode_power_fractions',
+    'calc_rms_error',
+    'calc_fidelity',
+    'calc_generalized_rms_error',
+    'remove_phase_ramp',
+    'remove_amplitude_exponent',
+    'standardize_reconstruction_set'
+]
 
 
 def product_svd(A, B):
@@ -76,15 +85,13 @@ def product_svd(A, B):
     return U_final, S, Vh_final
 
 
-def orthogonalize_probes_t(
+def orthogonalize_probes(
         probes,
         weight_matrix=None,
         n_probe_dims=2,
         return_reexpressed_weights=False,
 ):
     """ Orthogonalizes a set of incoherently mixing probes
-
-    ## TODO fully replace orthogonalize_probes with orthogonalize_probes_t
     
     This function takes any set of probe modes for mixed-mode ptychography,
     which are considered to define a mutual coherence function, and returns
@@ -170,113 +177,6 @@ def orthogonalize_probes_t(
         return orthogonalized_probes
 
         
-
-def orthogonalize_probes(probes, density_matrix=None, keep_transform=False, normalize=False):
-    """Orthogonalizes a set of incoherently mixing probes
-
-    The strategy is to define a reduced orthogonal basis that spans
-    all of the retrieved probes, and then build the density matrix
-    defined by the probes in that basis. After diagonalization, the
-    eigenvectors can be recast into the original basis and returned
-
-    By default, it assumes that the set of probes are defined just as
-    standard incoherently mixing probe modes, and orthogonalizes them.
-    However, if a density matrix is explicitly given, it will instead
-    consider the problem of extracting the eigenbasis of the matrix
-    probes * denstity_matrix * probes^dagger, where probes is the
-    column matrix of the given probe functions. This latter problem arises
-    in the generalization of the probe mixing model, and reduces to the
-    simpler case when the density matrix is equal to the identity matrix
-    
-    If the parameter "keep_transform" is set, the function will additionally
-    return the matrix A such that A * ortho_probes^dagger = probes^dagger
-    TODO: is the above right, or are ortho_probes and probes flipped?
-
-    If the parameter "normalize" is False (as is the default), the variation
-    in intensities in the probe modes will be kept in the probe modes, as is
-    natural for a purely incoherent model. If it is set to "True", the
-    returned probe modes will all be normalized instead.
-
-    Parameters
-    ----------
-    probes : array
-        An l x n x m complex array representing  a stack of probes
-    density_matrix : np.array
-        An optional l x l density matrix further elaborating on the state
-    keep_transform : bool
-        Default False, whether to return the map from probes to ortho_probes
-    normalize : bool
-        Default False, whether to normalize the probe modes
-
-    Returns
-    -------
-    ortho_probes: array
-        An l x n x m complex array representing a stack of probes
-    """
-    
-    try:
-        probes = probes.detach().cpu().numpy()
-        send_to_torch = True
-    except:
-        send_to_torch = False
-
-    # We can do the orthogonalization with an SVD, so first we have to
-    # reshape the final two dimensions (the image shape) into a single
-    # vectorized dimension. This matrix is probes^dagger, hence the
-    # conjugation
-    probes_mat = probes.reshape(probes.shape[0],
-                                probes.shape[1]*probes.shape[2])
-
-    if density_matrix is None:
-        density_matrix = np.eye(probes.shape[0])
-    
-        
-    # next we want to extract the eigendecomposition of the density matrix
-    # itself
-    w,v = sla.eigh(density_matrix)
-    w = w[::-1]
-    v = v[:,::-1]
-
-    # We do this just to avoid total failure when the density
-    # matrix is not positive definite.
-    # In most cases (such as when rho is generated directly from some other
-    # matrix A such that rho=A A^dagger), w should never have any negative
-    # entries.
-    w = np.maximum(w,0)
-
-    B_dagger = np.dot(np.diag(np.sqrt(w)), v.conj().transpose())
-
-    #u,s,vh = np.linalg.svd(np.dot(B_dagger,probes_mat), full_matrices=False)
-    u,s,vh = sla.svd(np.dot(B_dagger,probes_mat), full_matrices=False)
-    
-
-    if normalize:
-        ortho_probes = vh.reshape(probes.shape[0],
-                                  probes.shape[1],
-                                  probes.shape[2])
-
-        B_dagger_inv = np.linalg.pinv(B_dagger)
-        A = np.dot(B_dagger_inv,np.dot(u,np.diag(s)))
-        #A_dagger = np.dot(np.linalg.pinv(np.diag(s)),
-        #                  np.dot(np.transpose(u).conj(),B_dagger))
-    else:
-        ortho_probes = np.dot(np.diag(s),vh).reshape(probes.shape[0],
-                                                     probes.shape[1],
-                                                     probes.shape[2])
-        B_dagger_inv = np.linalg.pinv(B_dagger)
-        A = np.dot(B_dagger_inv,u)
-        #A_dagger = np.dot(np.transpose(u).conj(),B_dagger)
-    
-    if send_to_torch:
-        ortho_probes = t.as_tensor(np.stack(ortho_probes))
-        A = t.as_tensor(A)
-
-    if keep_transform:
-        return ortho_probes, A#_dagger
-    else:
-        return ortho_probes 
-
-    
 def standardize(probe, obj, obj_slice=None, correct_ramp=False):
     """Standardizes a probe and object to prepare them for comparison
 
@@ -794,7 +694,7 @@ def calc_mode_power_fractions(
     """
 
     if not assume_preorthogonalized:
-        ortho_probes = orthogonalize_probes_t(
+        ortho_probes = orthogonalize_probes(
             probes,
             weight_matrix=weight_matrix,
             n_probe_dims=n_probe_dims,
@@ -813,38 +713,6 @@ def calc_mode_power_fractions(
     power_fractions = power / t.sum(power)
     return power_fractions
 
-
-def calc_top_mode_fraction(matrix):
-    """Calculates the fraction of total power in the top mode of a density matrix
-    
-    Will either accept a single matrix, or a stack of matrices. Matrices
-    are assumed to be Hermetian and positive definite, to be well-formed
-    density matrices
-    
-    Parameters
-    ----------
-    matrix : np.array
-        The nxn matrix or lxnxn stack of matrices to work from
-
-    
-    Returns
-    -------
-    entropy: float or np.array
-        The fraction of power in the top mode of each matrix
-    """
-    # TODO depricate
-
-    if len(matrix.shape) == 3:
-        # Get the eigenvalues
-        eigs = [np.linalg.eigh(mat)[0] for mat in matrix]
-        # Normalize them to match standard density matrix form
-        fractions = [np.max(eig) / np.sum(eig) for eig in eigs]
-        return np.array(fractions)
-    else:
-        eig = np.linalg.eigh(matrix)[0]
-        fraction = np.max(eig) / np.sum(eig)
-        return fraction
-    
 
 def calc_rms_error(field_1, field_2, align_phases=True, normalize=False,
                    dims=2):

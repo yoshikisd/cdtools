@@ -52,9 +52,9 @@ def test_product_svd():
     assert np.allclose(prod_Vh, prod_U)
 
 
-def test_orthogonalize_probes_t():
+def test_orthogonalize_probes():
 
-    op = analysis.orthogonalize_probes_t
+    op = analysis.orthogonalize_probes
     
     probe_xs = np.arange(64) - 32
     probe_ys = np.arange(76) - 38
@@ -149,76 +149,6 @@ def test_orthogonalize_probes_t():
         # The abs accounts for the fact that the phase of the eigenvectors
         # is undefined
         assert np.allclose(np.abs(cross_products), np.abs(products))
-
-            
-        
-
-    
-def test_orthogonalize_probes():
-
-    # The test strategy should be to define a few non-orthogonal probes
-    # and orthogonalize them. Then we can test two features of the results:
-
-    # 1) Are they orthogonal?
-    # 2) Is the total intensity at each point the same as it was originally?
-
-    probe_xs = np.arange(128) - 64
-    probe_ys = np.arange(150) - 75
-    probe_Ys, probe_Xs = np.meshgrid(probe_ys, probe_xs)
-    probe_Rs = np.sqrt(probe_Xs**2 + probe_Ys**2)
-
-    probes = np.array([10*np.exp(-probe_Rs**2 / (2 * 10**2 + 1j)),
-                       3*np.exp(-probe_Rs**2 / (2 * 12**2 - 3j)),
-                       1*np.exp(-probe_Rs**2 / (2 * 15**2))]).astype(np.complex64)
-
-    # test that it works on numpy arrays
-    ortho_probes = analysis.orthogonalize_probes(probes)
-
-    # test that it also works on torch tensors
-    ortho_probes_t = analysis.orthogonalize_probes(t.as_tensor(probes)).numpy()
-
-    # This tests for orthogonality
-    for p1,p2 in combinations(ortho_probes,2):
-        assert np.sum(np.conj(p1)*p2) / np.sum(np.abs(p1)**2) < 1e-6
-
-    for p1,p2 in combinations(ortho_probes_t,2):
-        assert np.sum(np.conj(p1)*p2) / np.sum(np.abs(p1)**2) < 1e-6
-
-        
-    probe_intensity = np.sum(np.abs(probes)**2,axis=0)
-    ortho_probe_intensity = np.sum(np.abs(ortho_probes)**2,axis=0)
-    ortho_probe_t_intensity = np.sum(np.abs(ortho_probes_t)**2,axis=0)
-
-    assert np.allclose(probe_intensity,ortho_probe_intensity)
-    assert np.allclose(probe_intensity,ortho_probe_t_intensity)
-
-    # Check that it returns normalized probes if we ask
-    ortho_probes = analysis.orthogonalize_probes(probes, normalize=True)
-    assert np.allclose([1,1,1],np.sum(np.abs(ortho_probes)**2,axis=(1,2)))
-
-    # And now we check that the A matrices actually work
-    ortho_probes, A = analysis.orthogonalize_probes(probes, keep_transform=True,
-                                                    normalize=False)
-    assert np.allclose(np.tensordot(A, ortho_probes,axes=1),probes)
-
-    # And now we check that the A matrices actually work
-    ortho_probes, A = analysis.orthogonalize_probes(probes, keep_transform=True,
-                                                    normalize=False)
-    assert np.allclose(np.tensordot(A, ortho_probes,axes=1),probes)
-
-    # The big problem here is that we haven't tested if it returns the
-    # probes or their complex conjugate.. we can test that by sending in
-    # one probe and checking that we get the right thing out
-    
-    probes = np.array([10*np.exp(-probe_Rs**2 / (2 * 20**2 + 100j))])
-    ortho_probes = analysis.orthogonalize_probes(probes)
-    # We need to correct for the arbitrary phase offset to be able to
-    # compare them
-    correction = ortho_probes[0]/probes[0]
-    correction = correction / np.abs(correction)
-    ortho_probes *= correction
-
-    assert np.allclose(ortho_probes,probes)
 
         
 def test_standardize():
