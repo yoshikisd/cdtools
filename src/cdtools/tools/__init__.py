@@ -24,4 +24,3 @@ from cdtools.tools import propagators
 from cdtools.tools import measurements
 from cdtools.tools import analysis
 from cdtools.tools import atoms
-from cdtools.tools import polarization
