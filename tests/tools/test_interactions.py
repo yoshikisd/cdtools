@@ -253,7 +253,6 @@ def test_ptycho_2D_sinc(single_pixel_probe, random_obj):
 
 def test_RPI_interaction(random_probe, random_obj):
 
-
     random_obj1 = random_obj[:79,:68] * 0 + 1
     random_probe1 = random_probe * 0 + 1
     t_random_obj1 = t.as_tensor(random_obj1)
@@ -268,6 +267,9 @@ def test_RPI_interaction(random_probe, random_obj):
              (random_probe1.shape[1]-68)//2 + 68] = obj1_fourier
     output1 = random_probe1 * fftshift(fft.ifft2(ifftshift(obj1_ups),
                                                 norm='ortho'))
+
+    output1 = output1 * np.sqrt(output1.shape[-2] * output1.shape[-1]
+                       / (random_obj1.shape[-2] * random_obj1.shape[-1]))
 
     assert np.allclose(t_output1, output1)
     
@@ -286,5 +288,9 @@ def test_RPI_interaction(random_probe, random_obj):
     output2 = random_probe2 * fftshift(fft.ifft2(ifftshift(obj2_ups),
                                                 norm='ortho'))
 
+    output2 = output2 * np.sqrt(output2.shape[-2] * output2.shape[-1]
+                       / (random_obj2.shape[-2] * random_obj2.shape[-1]))
 
+    
+    assert np.allclose(t_output2, output2)
     

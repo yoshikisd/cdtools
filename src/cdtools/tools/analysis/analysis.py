@@ -775,8 +775,8 @@ def calc_rms_error(field_1, field_2, align_phases=True, normalize=False,
         The RMS error, or tensor of RMS errors, depending on the dim argument
 
     """
-    fields_1 = t.as_tensor(fields_1)
-    fields_2 = t.as_tensor(fields_2)
+    field_1 = t.as_tensor(field_1)
+    field_2 = t.as_tensor(field_2)
 
     sumdims = tuple(d - dims for d in range(dims))
         
@@ -922,6 +922,8 @@ def calc_generalized_rms_error(fields_1, fields_2, normalize=False, dims=2):
         The generalized RMS error, or tensor of generalized RMS errors, depending on the dim argument
 
     """
+    # TODO either make this work correctly or just make everything work
+    # only for tensors
     fields_1 = t.as_tensor(fields_1)
     fields_2 = t.as_tensor(fields_2)
 
@@ -1378,14 +1380,6 @@ def standardize_reconstruction_pair(
         limit=frc_limit,
     )
 
-
-    #probe_freqs, probe_frc, probe_frc_threshold = calc_generalized_frc(
-    #    probe_1,
-    #    probe_2,
-    #    half_1['probe_basis'],
-    #    nbins=probe_nbins,
-    #    limit=frc_limit,
-    #)
     probe_freqs, probe_frc, probe_frc_threshold = calc_generalized_frc(
         probe_1,
         probe_2,

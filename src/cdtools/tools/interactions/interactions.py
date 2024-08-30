@@ -625,6 +625,7 @@ def RPI_interaction(probe, obj):
     # The far-field propagator is just a 2D FFT but with an fftshift
     fftobj = propagators.far_field(obj)
     fftobj_npix = fftobj.shape[-2] * fftobj.shape[-1]
+    
     # We calculate the padding that we need to do the upsampling
     # This is carefully set up to keep the zero-frequency pixel in the correct
     # location as the overall shape changes. Don't mess with this without
@@ -635,8 +636,12 @@ def RPI_interaction(probe, obj):
     pad1r = probe.shape[-1] - obj.shape[-1] - pad1l
         
     fftobj = t.nn.functional.pad(fftobj, (pad1l, pad1r, pad2l, pad2r))
+
+    # This keeps the mean intensity equal, instead of spreading out the
+    # intensity over the upsampled region
+    # TODO: Keeping this in probably isn't the most efficient
     fftobj_npix_new = fftobj.shape[-2] * fftobj.shape[-1]
-    scale_factor =np.sqrt(fftobj_npix_new / fftobj_npix)
+    scale_factor = np.sqrt(fftobj_npix_new / fftobj_npix)
     
     # Again, just an inverse FFT but with an fftshift
     upsampled_obj = scale_factor * propagators.inverse_far_field(fftobj)
