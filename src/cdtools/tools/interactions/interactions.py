@@ -464,8 +464,8 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
         shifted_probe = t.fft.ifft2(t.fft.ifftshift(shifted_fft_probe,
                                                     dim=(-1,-2)))
 
-        if probe_support is not None:
-            shifted_probe = shifted_probe * probe_support[..., :, :]
+        # Note: resist the temptation to remultiply by the probe support here,
+        # it will fail if you have a probe which is restricted in Fourier space
         
         # TODO This is a kludge, I will fix this.
         if multiple_modes and len(selections.shape) == 3: # Multi-mode probe

@@ -14,8 +14,41 @@ import datetime
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--plot", action="store", default=False, help="plot: True to show test plots"
+        "--plot",
+        action="store_true",
+        default=False,
+        help="when set, shows the test plots"
     )
+    parser.addoption(
+        "--reconstruction_device",
+        action="store",
+        default="cuda",
+        help="What device to run reconstructions on, if they are being run"
+    )
+    parser.addoption(
+        "--runslow",
+        action="store_true",
+        default=False,
+        help="run slow tests, primarily full reconstruction tests."
+    )
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "slow: mark test as slow to run")
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--runslow"):
+        # --runslow given in cli: do not skip slow tests
+        return
+    skip_slow = pytest.mark.skip(reason="need --runslow option to run")
+    for item in items:
+        if "slow" in item.keywords:
+            item.add_marker(skip_slow)
+
+@pytest.fixture
+def reconstruction_device(request):
+    return request.config.getoption("--reconstruction_device")
 
 
 @pytest.fixture
@@ -319,3 +352,17 @@ def test_ptycho_cxis(ptycho_cxi_1, ptycho_cxi_2, ptycho_cxi_3):
     on the cxi files.
     """
     return [ptycho_cxi_1, ptycho_cxi_2, ptycho_cxi_3]
+
+
+@pytest.fixture(scope='module')
+def gold_ball_cxi(pytestconfig):
+    return str(pytestconfig.rootpath) + \
+        '/examples/example_data/AuBalls_700ms_30nmStep_3_6SS_filter.cxi'
+
+@pytest.fixture(scope='module')
+def lab_ptycho_cxi(pytestconfig):
+    return str(pytestconfig.rootpath) + \
+        '/examples/example_data/lab_ptycho_data.cxi'
+
+
+

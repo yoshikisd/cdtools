@@ -117,18 +117,18 @@ class CDIModel(t.nn.Module):
             The datatype to convert the values to before registering
         """
         self.register_buffer('det_basis',
-                             t.tensor(detector_geometry['basis'],
+                             t.as_tensor(detector_geometry['basis'],
                                       dtype=dtype))
         
         if 'distance' in detector_geometry \
            and detector_geometry['distance'] is not None:                
             self.register_buffer('det_distance',
-                                 t.tensor(detector_geometry['distance'],
+                                 t.as_tensor(detector_geometry['distance'],
                                           dtype=dtype))
         if 'corner' in detector_geometry \
            and detector_geometry['corner'] is not None:
             self.register_buffer('det_corner',
-                                 t.tensor(detector_geometry['corner'],
+                                 t.as_tensor(detector_geometry['corner'],
                                           dtype=dtype))
 
     def get_detector_geometry(self):

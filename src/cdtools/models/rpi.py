@@ -66,7 +66,7 @@ class RPI(CDIModel):
                          1j * t.ones([1], dtype=dtype)).dtype
         
         self.register_buffer('wavelength',
-                             t.tensor(wavelength, dtype=dtype))
+                             t.as_tensor(wavelength, dtype=dtype))
         self.store_detector_geometry(detector_geometry,
                                      dtype=dtype)
 
@@ -75,9 +75,9 @@ class RPI(CDIModel):
         # used a bandlimiting constraint and had a larger basis, the user is
         # expected to upsample it explicitly before doing RPI.
         self.register_buffer('probe_basis',
-                             t.tensor(probe_basis, dtype=dtype))
+                             t.as_tensor(probe_basis, dtype=dtype))
 
-        scale_factor = t.tensor([probe.shape[-1]/obj_guess.shape[-1],
+        scale_factor = t.as_tensor([probe.shape[-1]/obj_guess.shape[-1],
                                  probe.shape[-2]/obj_guess.shape[-2]])
         self.register_buffer('obj_basis',
                              (self.probe_basis * scale_factor).to(dtype=dtype))
@@ -86,7 +86,7 @@ class RPI(CDIModel):
             self.saturation = None
         else:
             self.register_buffer('saturation',
-                                 t.tensor(saturation, dtype=dtype))
+                                 t.as_tensor(saturation, dtype=dtype))
 
         # not sure how to make this a buffer, or if I have to
         self.units = units
@@ -95,23 +95,23 @@ class RPI(CDIModel):
             self.mask = None
         else:
             self.register_buffer('mask',
-                                 t.tensor(mask, dtype=t.bool))
+                                 t.as_tensor(mask, dtype=t.bool))
 
-        self.register_buffer('probe', t.tensor(probe, dtype=complex_dtype))
+        self.register_buffer('probe', t.as_tensor(probe, dtype=complex_dtype))
 
 
         self.register_buffer('exponentiate_obj',
-                             t.tensor(exponentiate_obj, dtype=bool))
+                             t.as_tensor(exponentiate_obj, dtype=bool))
 
         self.register_buffer('phase_only',
-                             t.tensor(phase_only, dtype=bool))
+                             t.as_tensor(phase_only, dtype=bool))
 
         # We always use multi-modes to store the object, so we convert it
         # if we just get a single 2D array as an input
         if obj_guess.dim() == 2:
             obj_guess = obj_guess[None, :, :]
         
-        self.obj = t.nn.Parameter(t.tensor(obj_guess, dtype=complex_dtype))
+        self.obj = t.nn.Parameter(t.as_tensor(obj_guess, dtype=complex_dtype))
 
         self.weights = t.nn.Parameter(
             t.eye(probe.shape[0], dtype=complex_dtype))
@@ -124,40 +124,26 @@ class RPI(CDIModel):
                                        dtype=dtype)
 
         self.register_buffer('background',
-                             t.tensor(background, dtype=t.float32))
+                             t.as_tensor(background, dtype=t.float32))
 
         if obj_support is None:
             obj_support = t.ones_like(self.obj[0, ...], dtype=int)
 
         self.register_buffer('obj_support',
-                             t.tensor(obj_support, dtype=int))
+                             t.as_tensor(obj_support, dtype=int))
         
         self.obj.data = self.obj * self.obj_support[None, ...]
         
         self.register_buffer('oversampling',
-                             t.tensor(oversampling, dtype=int))
+                             t.as_tensor(oversampling, dtype=int))
 
         self.register_buffer('propagation_distance',
-                             t.tensor(propagation_distance, dtype=dtype))
+                             t.as_tensor(propagation_distance, dtype=dtype))
 
         # The propagation direction of the probe. For now it's fixed,
         # but perhaps it would need to be updated in the future
         self.register_buffer('prop_dir',
-                             t.tensor([0, 0, 1], dtype=dtype))
-
-        # This propagator should be able to be multiplied by the propagation
-        # distance each time to get a propagator
-        #universal_propagator = t.angle(ggasp(
-        #    self.probe.shape[-2:],
-        #    self.probe_basis, self.wavelength,
-        #    t.tensor([0, 0, self.wavelength/(2*np.pi)], dtype=dtype),
-        #    propagation_vector=self.prop_dir,
-        #    dtype=complex_dtype,
-        #    propagate_along_offset=True))
-        
-        # TODO: probably doesn't support non-float-32 dtypes
-        #self.register_buffer('universal_propagator',
-        #                     universal_propagator)
+                             t.as_tensor([0, 0, 1], dtype=dtype))
 
 
     @classmethod
@@ -229,7 +215,7 @@ class RPI(CDIModel):
            and dataset.background is not None:
             background = t.sqrt(dataset.background)
         elif background is not None:
-            background = t.sqrt(t.Tensor(background).to(dtype=t.float32))
+            background = t.sqrt(t.as_tensor(background).to(dtype=t.float32))
 
         det_geo = dataset.detector_geometry
 

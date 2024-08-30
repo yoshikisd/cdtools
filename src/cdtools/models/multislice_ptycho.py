@@ -44,40 +44,40 @@ class MultislicePtycho(CDIModel):
 
         super(MultislicePtycho, self).__init__()
         self.register_buffer('wavelength',
-                             t.tensor(wavelength, dtype=dtype))
+                             t.as_tensor(wavelength, dtype=dtype))
         self.store_detector_geometry(detector_geometry,
                                      dtype=dtype)
 
         self.register_buffer('min_translation',
-                             t.tensor(min_translation, dtype=dtype))
+                             t.as_tensor(min_translation, dtype=dtype))
 
         self.register_buffer('obj_basis',
-                             t.tensor(obj_basis, dtype=dtype))
+                             t.as_tensor(obj_basis, dtype=dtype))
 
         self.register_buffer('exponentiate_obj',
-                             t.tensor(exponentiate_obj, dtype=bool))
+                             t.as_tensor(exponentiate_obj, dtype=bool))
         
         self.register_buffer('interslice_propagator',
-                             t.tensor(interslice_propagator, dtype=t.complex64))
+                             t.as_tensor(interslice_propagator, dtype=t.complex64))
         
         if probe_basis is None:
             self.register_buffer('probe_basis',
-                                 t.tensor(obj_basis, dtype=dtype))
+                                 t.as_tensor(obj_basis, dtype=dtype))
         else:
             self.register_buffer('probe_basis',
-                                 t.tensor(probe_basis, dtype=dtype))
+                                 t.as_tensor(probe_basis, dtype=dtype))
             
         self.register_buffer('surface_normal',
-                             t.tensor(surface_normal, dtype=dtype))
+                             t.as_tensor(surface_normal, dtype=dtype))
 
         if saturation is None:
             self.saturation = None
         else:
             self.register_buffer('saturation',
-                                 t.tensor(saturation, dtype=dtype))
+                                 t.as_tensor(saturation, dtype=dtype))
 
         self.register_buffer('fourier_probe',
-                             t.tensor(fourier_probe, dtype=bool))
+                             t.as_tensor(fourier_probe, dtype=bool))
 
         # Not sure how to make this a buffer...
         self.units = units
@@ -86,10 +86,10 @@ class MultislicePtycho(CDIModel):
             self.mask = None
         else:
             self.register_buffer('mask',
-                                 t.tensor(mask, dtype=t.bool))
+                                 t.as_tensor(mask, dtype=t.bool))
         
-        probe_guess = t.tensor(probe_guess, dtype=t.complex64)
-        obj_guess = t.tensor(obj_guess, dtype=t.complex64)
+        probe_guess = t.as_tensor(probe_guess, dtype=t.complex64)
+        obj_guess = t.as_tensor(obj_guess, dtype=t.complex64)
 
         # We rescale the probe here so it learns at the same rate as the
         # object
@@ -121,34 +121,36 @@ class MultislicePtycho(CDIModel):
             # weights and complex-valued per-mode weight matrices
             if len(weights.shape) == 1:
                 # This is if it's just a list of numbers
-                self.weights = t.nn.Parameter(t.tensor(weights,
+                self.weights = t.nn.Parameter(t.as_tensor(weights,
                                                        dtype=t.float32))
             else:
                 # Now this is a matrix of weights, so it needs to be complex
-                self.weights = t.nn.Parameter(t.tensor(weights,
+                self.weights = t.nn.Parameter(t.as_tensor(weights,
                                                        dtype=t.complex64))
 
         if translation_offsets is None:
             self.translation_offsets = None
         else:
-            t_o = t.tensor(translation_offsets, dtype=t.float32)
+            t_o = t.as_tensor(translation_offsets, dtype=t.float32)
             t_o = t_o / translation_scale
             self.translation_offsets = t.nn.Parameter(t_o)
 
         self.register_buffer('translation_scale',
-                             t.tensor(translation_scale, dtype=dtype))
+                             t.as_tensor(translation_scale, dtype=dtype))
 
         if probe_support is None:
             probe_support = t.ones_like(self.probe[0], dtype=t.bool)
         self.register_buffer('probe_support',
-                             t.tensor(probe_support, dtype=t.bool))
+                             t.as_tensor(probe_support, dtype=t.bool))
         self.probe.data *= self.probe_support
             
         self.register_buffer('oversampling',
-                             t.tensor(oversampling, dtype=int))
+                             t.as_tensor(oversampling, dtype=int))
 
-        self.register_buffer('simulate_probe_translation',
-                             t.tensor(simulate_probe_translation, dtype=bool))
+        self.register_buffer(
+            'simulate_probe_translation',
+            t.as_tensor(simulate_probe_translation, dtype=bool)
+        )
 
         if simulate_probe_translation:
             Is = t.arange(self.probe.shape[-2], dtype=dtype)
@@ -161,7 +163,7 @@ class MultislicePtycho(CDIModel):
             self.register_buffer('J_phase', J_phase)
 
         self.register_buffer('simulate_finite_pixels',
-                             t.tensor(simulate_finite_pixels, dtype=bool))
+                             t.as_tensor(simulate_finite_pixels, dtype=bool))
             
         # Here we set the appropriate loss function
         if (loss.lower().strip() == 'amplitude mse'

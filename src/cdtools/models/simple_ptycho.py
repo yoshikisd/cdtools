@@ -13,9 +13,6 @@ __all__ = ['SimplePtycho']
 
 class SimplePtycho(CDIModel):
     """A simple ptychography model for exploring ideas and extensions
-
-
-
     """
     def __init__(
             self,
@@ -40,8 +37,8 @@ class SimplePtycho(CDIModel):
         self.register_buffer('min_translation', t.as_tensor(min_translation))
         self.register_buffer('probe_basis', t.as_tensor(probe_basis))
 
-        probe_guess = t.tensor(probe_guess, dtype=t.complex64)
-        obj_guess = t.tensor(obj_guess, dtype=t.complex64)
+        probe_guess = t.as_tensor(probe_guess, dtype=t.complex64)
+        obj_guess = t.as_tensor(obj_guess, dtype=t.complex64)
 
         # We rescale the probe here so it learns at the same rate as the
         # object
