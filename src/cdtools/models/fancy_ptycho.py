@@ -36,6 +36,8 @@ class FancyPtycho(CDIModel):
                  units='um',
                  simulate_probe_translation=False,
                  simulate_finite_pixels=False,
+                 exponentiate_obj=False,
+                 phase_only=False,
                  dtype=t.float32,
                  obj_view_crop=0
                  ):
@@ -70,6 +72,12 @@ class FancyPtycho(CDIModel):
         self.register_buffer('fourier_probe',
                              t.tensor(fourier_probe, dtype=bool))
 
+        self.register_buffer('exponentiate_obj',
+                             t.tensor(exponentiate_obj, dtype=bool))
+
+        self.register_buffer('phase_only',
+                             t.tensor(phase_only, dtype=bool))
+
         # Not sure how to make this a buffer...
         self.units = units
 
@@ -82,6 +90,7 @@ class FancyPtycho(CDIModel):
         probe_guess = t.tensor(probe_guess, dtype=t.complex64)
         obj_guess = t.tensor(obj_guess, dtype=t.complex64)
 
+            
         # We rescale the probe here so it learns at the same rate as the
         # object
         if probe_guess.dim() > 2:
@@ -186,6 +195,8 @@ class FancyPtycho(CDIModel):
                      units='um',
                      simulate_probe_translation=False,
                      simulate_finite_pixels=False,
+                     exponentiate_obj=False,
+                     phase_only=False,
                      obj_view_crop=None,
                      obj_padding=200,
                      ):
@@ -292,9 +303,15 @@ class FancyPtycho(CDIModel):
 
         probe = t.stack([probe, ] + probe_stack)
 
-        obj = t.exp(1j * randomize_ang * (t.rand(obj_size)-0.5))
+        obj = (randomize_ang * (t.rand(obj_size)-0.5)).to(dtype=t.complex64)
+        if not exponentiate_obj:
+            obj = t.exp(1j * obj)
+
         if n_obj_modes != 1:
             obj = t.stack([obj,] + [0.05*t.ones_like(obj),]*(n_obj_modes-1))
+
+        if phase_only:
+            obj.imag[:] = 0
 
         pfc = (probe_fourier_crop if probe_fourier_crop else 0)
         if obj_view_crop is None:
@@ -363,6 +380,8 @@ class FancyPtycho(CDIModel):
                    loss=loss, units=units,
                    simulate_probe_translation=simulate_probe_translation,
                    simulate_finite_pixels=simulate_finite_pixels,
+                   phase_only=phase_only,
+                   exponentiate_obj=exponentiate_obj,
                    obj_view_crop=obj_view_crop)
 
 
@@ -437,12 +456,23 @@ class FancyPtycho(CDIModel):
             prs = t.nn.functional.pad(prs, padding)
             prs = tools.propagators.inverse_far_field(prs)
 
+            
+        if self.exponentiate_obj:
+            if self.phase_only:
+                obj = t.exp(1j*self.obj.real)
+            else:
+                obj = t.exp(1j*self.obj)
+        else:
+            obj = self.obj
+
 
         # Now we actually do the interaction, using the sinc subpixel
         # translation model as per usual
         exit_waves = self.probe_norm * tools.interactions.ptycho_2D_sinc(
-            prs, self.obj, pix_trans,
-            shift_probe=True, multiple_modes=True)
+            prs, obj, pix_trans,
+            shift_probe=True,
+            multiple_modes=True,
+            probe_support=self.probe_support)
         return exit_waves
 
 
@@ -707,12 +737,12 @@ class FancyPtycho(CDIModel):
         ('Basis Probe Fourier Space Amplitudes',
          lambda self, fig: p.plot_amplitude(
              (self.probe if self.fourier_probe
-              else tools.propagators.inverse_far_field(self.probe)),
+              else tools.propagators.far_field(self.probe)),
               fig=fig)),
-        ('Basis Probe Fourier Space Phases',
-         lambda self, fig: p.plot_phase(
+        ('Basis Probe Fourier Space Colorized',
+         lambda self, fig: p.plot_colorized(
              (self.probe if self.fourier_probe
-              else tools.propagators.inverse_far_field(self.probe))
+              else tools.propagators.far_field(self.probe))
              , fig=fig)),
         ('Basis Probe Real Space Amplitudes',
          lambda self, fig: p.plot_amplitude(
@@ -721,8 +751,8 @@ class FancyPtycho(CDIModel):
              fig=fig,
              basis=self.probe_basis,
              units=self.units)),
-        ('Basis Probe Real Space Phases',
-         lambda self, fig: p.plot_phase(
+        ('Basis Probe Real Space Colorized',
+         lambda self, fig: p.plot_colorized(
              (self.probe if not self.fourier_probe
               else tools.propagators.inverse_far_field(self.probe)),
              fig=fig,
@@ -750,13 +780,31 @@ class FancyPtycho(CDIModel):
              self.obj[self.obj_view_slice],
              fig=fig,
              basis=self.obj_basis,
-             units=self.units)),
+             units=self.units),
+         lambda self: not self.exponentiate_obj),
         ('Object Phase',
          lambda self, fig: p.plot_phase(
              self.obj[self.obj_view_slice],
              fig=fig,
              basis=self.obj_basis,
-             units=self.units)),
+             units=self.units),
+         lambda self: not self.exponentiate_obj),
+        ('Real Part of T', 
+         lambda self, fig: p.plot_real(
+             self.obj[self.obj_view_slice],
+             fig=fig,
+             basis=self.obj_basis,
+             units=self.units,
+             cmap='cividis'),
+         lambda self: self.exponentiate_obj),
+        ('Imaginary Part of T',
+         lambda self, fig: p.plot_imag(
+             self.obj[self.obj_view_slice],
+             fig=fig,
+             basis=self.obj_basis,
+             units=self.units),
+         lambda self: self.exponentiate_obj),
+
         ('Corrected Translations',
          lambda self, fig, dataset: p.plot_translations(self.corrected_translations(dataset), fig=fig, units=self.units)),
         ('Background',

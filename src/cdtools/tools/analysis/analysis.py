@@ -28,7 +28,8 @@ __all__ = [
     'calc_generalized_rms_error',
     'remove_phase_ramp',
     'remove_amplitude_exponent',
-    'standardize_reconstruction_set'
+    'standardize_reconstruction_set',
+    'standardize_reconstruction_pair',
 ]
 
 
@@ -569,6 +570,8 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1., limit='side'):
     cor_fft = f1 * t.conj(f2)
     #from cdtools.tools import plotting as p
     #from matplotlib import pyplot as plt
+    #p.plot_phase(im1[im_slice], cmap='cividis')
+    #p.plot_phase(im2[im_slice], cmap='cividis')    
     #p.plot_amplitude(t.log(t.abs(cor_fft)))
     #p.plot_amplitude(t.log(t.abs(f1)))
     #p.plot_phase(cor_fft)
@@ -576,7 +579,7 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1., limit='side'):
     F1 = t.abs(f1)**2
     F2 = t.abs(f2)**2
 
-
+    # TODO this is still incorrect if the two bases arent equal
     di = np.linalg.norm(basis[:,0])
     dj = np.linalg.norm(basis[:,1])
 
@@ -590,6 +593,7 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1., limit='side'):
         max_i = np.max(i_freqs)
         max_j = np.max(j_freqs)
         frc_range = [0, max(max_i,max_j)]
+
     elif limit.lower().strip() == 'corner':
         frc_range = [0, np.max(Rs)]
     else:
@@ -607,7 +611,13 @@ def calc_frc(im1, im2, basis, im_slice=None, nbins=None, snr=1., limit='side'):
     #n_pix = n_pix / 4 # This is for an apodized image, apodized with a hann window
     
     frc = numerator / np.sqrt(denominator_F1*denominator_F2)
-
+    #plt.figure()
+    #plt.plot(np.real(frc))
+    #plt.title('real')
+    #plt.figure()
+    #plt.plot(np.imag(frc))
+    #plt.title('imag')
+    #plt.show()
     # This moves from combined-image SNR to single-image SNR
     snr /= 2
 
@@ -765,6 +775,8 @@ def calc_rms_error(field_1, field_2, align_phases=True, normalize=False,
         The RMS error, or tensor of RMS errors, depending on the dim argument
 
     """
+    fields_1 = t.as_tensor(fields_1)
+    fields_2 = t.as_tensor(fields_2)
 
     sumdims = tuple(d - dims for d in range(dims))
         
@@ -928,7 +940,7 @@ def calc_generalized_rms_error(fields_1, fields_2, normalize=False, dims=2):
     return t.sqrt(result)
     
 
-def calc_generalized_frc(fields_1, fields_2, basis, im_slice=None, nbins=None, snr=1.):
+def calc_generalized_frc(fields_1, fields_2, basis, im_slice=None, nbins=None, snr=1., limit='side'):
     """Calculates a Fourier ring correlation between two images
 
     This function requires an input of a basis to allow for FRC calculations
@@ -965,7 +977,7 @@ def calc_generalized_frc(fields_1, fields_2, basis, im_slice=None, nbins=None, s
 
     im_np = False
     if isinstance(fields_1, np.ndarray):
-        fields_1 = t.as_tensor(fields_)
+        fields_1 = t.as_tensor(fields_1)
         im_np = True
     if isinstance(fields_2, np.ndarray):
         fields_2 = t.as_tensor(fields_2)
@@ -975,17 +987,15 @@ def calc_generalized_frc(fields_1, fields_2, basis, im_slice=None, nbins=None, s
         basis = t.tensor(basis)
 
     if im_slice is None:
-        im_slice = np.s_[(im1.shape[0]//8)*3:(im1.shape[0]//8)*5,
-                          (im1.shape[1]//8)*3:(im1.shape[1]//8)*5]
+        im_slice = np.s_[...,:,:]
 
     if nbins is None:
         nbins = np.max(fields_1[...,im_slice].shape[-2:]) // 4
 
 
-    f1 = t.fft.fftshift(t.fft.fft2(im1[im_slice]),dim=(-1,-2))
-    f2 = t.fft.fftshift(t.fft.fft2(im2[im_slice]),dim=(-1,-2))
+    f1 = t.fft.fftshift(t.fft.fft2(fields_1[im_slice]),dim=(-1,-2))
+    f2 = t.fft.fftshift(t.fft.fft2(fields_2[im_slice]),dim=(-1,-2))
     cor_fft = f1 * t.conj(f2)
-        
 
     F1 = t.abs(f1)**2
     F2 = t.abs(f2)**2
@@ -994,18 +1004,30 @@ def calc_generalized_frc(fields_1, fields_2, basis, im_slice=None, nbins=None, s
     di = np.linalg.norm(basis[:,0])
     dj = np.linalg.norm(basis[:,1])
 
-    i_freqs = np.fft.fftshift(np.fft.fftfreq(cor_fft.shape[0],d=di))
-    j_freqs = np.fft.fftshift(np.fft.fftfreq(cor_fft.shape[1],d=dj))
+    i_freqs = np.fft.fftshift(np.fft.fftfreq(cor_fft.shape[-2],d=di))
+    j_freqs = np.fft.fftshift(np.fft.fftfreq(cor_fft.shape[-1],d=dj))
 
     Js,Is = np.meshgrid(j_freqs,i_freqs)
     Rs = np.sqrt(Is**2+Js**2)
+
+    if limit.lower().strip() == 'side':
+        max_i = np.max(i_freqs)
+        max_j = np.max(j_freqs)
+        frc_range = [0, max(max_i,max_j)]
+
+    elif limit.lower().strip() == 'corner':
+        frc_range = [0, np.max(Rs)]
+    else:
+        raise ValueError('Invalid FRC limit: choose "side" or "corner"')
 
     # This line is used to get a set of bins that matches the logic
     # used by np.histogram, so that this function will match the choices
     # of bin edges that comes from the non-generalized version. This also
     # gets us the count on the number of pixels per bin so we can calculate
     # the threshold curve
-    n_pix, bins = np.histogram(Rs,bins=nbins)
+    n_pix, bins = np.histogram(Rs,bins=nbins, range=frc_range)
+    bins = t.as_tensor(bins)
+    Rs = t.as_tensor(Rs)
 
     frc = []
     for i in range(len(bins)-1):
@@ -1202,8 +1224,8 @@ def standardize_reconstruction_set(
     
     if correct_phase_offset:
         obj_1 = np.exp(-1j* np.angle(np.sum(obj_1[window]))) * obj_1
-        obj_2 = np.exp(-1j* np.angle(np.sum(obj_2))) * obj_2
-        obj = np.exp(-1j* np.angle(np.sum(obj))) * obj
+        obj_2 = np.exp(-1j* np.angle(np.sum(obj_2[window]))) * obj_2
+        obj = np.exp(-1j* np.angle(np.sum(obj[window]))) * obj
 
 
     # Todo update the translations to account for the determined shift
@@ -1252,6 +1274,159 @@ def standardize_reconstruction_set(
         'frc': frc,
         'frc_threshold': threshold,
         'ssnr': ssnr}
+    
+    return results
+
+
+def standardize_reconstruction_pair(
+        half_1,
+        half_2,
+        correct_phase_offset=True,
+        correct_phase_ramp=True,
+        correct_amplitude_exponent=False,
+        window=np.s_[:,:],
+        nbins=50,
+        probe_nbins=50,
+        frc_limit='side',
+):
+    """Standardizes and analyses a set of two repeat
+    
+    It's very common to run two subsequent ptycho reconstructions, so that the
+    effect of sample damage during the first reconstruction can be used in the
+    estimate of thefinal quality. The difference between the two datasets
+    datasets can be used to estimate the quality and resolution of each one.
+    But to do that analysis, first the reconstructions need to be aligned
+    with respect to each other and normalized in a few ways.
+
+    This function takes the results (as output by model.save_results) of
+    a pair of reconstructions and:
+
+    - Aligns the object reconstructions with one another
+    - Corrects for the global phase offset (by default)
+    - Sets a sensible value for the object/probe phase ramp (by default)
+    - Sets a sensible value for the object/probe exponential decay (off by
+        default)
+    - Calculates the FRC and derived SSNR.
+
+    Then, these results are packaged into an output dictionary. The output
+    does not retain all the information from the inputs, so if full traceability
+    is desired, do not delete the files containing the individual
+    reconstructions
+
+    Parameters
+    ----------
+    half_1 : dict
+        The result of the first half dataset, as returned by model.save_results
+    half_2 : dict
+        The result of the second half dataset, as returned by model.save_results
+
+    Returns
+    -------
+    results : dict
+        A dictionary containing the synthesized results
+    """
+   # We get the two half-data reconstructions
+    obj_1, probe_1, weights_1 = half_1['obj'],half_1['probe'],half_1['weights']
+    obj_2, probe_2, weights_2 = half_2['obj'],half_2['probe'],half_2['weights']
+
+
+    if correct_phase_ramp:
+        obj_1, probe_1 = remove_phase_ramp(
+            half_1['obj'], window, probe=half_1['probe'])
+        obj_2, probe_2 = remove_phase_ramp(
+            half_2['obj'], window, probe=half_2['probe'])
+
+    if correct_amplitude_exponent:
+        obj_1, probe_1, weights_1 = remove_amplitude_exponent(
+            obj_1, window, probe=probe_1,
+            weights=half_1['weights'],
+            basis=half_1['basis'],
+            translations=half_1['translations'])
+        obj_2, probe_2, weights_2 = remove_amplitude_exponent(
+            obj_2, window, probe=probe_2,
+            weights=half_2['weights'],
+            basis=half_2['basis'],
+            translations=half_2['translations'])
+
+    
+    if correct_phase_offset:
+        obj_1 = np.exp(-1j* np.angle(np.sum(obj_1[window]))) * obj_1
+        obj_2 = np.exp(-1j* np.angle(np.sum(obj_2[window]))) * obj_2
+
+
+    # Todo update the translations to account for the determined shift
+    shift = ip.find_shift(
+        t.as_tensor(ip.hann_window(obj_1[window])),
+        t.as_tensor(ip.hann_window(obj_2[window])))
+    obj_2  = ip.sinc_subpixel_shift(
+        t.as_tensor(obj_2), shift).numpy()
+
+    probe_shift = ip.find_shift(
+        t.as_tensor(probe_1[0]),
+        t.as_tensor(probe_2[0]),
+    )
+    for idx in range(probe_2.shape[0]):
+        probe_2[idx] = ip.sinc_subpixel_shift(
+            t.as_tensor(probe_2[idx]), probe_shift).numpy()
+
+    # TODO I'm not sure if the default threshold treats this case right tbh
+    freqs, frc, threshold = calc_frc(
+        ip.hann_window(obj_1[window]),
+        ip.hann_window(obj_2[window]),
+        half_1['obj_basis'],
+        nbins=nbins,
+        limit=frc_limit,
+    )
+
+
+    #probe_freqs, probe_frc, probe_frc_threshold = calc_generalized_frc(
+    #    probe_1,
+    #    probe_2,
+    #    half_1['probe_basis'],
+    #    nbins=probe_nbins,
+    #    limit=frc_limit,
+    #)
+    probe_freqs, probe_frc, probe_frc_threshold = calc_generalized_frc(
+        probe_1,
+        probe_2,
+        half_1['probe_basis'],
+        nbins=probe_nbins,
+        limit=frc_limit,
+    )
+
+    probe_nrms_error = calc_generalized_rms_error(
+        probe_1,
+        probe_2,
+        normalize=True
+    )
+    
+    # The correct formulation when the final output is one of the two
+    # reconstructions
+    ssnr = np.abs(frc) / (1 - np.abs(frc))
+
+    results = {
+        'obj_1': obj_1,
+        'probe_1': probe_1,
+        'weights_1': weights_1,
+        'translations_1': half_1['translations'],
+        'background_1': half_1['background'],
+        'obj_2': obj_2,
+        'probe_2': probe_2,
+        'weights_2': weights_2,
+        'translations_2': half_2['translations'],
+        'background_2': half_2['background'],
+        'wavelength': half_1['wavelength'],
+        'obj_basis': half_1['obj_basis'],
+        'probe_basis': half_1['probe_basis'],
+        'frc_freqs': freqs,
+        'frc': frc,
+        'frc_threshold': threshold,
+        'ssnr': ssnr,
+        'probe_freqs': probe_freqs,
+        'probe_frc': probe_frc,
+        'probe_frc_threshold': probe_frc_threshold,
+        'probe_nrms_error': probe_nrms_error,
+    }
     
     return results
 

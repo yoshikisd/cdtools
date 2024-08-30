@@ -389,7 +389,7 @@ def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
         return t.stack(exit_waves)
 
 
-def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multiple_modes=True, polarized=False, polarizer=None, analyzer=None):
+def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multiple_modes=True, probe_support=None, polarized=False, polarizer=None, analyzer=None):
     """Returns a stack of exit waves accounting for subpixel shifts
 
     This function returns a collection of exit waves, with the first
@@ -473,6 +473,10 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
             shifted_fft_probe = fft_probe * phase_masks
         shifted_probe = t.fft.ifft2(t.fft.ifftshift(shifted_fft_probe,
                                                     dim=(-1,-2)))
+
+        if probe_support is not None:
+            shifted_probe = shifted_probe * probe_support[..., :, :]
+        
         if not polarized:
             # TODO This is a kludge, I will fix this. I need to handle
             # multiple incoherently mixing polarized objects
@@ -620,6 +624,7 @@ def RPI_interaction(probe, obj):
 
     # The far-field propagator is just a 2D FFT but with an fftshift
     fftobj = propagators.far_field(obj)
+    fftobj_npix = fftobj.shape[-2] * fftobj.shape[-1]
     # We calculate the padding that we need to do the upsampling
     # This is carefully set up to keep the zero-frequency pixel in the correct
     # location as the overall shape changes. Don't mess with this without
@@ -630,10 +635,12 @@ def RPI_interaction(probe, obj):
     pad1r = probe.shape[-1] - obj.shape[-1] - pad1l
         
     fftobj = t.nn.functional.pad(fftobj, (pad1l, pad1r, pad2l, pad2r))
-
+    fftobj_npix_new = fftobj.shape[-2] * fftobj.shape[-1]
+    scale_factor =np.sqrt(fftobj_npix_new / fftobj_npix)
+    
     # Again, just an inverse FFT but with an fftshift
-    upsampled_obj = propagators.inverse_far_field(fftobj)
-
+    upsampled_obj = scale_factor * propagators.inverse_far_field(fftobj)
+    
     if obj.dim() >= 3:
         return probe[None,...] *  upsampled_obj
     else:
