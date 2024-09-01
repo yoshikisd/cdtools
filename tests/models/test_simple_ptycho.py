@@ -1,6 +1,8 @@
+import pytest
 import cdtools
 from matplotlib import pyplot as plt
 
+@pytest.mark.slow
 def test_simple_ptycho(lab_ptycho_cxi, reconstruction_device, show_plot):
     dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(lab_ptycho_cxi)
 

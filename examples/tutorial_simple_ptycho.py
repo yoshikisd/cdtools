@@ -3,7 +3,7 @@ from cdtools.models import CDIModel
 from cdtools import tools
 from cdtools.tools import plotting as p
 
-__all__ = ['SimplePtycho']        
+__all__ = ['SimplePtycho']
 
 class SimplePtycho(CDIModel):
     """A simple ptychography model to demonstrate the structure of a model
