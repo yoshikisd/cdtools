@@ -26,7 +26,7 @@ model.compare(dataset) # See how the simulated and measured patterns compare
 plt.show()
 ```
 
-Full installation instructions and documentation can be found [here](https://allevitan.github.io/cdtools-docs/).
+Full installation instructions and documentation can be found [here](https://cdtools-developers.github.io/cdtools-docs/).
 
 
 CDTools was developed in the [photon scattering lab](https://scattering.mit.edu/) at MIT, and further development took place within the [computational x-ray imaging group](https://www.psi.ch/en/cxi) at PSI. If you would like to publish any work that uses CDTools, please contact [Abe Levitan](mailto:abraham.levitan@psi.ch).
