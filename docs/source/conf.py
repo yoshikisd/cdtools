@@ -49,7 +49,9 @@ extensions = [
 
 # One only works in 1.8+, the other is depricated in >1.8
 autodoc_default_options = {
-    'show-inheritance': True
+    'show-inheritance': True,
+    'special-members': '__init__',
+    'member-order': 'bysource',
 }
 autodoc_default_flags = [ 'show-inheritance']
 

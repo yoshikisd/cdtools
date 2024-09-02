@@ -92,23 +92,23 @@ class Bragg2DPtycho(CDIModel):
 
         super(Bragg2DPtycho, self).__init__()
         self.register_buffer('wavelength',
-                             t.tensor(wavelength, dtype=dtype))
+                             t.as_tensor(wavelength, dtype=dtype))
         self.store_detector_geometry(detector_geometry,
                                      dtype=dtype)
 
         self.register_buffer('min_translation',
-                             t.tensor(min_translation, dtype=dtype))
+                             t.as_tensor(min_translation, dtype=dtype))
         self.register_buffer('median_propagation',
-                             t.tensor(median_propagation, dtype=dtype))
+                             t.as_tensor(median_propagation, dtype=dtype))
 
         self.register_buffer('obj_basis',
-                             t.tensor(obj_basis, dtype=dtype))
+                             t.as_tensor(obj_basis, dtype=dtype))
         if probe_basis is None:
             self.register_buffer('probe_basis',
-                                 t.tensor(obj_basis, dtype=dtype))
+                                 t.as_tensor(obj_basis, dtype=dtype))
         else:
             self.register_buffer('probe_basis',
-                                 t.tensor(probe_basis, dtype=dtype))        
+                                 t.as_tensor(probe_basis, dtype=dtype))        
 
             self.units = units
 
@@ -119,22 +119,22 @@ class Bragg2DPtycho(CDIModel):
                            np.array(obj_basis)[:,0])
         surface_normal /= np.linalg.norm(surface_normal)
         self.register_buffer('surface_normal',
-                             t.tensor(surface_normal, dtype=dtype))
+                             t.as_tensor(surface_normal, dtype=dtype))
 
         if saturation is None:
             self.saturation = None
         else:
             self.register_buffer('saturation',
-                                 t.tensor(saturation, dtype=dtype))
+                                 t.as_tensor(saturation, dtype=dtype))
 
         if mask is None:
             self.mask = None
         else:
             self.register_buffer('mask',
-                                 t.tensor(mask, dtype=t.bool))
+                                 t.as_tensor(mask, dtype=t.bool))
 
-        probe_guess = t.tensor(probe_guess, dtype=t.complex64)
-        obj_guess = t.tensor(obj_guess, dtype=t.complex64)
+        probe_guess = t.as_tensor(probe_guess, dtype=t.complex64)
+        obj_guess = t.as_tensor(obj_guess, dtype=t.complex64)
 
         # We rescale the probe here so it learns at the same rate as the
         # object
@@ -150,7 +150,7 @@ class Bragg2DPtycho(CDIModel):
         if probe_support is None:
             probe_support = t.ones_like(self.probe[0], dtype=t.bool)
         self.register_buffer('probe_support',
-                             t.tensor(probe_support, dtype=t.bool))
+                             t.as_tensor(probe_support, dtype=t.bool))
         self.probe.data *= self.probe_support
 
         if background is None:
@@ -164,26 +164,26 @@ class Bragg2DPtycho(CDIModel):
             self.weights = None
         else:
             # No incoherent + unstable here yet
-            self.weights = t.nn.Parameter(t.tensor(weights,
+            self.weights = t.nn.Parameter(t.as_tensor(weights,
                                                    dtype=t.float32))
 
         if translation_offsets is None:
             self.translation_offsets = None
         else:
-            t_o = t.tensor(translation_offsets, dtype=t.float32)
+            t_o = t.as_tensor(translation_offsets, dtype=t.float32)
             t_o = t_o / translation_scale
             self.translation_offsets = t.nn.Parameter(t_o)
 
         self.register_buffer('translation_scale',
-                             t.tensor(translation_scale, dtype=dtype))
+                             t.as_tensor(translation_scale, dtype=dtype))
 
         self.register_buffer('oversampling',
-                             t.tensor(oversampling, dtype=int))
+                             t.as_tensor(oversampling, dtype=int))
 
         self.register_buffer('propagate_probe',
-                             t.tensor(propagate_probe, dtype=bool))
+                             t.as_tensor(propagate_probe, dtype=bool))
         self.register_buffer('correct_tilt',
-                             t.tensor(correct_tilt, dtype=bool))
+                             t.as_tensor(correct_tilt, dtype=bool))
 
         if correct_tilt:
             k_map, intensity_map = \
@@ -195,9 +195,9 @@ class Bragg2DPtycho(CDIModel):
                     self.wavelength,dtype=t.float32,
                     lens=lens)
             self.register_buffer('k_map',
-                                 t.tensor(k_map, dtype=dtype))
+                                 t.as_tensor(k_map, dtype=dtype))
             self.register_buffer('intensity_map',
-                                 t.tensor(intensity_map, dtype=dtype))
+                                 t.as_tensor(intensity_map, dtype=dtype))
 
         else:
             self.k_map = None
@@ -205,7 +205,7 @@ class Bragg2DPtycho(CDIModel):
 
         # The propagation direction of the probe 
         self.register_buffer('prop_dir',
-                             t.tensor([0, 0, 1], dtype=dtype))
+                             t.as_tensor([0, 0, 1], dtype=dtype))
 
         # This propagator should be able to be multiplied by the propagation
         # distance each time to get a propagator

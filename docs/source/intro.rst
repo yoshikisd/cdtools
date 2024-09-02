@@ -17,6 +17,9 @@ CDTools is a python library for ptychography and CDI reconstructions, using an a
    
    # Load a data file
    dataset = Ptycho2DDataset.from_cxi('ptycho_data.cxi')
+
+   # Look at the data inside
+   dataset.inspect()
    
    # Initialize a model from the data
    model = FancyPtycho.from_dataset(dataset)
@@ -36,7 +39,16 @@ CDTools is a python library for ptychography and CDI reconstructions, using an a
 
 CDTools makes it simple to load and inspect data stored in .cxi files. Reconstruction models for common geometries are included "out of the box". For more advanced users, it includes a collection of differentiable functions which can beused to construct new forward models.
 
-The high-level interface to CDTools - datasets and models - is built on a set oflower-level tools. These include functions for accessing stored data in .cxi files, tools to visualize data and reconstructions, and tools that implement basic operations - such as light propagation - relevant to coherent diffraction. These functions can be used alongside the high-level interface, when needed.
+The high-level interface to CDTools - datasets and models - is built on a set of lower-level tools. These lower level tools include:
 
-Enough blabber. If you're interested, read the docs!
+- functions for accessing stored data in .cxi files
+- plotting tools to visualize data and reconstructions
+- basic operations, like light propagators, needed for coherent diffraction
+- tools that implement basic operations - such as light propagation - relevant to coherent diffraction.
+- analysis functions for assessing the quality of reconstructions
+
+
+These functions can be used alongside the high-level interface to make fun and fancy reconstruction scripts for challenging data.
+
+If you're interested, read the docs!
 

@@ -7,7 +7,7 @@ for ptychographic reconstruction.
 
 import torch as t
 import numpy as np
-from cdtools.tools import propagators, image_processing, polarization
+from cdtools.tools import propagators, image_processing
 
 __all__ = ['translations_to_pixel', 'pixel_to_translations',
            'project_translations_to_sample',
@@ -389,7 +389,7 @@ def ptycho_2D_linear(probe, obj, translations, shift_probe=True):
         return t.stack(exit_waves)
 
 
-def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multiple_modes=True, polarized=False, polarizer=None, analyzer=None):
+def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multiple_modes=True, probe_support=None):
     """Returns a stack of exit waves accounting for subpixel shifts
 
     This function returns a collection of exit waves, with the first
@@ -438,15 +438,10 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
     integer_translations = t.floor(translations)
     subpixel_translations = translations - integer_translations
     integer_translations = integer_translations.to(dtype=t.int32)
-    if not polarized:
-        selections = t.stack([obj[..., tr[0]:tr[0]+probe.shape[-2],
-                                  tr[1]:tr[1]+probe.shape[-1]]
-                              for tr in integer_translations])
-    else:
-        selections = t.stack([obj[:, :, tr[0]:tr[0]+probe.shape[-2],
-                                  tr[1]:tr[1]+probe.shape[-1]]
-                      for tr in integer_translations])
-        # Nx2x2xMxL tensor
+
+    selections = t.stack([obj[..., tr[0]:tr[0]+probe.shape[-2],
+                              tr[1]:tr[1]+probe.shape[-1]]
+                          for tr in integer_translations])
 
     exit_waves = []
     if shift_probe:
@@ -459,35 +454,29 @@ def ptycho_2D_sinc(probe, obj, translations, shift_probe=True, padding=10, multi
         J = 2 * np.pi * J / probe.shape[-1]
         phase_masks = t.exp(1j*(-subpixel_translations[:,0,None,None]*I
                                 -subpixel_translations[:,1,None,None]*J))
-        if polarized:
-            phase_masks = phase_masks[..., None, :, :]
-            # Nx2x1xMxL tensor
-            # probe is (N)(P)x2xMxL tensor
+
+        
         fft_probe = t.fft.fftshift(t.fft.fft2(probe),dim=(-1,-2))
         if multiple_modes: # Multi-mode probe
-            if polarized:
-                shifted_fft_probe = fft_probe * phase_masks[...,None,:,:,:]
-            else:
-                shifted_fft_probe = fft_probe * phase_masks[...,None,:,:]
+            shifted_fft_probe = fft_probe * phase_masks[...,None,:,:]
         else:
             shifted_fft_probe = fft_probe * phase_masks
         shifted_probe = t.fft.ifft2(t.fft.ifftshift(shifted_fft_probe,
                                                     dim=(-1,-2)))
-        if not polarized:
-            # TODO This is a kludge, I will fix this. I need to handle
-            # multiple incoherently mixing polarized objects
-            if multiple_modes and len(selections.shape) == 3: # Multi-mode probe
-                output = shifted_probe * selections[...,None,:,:]
-            else:
-                # This will only work if the 
-                output = shifted_probe * selections
-        # selections: Nx2x2xMxL
-        # probe: Nx(P)x2x1xMxL
-        else:
-            output = polarization.apply_jones_matrix(shifted_probe, selections, multiple_modes=multiple_modes)
 
+        # Note: resist the temptation to remultiply by the probe support here,
+        # it will fail if you have a probe which is restricted in Fourier space
+        
+        # TODO This is a kludge, I will fix this.
+        if multiple_modes and len(selections.shape) == 3: # Multi-mode probe
+            output = shifted_probe * selections[...,None,:,:]
+        else:
+            # This will only work if the 
+            output = shifted_probe * selections
+        
     else:
         raise NotImplementedError('Object shift not yet implemented')
+    
     if single_translation:
         return output[0]
     else:
@@ -620,6 +609,8 @@ def RPI_interaction(probe, obj):
 
     # The far-field propagator is just a 2D FFT but with an fftshift
     fftobj = propagators.far_field(obj)
+    fftobj_npix = fftobj.shape[-2] * fftobj.shape[-1]
+    
     # We calculate the padding that we need to do the upsampling
     # This is carefully set up to keep the zero-frequency pixel in the correct
     # location as the overall shape changes. Don't mess with this without
@@ -631,9 +622,15 @@ def RPI_interaction(probe, obj):
         
     fftobj = t.nn.functional.pad(fftobj, (pad1l, pad1r, pad2l, pad2r))
 
+    # This keeps the mean intensity equal, instead of spreading out the
+    # intensity over the upsampled region
+    # TODO: Keeping this in probably isn't the most efficient
+    fftobj_npix_new = fftobj.shape[-2] * fftobj.shape[-1]
+    scale_factor = np.sqrt(fftobj_npix_new / fftobj_npix)
+    
     # Again, just an inverse FFT but with an fftshift
-    upsampled_obj = propagators.inverse_far_field(fftobj)
-
+    upsampled_obj = scale_factor * propagators.inverse_far_field(fftobj)
+    
     if obj.dim() >= 3:
         return probe[None,...] *  upsampled_obj
     else:

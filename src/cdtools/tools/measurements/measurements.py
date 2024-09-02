@@ -140,7 +140,7 @@ def incoherent_sum(wavefields, detector_slice=None, epsilon=1e-7, saturation=Non
         if wavefields.dim() == 3:
             output = avg_pool2d(output.unsqueeze(0), oversampling)[0]
         else:
-            output = avg_pool2d(output, oversampling)
+            output = avg_pool2d(output, int(oversampling))
             
     # Then we grab the detector slice
     if detector_slice is not None:

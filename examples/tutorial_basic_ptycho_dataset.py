@@ -1,4 +1,3 @@
-import numpy as np
 import torch as t
 from matplotlib import pyplot as plt
 from cdtools.datasets import CDataset
@@ -14,7 +13,7 @@ class BasicPtychoDataset(CDataset):
     def __init__(self, translations, patterns, *args, **kwargs):
         """Initialize the dataset from python objects"""
 
-        super(BasicPtychoDataset,self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.translations = t.Tensor(translations).clone()
         self.patterns = t.Tensor(patterns).clone()
 
@@ -27,7 +26,7 @@ class BasicPtychoDataset(CDataset):
 
     def to(self, *args, **kwargs):
         """Sends the relevant data to the given device and dtype"""
-        super(BasicPtychoDataset,self).to(*args,**kwargs)
+        super().to(*args,**kwargs)
         self.translations = self.translations.to(*args, **kwargs)
         self.patterns = self.patterns.to(*args, **kwargs)
 
@@ -55,7 +54,7 @@ class BasicPtychoDataset(CDataset):
     def to_cxi(self, cxi_file):
         """Saves out a BasicPtychoDataset as a .cxi file"""
 
-        super(BasicPtychoDataset,self).to_cxi(cxi_file)
+        super().to_cxi(cxi_file)
         cdtdata.add_data(cxi_file, self.patterns, axes=self.axes)
         cdtdata.add_ptycho_translations(cxi_file, self.translations)
 
@@ -63,6 +62,6 @@ class BasicPtychoDataset(CDataset):
     def inspect(self):
         """Plots a random diffraction pattern"""
 
-        index = np.random.randint(len(self))
+        index = t.randint(len(self), (1,))[0]
         plt.figure()
         plt.imshow(self.patterns[index,:,:].cpu().numpy())

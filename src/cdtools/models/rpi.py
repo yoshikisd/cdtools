@@ -53,6 +53,8 @@ class RPI(CDIModel):
             obj_support=None,
             oversampling=1,
             weight_matrix=False,
+            exponentiate_obj=False,
+            phase_only=False,
             propagation_distance=0,
             units='um',
             dtype=t.float32,
@@ -64,7 +66,7 @@ class RPI(CDIModel):
                          1j * t.ones([1], dtype=dtype)).dtype
         
         self.register_buffer('wavelength',
-                             t.tensor(wavelength, dtype=dtype))
+                             t.as_tensor(wavelength, dtype=dtype))
         self.store_detector_geometry(detector_geometry,
                                      dtype=dtype)
 
@@ -73,9 +75,9 @@ class RPI(CDIModel):
         # used a bandlimiting constraint and had a larger basis, the user is
         # expected to upsample it explicitly before doing RPI.
         self.register_buffer('probe_basis',
-                             t.tensor(probe_basis, dtype=dtype))
+                             t.as_tensor(probe_basis, dtype=dtype))
 
-        scale_factor = t.tensor([probe.shape[-1]/obj_guess.shape[-1],
+        scale_factor = t.as_tensor([probe.shape[-1]/obj_guess.shape[-1],
                                  probe.shape[-2]/obj_guess.shape[-2]])
         self.register_buffer('obj_basis',
                              (self.probe_basis * scale_factor).to(dtype=dtype))
@@ -84,7 +86,7 @@ class RPI(CDIModel):
             self.saturation = None
         else:
             self.register_buffer('saturation',
-                                 t.tensor(saturation, dtype=dtype))
+                                 t.as_tensor(saturation, dtype=dtype))
 
         # not sure how to make this a buffer, or if I have to
         self.units = units
@@ -93,19 +95,26 @@ class RPI(CDIModel):
             self.mask = None
         else:
             self.register_buffer('mask',
-                                 t.tensor(mask, dtype=t.bool))
+                                 t.as_tensor(mask, dtype=t.bool))
 
-        self.register_buffer('probe', t.tensor(probe, dtype=complex_dtype))
+        self.register_buffer('probe', t.as_tensor(probe, dtype=complex_dtype))
+
+
+        self.register_buffer('exponentiate_obj',
+                             t.as_tensor(exponentiate_obj, dtype=bool))
+
+        self.register_buffer('phase_only',
+                             t.as_tensor(phase_only, dtype=bool))
 
         # We always use multi-modes to store the object, so we convert it
         # if we just get a single 2D array as an input
         if obj_guess.dim() == 2:
             obj_guess = obj_guess[None, :, :]
         
-        self.obj = t.nn.Parameter(t.tensor(obj_guess, dtype=complex_dtype))
-        
+        self.obj = t.nn.Parameter(t.as_tensor(obj_guess, dtype=complex_dtype))
+
         self.weights = t.nn.Parameter(
-            t.eye(probe.shape[0], dtype=complex_dtype)* 10)
+            t.eye(probe.shape[0], dtype=complex_dtype))
 
         if not weight_matrix:
             self.weights.requires_grad=False
@@ -115,40 +124,26 @@ class RPI(CDIModel):
                                        dtype=dtype)
 
         self.register_buffer('background',
-                             t.tensor(background, dtype=t.float32))
+                             t.as_tensor(background, dtype=t.float32))
 
         if obj_support is None:
             obj_support = t.ones_like(self.obj[0, ...], dtype=int)
 
         self.register_buffer('obj_support',
-                             t.tensor(obj_support, dtype=int))
+                             t.as_tensor(obj_support, dtype=int))
         
         self.obj.data = self.obj * self.obj_support[None, ...]
         
         self.register_buffer('oversampling',
-                             t.tensor(oversampling, dtype=int))
+                             t.as_tensor(oversampling, dtype=int))
 
         self.register_buffer('propagation_distance',
-                             t.tensor(propagation_distance, dtype=dtype))
+                             t.as_tensor(propagation_distance, dtype=dtype))
 
         # The propagation direction of the probe. For now it's fixed,
         # but perhaps it would need to be updated in the future
         self.register_buffer('prop_dir',
-                             t.tensor([0, 0, 1], dtype=dtype))
-
-        # This propagator should be able to be multiplied by the propagation
-        # distance each time to get a propagator
-        #universal_propagator = t.angle(ggasp(
-        #    self.probe.shape[-2:],
-        #    self.probe_basis, self.wavelength,
-        #    t.tensor([0, 0, self.wavelength/(2*np.pi)], dtype=dtype),
-        #    propagation_vector=self.prop_dir,
-        #    dtype=complex_dtype,
-        #    propagate_along_offset=True))
-        
-        # TODO: probably doesn't support non-float-32 dtypes
-        #self.register_buffer('universal_propagator',
-        #                     universal_propagator)
+                             t.as_tensor([0, 0, 1], dtype=dtype))
 
 
     @classmethod
@@ -165,6 +160,8 @@ class RPI(CDIModel):
             oversampling=1,
             initialization='random',
             weight_matrix=False,
+            exponentiate_obj=False,
+            phase_only=False,
             probe_threshold=0,
             dtype=t.float32,
     ):
@@ -218,7 +215,7 @@ class RPI(CDIModel):
            and dataset.background is not None:
             background = t.sqrt(dataset.background)
         elif background is not None:
-            background = t.sqrt(t.Tensor(background).to(dtype=t.float32))
+            background = t.sqrt(t.as_tensor(background).to(dtype=t.float32))
 
         det_geo = dataset.detector_geometry
 
@@ -253,7 +250,10 @@ class RPI(CDIModel):
                          probe, dummy_init_obj, 
                          background=background, mask=mask,
                          saturation=saturation,
-                         obj_support=obj_support, oversampling=oversampling,
+                         obj_support=obj_support,
+                         oversampling=oversampling,
+                         exponentiate_obj=exponentiate_obj,
+                         phase_only=phase_only,
                          weight_matrix=weight_matrix)
 
         # I don't love this pattern, where I do the "real" obj initialization
@@ -263,6 +263,13 @@ class RPI(CDIModel):
         # is a better pattern for doing this.
         rpi_object.init_obj(initialization,
                             pattern=dataset.patterns[0])
+
+        if exponentiate_obj:
+            rpi_object.obj.data = -1j * t.log(rpi_object.obj.data)
+        
+        if phase_only:
+            rpi_object.obj.data.imag[:] = 0
+
         
         return rpi_object
 
@@ -273,6 +280,8 @@ class RPI(CDIModel):
             obj_size=None,
             n_modes=1,
             saturation=None, # TODO can we get this from the calibration?
+            exponentiate_obj=False,
+            phase_only=False,
             initialization='random',
             dtype=t.float32
     ):
@@ -316,10 +325,18 @@ class RPI(CDIModel):
             dummy_init_obj,
             background=background,
             mask=mask,
+            exponentiate_obj=exponentiate_obj,
+            phase_only=phase_only,
         )
 
         rpi_object.init_obj(initialization)
         
+        if exponentiate_obj:
+            rpi_object.obj.data = -1j * t.log(rpi_object.obj.data)
+
+        if phase_only:
+            rpi_object.obj.data.imag[:] = 0
+
         return rpi_object
 
     
@@ -443,20 +460,28 @@ class RPI(CDIModel):
 
         # Mix the probes with the weight matrix
         prs = t.sum(self.weights[..., None, None] * self.probe, axis=-3)
+
+        if self.exponentiate_obj:
+            if self.phase_only:
+                obj = t.exp(1j*self.obj.real)
+            else:
+                obj = t.exp(1j*self.obj)
+        else:
+            obj = self.obj
+
         
         for i in range(self.probe.shape[0]):
             pr = prs[i]
             # Here we have a 3D probe (one single mode)
             # and a 4D object (multiple modes mixing incoherently)
             exit_waves = RPI_interaction(pr,
-                                         self.obj_support * self.obj)
+                                         self.obj_support * obj)
                 
             all_exit_waves.append(exit_waves)
 
         # This creates a bunch of modes generated from all possible combos
         # of the probe and object modes all strung out along the first index
         output = t.cat(all_exit_waves)
-        
         # If we have multiple indexes input, we unsqueeze and repeat the stack
         # of wavefields enough times to simulate each requested index. This
         # seems silly, but it enables (for example) one to do a reconstruction
@@ -484,11 +509,12 @@ class RPI(CDIModel):
         # Here I'm taking advantage of an undocumented feature in the
         # incoherent_sum measurement function where it will work with
         # a 4D wavefield array as well as a 5D array.
-        m = tools.measurements.quadratic_background(wavefields,
-                            self.background,
-                            measurement=tools.measurements.incoherent_sum,
-                            saturation=self.saturation,
-                            oversampling=self.oversampling)
+        m = tools.measurements.quadratic_background(
+            wavefields,
+            self.background,
+            measurement=tools.measurements.incoherent_sum,
+            saturation=self.saturation,
+            oversampling=self.oversampling)
         return m
     
     def loss(self, sim_data, real_data, mask=None):
@@ -510,20 +536,35 @@ class RPI(CDIModel):
          lambda self, fig: p.plot_amplitude(
              np.sqrt(np.sum((t.abs(t.sum(self.weights[..., None, None].detach() * self.probe, axis=-3))**2).cpu().numpy(),axis=0)),
              fig=fig, basis=self.probe_basis)),
-        ('Dominant Object Amplitude', 
-         lambda self, fig: p.plot_amplitude(self.obj[0], fig=fig,
-                                            basis=self.obj_basis)),
-        ('Dominant Object Phase',
-         lambda self, fig: p.plot_phase(self.obj[0], fig=fig,
-                                        basis=self.obj_basis)),
-        ('Subdominant Object Amplitude',
-         lambda self, fig: p.plot_amplitude(self.obj[1], fig=fig,
-                                            basis=self.obj_basis),
-         lambda self: len(self.obj) >=2),
-        ('Subdominant Object Phase',
-         lambda self, fig: p.plot_phase(self.obj[1], fig=fig,
-                                        basis=self.obj_basis),
-         lambda self: len(self.obj) >=2)
+        ('Object Amplitude',
+         lambda self, fig: p.plot_amplitude(
+             self.obj,
+             fig=fig,
+             basis=self.obj_basis,
+             units=self.units),
+         lambda self: not self.exponentiate_obj),
+        ('Object Phase',
+         lambda self, fig: p.plot_phase(
+             self.obj,
+             fig=fig,
+             basis=self.obj_basis,
+             units=self.units),
+         lambda self: not self.exponentiate_obj),
+        ('Real Part of T', 
+         lambda self, fig: p.plot_real(
+             self.obj,
+             fig=fig,
+             basis=self.obj_basis,
+             units=self.units,
+             cmap='cividis'),
+         lambda self: self.exponentiate_obj),
+        ('Imaginary Part of T',
+         lambda self, fig: p.plot_imag(
+             self.obj,
+             fig=fig,
+             basis=self.obj_basis,
+             units=self.units),
+         lambda self: self.exponentiate_obj),
     ]
 
 

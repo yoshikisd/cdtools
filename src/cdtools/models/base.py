@@ -39,7 +39,6 @@ import queue
 import time
 from scipy import io
 from contextlib import contextmanager
-from .complex_lbfgs import MyLBFGS
 from cdtools.tools.data import nested_dict_to_h5, h5_to_nested_dict, nested_dict_to_numpy, nested_dict_to_torch
 
 __all__ = ['CDIModel']
@@ -118,18 +117,18 @@ class CDIModel(t.nn.Module):
             The datatype to convert the values to before registering
         """
         self.register_buffer('det_basis',
-                             t.tensor(detector_geometry['basis'],
+                             t.as_tensor(detector_geometry['basis'],
                                       dtype=dtype))
         
         if 'distance' in detector_geometry \
            and detector_geometry['distance'] is not None:                
             self.register_buffer('det_distance',
-                                 t.tensor(detector_geometry['distance'],
+                                 t.as_tensor(detector_geometry['distance'],
                                           dtype=dtype))
         if 'corner' in detector_geometry \
            and detector_geometry['corner'] is not None:
             self.register_buffer('det_corner',
-                                 t.tensor(detector_geometry['corner'],
+                                 t.as_tensor(detector_geometry['corner'],
                                           dtype=dtype))
 
     def get_detector_geometry(self):
@@ -629,8 +628,6 @@ class CDIModel(t.nn.Module):
         optimizer = t.optim.LBFGS(self.parameters(),
                                   lr = lr, history_size=history_size,
                                   line_search_fn=line_search_fn)
-        #optimizer = MyLBFGS(self.parameters(),
-        #                    lr = lr, history_size=history_size)
 
         return self.AD_optimize(iterations, data_loader, optimizer,
                                 regularization_factor=regularization_factor,
