@@ -9,6 +9,7 @@ data has been stored in numpy arrays.
 import torch as t
 import numpy as np
 from cdtools.tools import image_processing as ip
+import cdtools
 from scipy import linalg as sla
 from scipy import special
 from scipy import optimize as opt
@@ -1338,23 +1339,21 @@ def standardize_reconstruction_pair(
         obj_2, probe_2 = remove_phase_ramp(
             half_2['obj'], window, probe=half_2['probe'])
 
+    # TODO weights are not included
     if correct_amplitude_exponent:
-        obj_1, probe_1, weights_1 = remove_amplitude_exponent(
+        obj_1, probe_1 = remove_amplitude_exponent(
             obj_1, window, probe=probe_1,
-            weights=half_1['weights'],
-            basis=half_1['basis'],
+            basis=half_1['obj_basis'],
             translations=half_1['translations'])
-        obj_2, probe_2, weights_2 = remove_amplitude_exponent(
+        obj_2, probe_2 = remove_amplitude_exponent(
             obj_2, window, probe=probe_2,
-            weights=half_2['weights'],
-            basis=half_2['basis'],
+            basis=half_2['obj_basis'],
             translations=half_2['translations'])
 
     
     if correct_phase_offset:
         obj_1 = np.exp(-1j* np.angle(np.sum(obj_1[window]))) * obj_1
         obj_2 = np.exp(-1j* np.angle(np.sum(obj_2[window]))) * obj_2
-
 
     # Todo update the translations to account for the determined shift
     shift = ip.find_shift(
@@ -1367,6 +1366,7 @@ def standardize_reconstruction_pair(
         t.as_tensor(probe_1[0]),
         t.as_tensor(probe_2[0]),
     )
+    
     for idx in range(probe_2.shape[0]):
         probe_2[idx] = ip.sinc_subpixel_shift(
             t.as_tensor(probe_2[idx]), probe_shift).numpy()
@@ -1388,9 +1388,16 @@ def standardize_reconstruction_pair(
         limit=frc_limit,
     )
 
+
+    probe_1_intensity = np.sum(np.abs(probe_1)**2)
+    probe_2_intensity = np.sum(np.abs(probe_2)**2)
+
+    probe_nmse = 1 - (calc_fidelity(probe_1, probe_2)
+                      / (probe_1_intensity * probe_2_intensity))
+    
     probe_nrms_error = calc_generalized_rms_error(
-        probe_1,
-        probe_2,
+        probe_1[0:],
+        probe_2[0:],
         normalize=True
     )
     
@@ -1420,6 +1427,7 @@ def standardize_reconstruction_pair(
         'probe_frc': probe_frc,
         'probe_frc_threshold': probe_frc_threshold,
         'probe_nrms_error': probe_nrms_error,
+        'probe_nmse': probe_nmse,
     }
     
     return results
