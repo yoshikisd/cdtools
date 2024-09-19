@@ -13,6 +13,7 @@ import cdtools
 from scipy import linalg as sla
 from scipy import special
 from scipy import optimize as opt
+from scipy import spatial
 
 __all__ = [
     'product_svd',
@@ -31,6 +32,7 @@ __all__ = [
     'remove_amplitude_exponent',
     'standardize_reconstruction_set',
     'standardize_reconstruction_pair',
+    'calc_spectral_info',
 ]
 
 
@@ -1432,3 +1434,82 @@ def standardize_reconstruction_pair(
     
     return results
 
+
+def calc_spectral_info(dataset, nbins=50):
+    """Makes a properly normalized sum diffraction pattern
+
+    This returns a scaled version of sum of all the diffraction patterns
+    within the dataset. The scaling is defined so that the total intensity
+    in the final image is equal to the intensity arising from a region of
+    the scan pattern whose area matches one detector conjugate field of
+    view.
+
+    Parameters
+    ----------
+    dataset : Ptycho2DDataset
+        A ptychography dataset to use
+    nbins : int
+        The number of bins to use for the SNR curve
+    
+    Returns
+    -------
+    spectrum : t.tensor
+        An image of the spectral signal rate
+    freqs : t.tensor
+        The frequencies at which the SSNR is estimated
+    SSNR : t.tensor
+        The estimated SSNR
+    
+    """
+
+    scan_hull = spatial.ConvexHull(dataset.translations[:,:2].cpu().numpy())
+    
+    scan_area = scan_hull.volume
+
+    ewg = cdtools.tools.initializers.exit_wave_geometry
+    obj_basis = ewg(
+        dataset.detector_geometry['basis'],
+        dataset[0][1].shape,
+        dataset.wavelength,
+        dataset.detector_geometry['distance'],
+    )
+
+    det_conj_fov_area = np.linalg.norm(
+        np.cross(obj_basis[:,0]*dataset.patterns.shape[-2],
+                 obj_basis[:,1]*dataset.patterns.shape[-1])
+    )
+    scale_factor = det_conj_fov_area / scan_area
+
+
+    mask = dataset.mask.cpu().numpy().astype(int)
+    sum_pattern = dataset.mask * t.sum(dataset.patterns, dim=0) * scale_factor
+    sum_pattern = sum_pattern.cpu().numpy()
+
+    # TODO this assumes orthogonal axes
+    pix_sizes = np.linalg.norm(obj_basis, axis=0)
+    i_freqs = np.fft.fftshift(np.fft.fftfreq(
+        sum_pattern.shape[0],d=pix_sizes[0]))
+    j_freqs = np.fft.fftshift(np.fft.fftfreq(
+        sum_pattern.shape[1],d=pix_sizes[1]))
+
+    
+    Js,Is = np.meshgrid(j_freqs,i_freqs)
+    Rs = np.sqrt(Is**2+Js**2)
+    max_i = np.max(i_freqs)
+    max_j = np.max(j_freqs)
+    frc_range = [0, max(max_i,max_j)]
+
+    sum_spectrum, frc_bins = np.histogram(Rs, bins=nbins, range=frc_range,
+                                          weights=sum_pattern)
+    sum_spectrum_sq, frc_bins = np.histogram(Rs, bins=nbins, range=frc_range,
+                                             weights=sum_pattern**2)
+
+    
+    n_pix, frc_bins = np.histogram(Rs, bins=nbins, range=frc_range,
+                                   weights=mask)
+    mean_spectrum = sum_spectrum / n_pix
+
+    pattern_snr = sum_spectrum_sq / sum_spectrum
+
+    return sum_pattern, frc_bins[:-1], mean_spectrum
+        

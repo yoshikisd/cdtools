@@ -25,6 +25,7 @@ class FancyPtycho(CDIModel):
                  background=None,
                  probe_basis=None,
                  translation_offsets=None,
+                 probe_fourier_shifts=None,
                  mask=None,
                  weights=None,
                  translation_scale=1,
@@ -134,6 +135,13 @@ class FancyPtycho(CDIModel):
             t_o = t.as_tensor(translation_offsets, dtype=t.float32)
             t_o = t_o / translation_scale
             self.translation_offsets = t.nn.Parameter(t_o)
+            
+        if probe_fourier_shifts is None:
+            self.probe_fourier_shifts = None
+        else:
+            self.probe_fourier_shifts = t.nn.Parameter(
+                t.as_tensor(translation_offsets, dtype=t.float32)
+            )
 
         self.register_buffer('translation_scale',
                              t.as_tensor(translation_scale, dtype=dtype))
@@ -152,7 +160,7 @@ class FancyPtycho(CDIModel):
             t.as_tensor(simulate_probe_translation, dtype=bool)
         )
 
-        if simulate_probe_translation:
+        if simulate_probe_translation or (self.probe_fourier_shifts is not None):
             Is = t.arange(self.probe.shape[-2], dtype=dtype)
             Js = t.arange(self.probe.shape[-1], dtype=dtype)
             Is, Js = t.meshgrid(Is/t.max(Is), Js/t.max(Js))
@@ -195,6 +203,7 @@ class FancyPtycho(CDIModel):
                      fourier_probe=False,
                      loss='amplitude mse',
                      units='um',
+                     allow_probe_fourier_shifts=False,
                      simulate_probe_translation=False,
                      simulate_finite_pixels=False,
                      exponentiate_obj=False,
@@ -327,6 +336,11 @@ class FancyPtycho(CDIModel):
 
         translation_offsets = 0 * (t.rand((len(dataset), 2)) - 0.5)
 
+        if allow_probe_fourier_shifts:
+            probe_fourier_shifts = t.zeros((len(dataset), 2), dtype=t.float32)
+        else:
+            probe_fourier_shifts = None
+
         if dm_rank is not None and dm_rank != 0:
             if dm_rank > n_modes:
                 raise KeyError('Density matrix rank cannot be greater than the number of modes. Use dm_rank = -1 to use a full rank matrix.')
@@ -380,6 +394,7 @@ class FancyPtycho(CDIModel):
                    fourier_probe=fourier_probe,
                    oversampling=oversampling,
                    loss=loss, units=units,
+                   probe_fourier_shifts=probe_fourier_shifts,
                    simulate_probe_translation=simulate_probe_translation,
                    simulate_finite_pixels=simulate_finite_pixels,
                    phase_only=phase_only,
@@ -431,12 +446,19 @@ class FancyPtycho(CDIModel):
             # Maybe this can be done with a matmul now?
             prs = t.sum(Ws[..., None, None] * basis_prs, axis=-3)
         
-        if self.simulate_probe_translation:
-            det_pix_trans = tools.interactions.translations_to_pixel(
+        if self.simulate_probe_translation or (self.probe_fourier_shifts is not None):
+            if self.probe_fourier_shifts is not None:
+                det_pix_trans = self.probe_fourier_shifts[index]
+            else:
+                det_pix_trans = t.zeros_like(translations)
+
+            if self.simulate_probe_translation:
+                det_pix_trans = det_pix_trans +  tools.interactions.translations_to_pixel(
                     self.det_basis,
                     translations,
                     surface_normal=self.surface_normal)
-            
+
+                
             probe_masks = t.exp(1j* (det_pix_trans[:,0,None,None] *
                                      self.I_phase[None,...] +
                                      det_pix_trans[:,1,None,None] *
