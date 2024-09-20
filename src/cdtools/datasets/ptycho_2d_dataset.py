@@ -7,6 +7,8 @@ from cdtools.datasets import CDataset
 from cdtools.datasets.random_selection import random_selection
 from cdtools.tools import data as cdtdata
 from cdtools.tools import plotting
+from matplotlib import pyplot as plt
+from cdtools.tools import analysis
 from copy import deepcopy
 
 __all__ = ['Ptycho2DDataset']
@@ -207,7 +209,13 @@ class Ptycho2DDataset(CDataset):
             cdtdata.add_shot_to_shot_info(cxi_file, self.intensities, 'intensities')
 
 
-    def inspect(self, logarithmic=True, units='um', log_offset=1):
+    def inspect(
+            self,
+            logarithmic=True,
+            units='um',
+            log_offset=1,
+            plot_mean_pattern=True
+    ):
         """Launches an interactive plot for perusing the data
 
         This launches an interactive plotting tool in matplotlib that
@@ -248,14 +256,39 @@ class Ptycho2DDataset(CDataset):
         # nanomap_values = (self.mask * self.patterns).sum(dim=(1,2)).detach().cpu().numpy()
     
         if logarithmic:
-            cbar_title = ('Log Base 10 of Diffraction Intensity + %0.2f'
-                          % log_offset)
+            cbar_title = f'Log Base 10 of Intensity + {log_offset}'
         else:
-            cbar_title = 'Diffraction Intensity'
-        
+            cbar_title = 'Intensity'
+
+        if plot_mean_pattern:
+            self.plot_mean_pattern(log_offset=log_offset)
+            
         return plotting.plot_nanomap_with_images(self.translations.detach().cpu(), get_images, values=nanomap_values, nanomap_units=units, image_title='Diffraction Pattern', image_colorbar_title=cbar_title)
 
+    def plot_mean_pattern(self, log_offset=1):
+        """Plots the mean diffraction pattern across the dataset
 
+        The output is normalized so that the summed intensity on the
+        detector is equal to the total intensity of light that passed
+        through the sample within each detector conjugate field of view.
+
+        The plot is plotted as log base 10 of the output plus log_offset.
+        By default, log_offset is set equal to 1, which is a good level for
+        shot-noise limited data captured in units of photons. More
+        generally, log_offset should be set roughly at the background noise
+        level.
+        
+        """
+        mean_pattern, bins, ssnr = analysis.calc_spectral_info(self)
+        cmap_label = f'Log Base 10 of Intensity + {log_offset}'
+        title = 'Scaled mean diffraction pattern'
+        return plotting.plot_real(
+            t.log10(t.as_tensor(mean_pattern + log_offset)),
+            cmap_label=cmap_label,
+            title=title,
+        )
+        
+        
     def split(self):
         """Splits a dataset into two pseudorandomly selected sub-datasets
         """
