@@ -4,7 +4,7 @@ The datasets contained in the following three files:
 - Optical_ptycho_incoherent.pickle
 - lab_ptycho_data.cxi
 
-Are made available under a CC BY 4.0 License, defined here: https://creativecommons.org/licenses/by/4.0/
+were collected by Abraham Levitan, abraham.levitan@psi.ch. Copyright (2023) is held by Massachusetts Institute of Technology. All three datasets are made available under a CC BY 4.0 License, defined at https://creativecommons.org/licenses/by/4.0/.
 
 The dataset contained in the file:
 
