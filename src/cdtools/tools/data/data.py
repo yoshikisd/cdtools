@@ -485,9 +485,9 @@ def add_entry_info(cxi_file, metadata):
     # included in case the cxi spec becomes more permissive
     for key, value in metadata.items():
         if isinstance(value,(str,bytes)):
-            cxi_file['entry_1'][key] = np.string_(value)
+            cxi_file['entry_1'][key] = np.bytes_(value)
         elif isinstance(value, datetime.datetime):
-            cxi_file['entry_1'][key] = np.string_(value.isoformat())
+            cxi_file['entry_1'][key] = np.bytes_(value.isoformat())
         elif isinstance(value, numbers.Number):
             cxi_file['entry_1'][key] = value
         elif isinstance(value, (np.ndarray,list,tuple)):
@@ -525,9 +525,9 @@ def add_sample_info(cxi_file, metadata):
         if key == 'orientation':
             continue # this is a special case
         if isinstance(value,(str,bytes)):
-            s1[key] = np.string_(value)
+            s1[key] = np.bytes_(value)
         elif isinstance(value, datetime.datetime):
-            s1[key] = np.string_(value.isoformat())
+            s1[key] = np.bytes_(value.isoformat())
         elif isinstance(value, numbers.Number):
             s1[key] = value
         elif isinstance(value, (np.ndarray,list,tuple)):
@@ -701,7 +701,7 @@ def add_data(cxi_file, data, axes=None, compression='gzip',
             axes_str = ':'.join(axes)
         else:
             axes_str = str(axes)
-        det1['data'].attrs['axes'] = np.string_(axes_str)
+        det1['data'].attrs['axes'] = np.bytes_(axes_str)
 
         
 def add_shot_to_shot_info(cxi_file, data, field_name):
