@@ -706,7 +706,7 @@ class CDIModel(t.nn.Module):
             epoch = len(self.loss_history)
             dt = self.latest_iteration_time
             loss = self.loss_history[-1]
-            msg = f'Epoch {epoch} completed in {dt:0.2f} s with loss {loss:.5e}'
+            msg = f'Epoch {epoch:3d} completed in {dt:0.2f} s with loss {loss:.5e}'
         else:
             msg = 'No reconstruction iterations performed yet!'
 
