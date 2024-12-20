@@ -878,3 +878,201 @@ class FancyPtycho(CDIModel):
         }
 
         return {**base_results, **results}
+
+class FancyPtychoMultilayer(FancyPtycho):
+    """ A subclass of FancyPtycho modified to handle the appearance of a
+    rocking-curve produced by a multilayer Bragg mirror.
+
+    This model should largely be identical to FancyPtycho but utilizes 3
+    parameters: the object (obj_guess), probe (probe_guess), and a signal
+    representing the contribution from the multilayer (ml_guess)
+
+    The parameter ml_guess has been added in the  __init__ and is, by default,
+    defined as None. If the ml_guess is still None, FancyPtychoMultilayer
+    should behave as if it was just FancyPtycho. If, however, ml_guess is
+    defined as a tensor, then the tensor will be added as a t.nn.Parameter.
+    """
+
+    def __init__(self,
+                 wavelength,
+                 detector_geometry,
+                 obj_basis,
+                 probe_guess,
+                 obj_guess,
+                 ml_guess = None,
+                 surface_normal=t.tensor([0., 0., 1.], dtype=t.float32),
+                 min_translation=t.tensor([0, 0], dtype=t.float32),
+                 background=None,
+                 probe_basis=None,
+                 translation_offsets=None,
+                 probe_fourier_shifts=None,
+                 mask=None,
+                 weights=None,
+                 translation_scale=1,
+                 saturation=None,
+                 probe_support=None,
+                 oversampling=1,
+                 fourier_probe=False,
+                 loss='amplitude mse',
+                 units='um',
+                 simulate_probe_translation=False,
+                 simulate_finite_pixels=False,
+                 exponentiate_obj=False,
+                 phase_only=False,
+                 dtype=t.float32,
+                 obj_view_crop=0
+                 ):
+        """ Initializes the class FancyPtychoMultilayer.
+
+        The initialization done here is nearly identical to the one performed
+        in FancyPtycho. The main exception being...
+        - ...the addition of ml_guess as a parameter, representing the
+            signal contribution
+        - ...the last few lines of code which adds ml_guess as a
+            t.nn.Parameter if it is not None
+
+        """
+        # Call FancyPtycho's __init__ method
+        super(FancyPtychoMultilayer, self).__init__(wavelength=wavelength,
+                                                    detector_geometry=detector_geometry,
+                                                    obj_basis=obj_basis,
+                                                    probe_guess=probe_guess,
+                                                    obj_guess=obj_guess,
+                                                    surface_normal=surface_normal,
+                                                    min_translation=min_translation,
+                                                    background=background,
+                                                    probe_basis=probe_basis,
+                                                    translation_offsets=translation_offsets,
+                                                    probe_fourier_shifts=probe_fourier_shifts,
+                                                    mask=mask,
+                                                    weights=weights,
+                                                    translation_scale=translation_scale,
+                                                    saturation=saturation,
+                                                    probe_support=probe_support,
+                                                    oversampling=oversampling,
+                                                    fourier_probe=fourier_probe,
+                                                    loss=loss,
+                                                    units=units,
+                                                    simulate_probe_translation=simulate_probe_translation,
+                                                    simulate_finite_pixels=simulate_finite_pixels,
+                                                    exponentiate_obj=exponentiate_obj,
+                                                    phase_only=phase_only,
+                                                    dtype=dtype,
+                                                    obj_view_crop=obj_view_crop)
+
+        # Store the representation of the multilayer signal
+        # TODO: Double check to make sure that the None case works
+        if ml_guess is not None:
+            ml_guess = t.as_tensor(ml_guess, dtype=t.complex64)
+        self.ml = ml_guess
+
+    @classmethod
+    def from_dataset(cls,
+                     dataset,
+                     probe_size=None,
+                     randomize_ang=0,
+                     n_modes=1,
+                     n_obj_modes=1,
+                     dm_rank=None,
+                     translation_scale=1,
+                     saturation=None,
+                     probe_support_radius=None,
+                     probe_fourier_crop=None,
+                     propagation_distance=None,
+                     scattering_mode=None,
+                     oversampling=1,
+                     fourier_probe=False,
+                     loss='amplitude mse',
+                     units='um',
+                     allow_probe_fourier_shifts=False,
+                     simulate_probe_translation=False,
+                     simulate_finite_pixels=False,
+                     exponentiate_obj=False,
+                     phase_only=False,
+                     multilayer=False,
+                     obj_view_crop=None,
+                     obj_padding=200,
+                     ):
+        """Creates a FancyPtychoMultilayer class from a dataset.
+
+        This function is similar to its counterpart in FancyPtycho with
+        the exception of its utilization of an additonal t.nn.Parameter
+        to represent the signal contribtution of the multilayer.
+
+        """
+        # Call the OG from_dataset method from FancyPtycho
+        super(FancyPtychoMultilayer,  cls).from_dataset(dataset=dataset,
+                                                        probe_size=probe_size,
+                                                        randomize_ang=randomize_ang,
+                                                        n_modes=n_modes,
+                                                        n_obj_modes=n_obj_modes,
+                                                        dm_rank=dm_rank,
+                                                        translation_scale=translation_scale,
+                                                        saturation=saturation,
+                                                        probe_support_radius=probe_support_radius,
+                                                        probe_fourier_crop=probe_fourier_crop,
+                                                        propagation_distance=propagation_distance,
+                                                        scattering_mode=scattering_mode,
+                                                        oversampling=oversampling,
+                                                        fourier_probe=fourier_probe,
+                                                        loss=loss,
+                                                        units=units,
+                                                        allow_probe_fourier_shifts=allow_probe_fourier_shifts,
+                                                        simulate_probe_translation=simulate_probe_translation,
+                                                        simulate_finite_pixels=simulate_finite_pixels,
+                                                        exponentiate_obj=exponentiate_obj,
+                                                        phase_only=phase_only,
+                                                        multilayer=multilayer,
+                                                        obj_view_crop=obj_view_crop,
+                                                        obj_padding=obj_padding)
+
+        
+
+        # Additional consideration for a multilayer:
+        # Assuming that the probe has been initialized as a SHARP style probe,
+        # we would like to remove the loud sinc signal.
+        if not multilayer:
+            # TODO: Check if we can do a regular ptycho reconstruction by setting ml_guess
+            #       to None while incorporating a multilayer into the interaction model
+            ml_guess = None
+        else:
+            if probe_size is not None:
+                # Throw an error if the beam is initialized as a gaussian; we're not
+                # considering this situation.
+                raise NotImplementedError(
+                    "Multilayer consideration is not supported for probes initialized as gaussians.")
+
+            # First, get the main probe mode in the far-field
+            # TODO: Generalize this to accept multiple probes
+            #probe_fft = tools.propagators.far_field(probe)[0].numpy()
+
+            # Grab a vertical line scan showing the sinc-pulse
+            # TODO: Make the determination of the vertical
+            #       line scan position automated. It's currently manual
+            #line_scan = np.mean(probe_fft[:, 150:160], axis=1)
+            #intensity_scan = np.abs(line_scan)
+
+            # Fit a sinc function
+            # TODO: Before this step, use shrinkwrap (or somethin) to create a mask
+            #       out of the annulus.
+            # Question: What would be the optimal way to handle the phase here?
+            """ Note to self: sinc does not nicely describe the multilayer
+            def sinc(x, a, b, c, d):
+                return a * np.sinc(b * (x - c)) + d
+            """
+
+            # But, where a sinc fails, maybe an interference function
+            # (or a bit from it) may work
+            #def custom_fn(x, a, b):
+            #    return (np.sin(a * (x - b)) ** 2) / (np.sin(x - b) ** 2)
+
+            #x_data = np.linspace(0, intensity_scan.shape[0],
+            #                     intensity_scan.shape[0])
+            #k = intensity_scan.argmax()
+            #p0 = [intensity_scan[k], 20, x_data[k], intensity_scan.mean()]
+
+            #params, _ = curve_fit(sinc, x_data, intensity_scan, p0=p0)
+
+            #line_scan = 1 + 1  # Here to trigger a break-point
+
+        return cls
