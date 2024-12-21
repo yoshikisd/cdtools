@@ -398,3 +398,47 @@ class Ptycho2DDataset(CDataset):
                 self.background.unsqueeze(0).unsqueeze(0),
                 factor,
                 divisor_override=1)[0,0]
+
+
+    def crop_2D_translations(self, roi):
+        """Shrinks the range of translation positions that are analyzed
+        
+        This deletes all diffraction patterns associated with x- and 
+        y-translations that lie outside of a specified rectangular
+        region of interest. In essence, this operation crops the "relative 
+        displacement map" (shown in self.inspect()) down to the region of 
+        interest.
+
+        Parameters:
+        ----------
+        roi : tuple(float, float, float, float)
+            The translation-x and -y coordinates that define the rectangular 
+            region of interest as (in units of meters)
+            ('left-most x', 'right-most x', 'top-most y', 'bottom-most y').
+            Note that "left" and "up" are defined to be the positive-most
+            values of x and y, respectively. This is to have consistency with
+            the "relative displacement map" in self.inspect().
+        """
+        
+        # Convert the tuples to torch tensors
+        x_left, x_right, y_top, y_bottom = t.tensor(roi, dtype=t.float16)
+
+        # Create pointers to the x- and y-translation positions in
+        # self.translations
+        x = self.translations[:, 0]
+        y = self.translations[:, 1]
+
+        # Go look for all translation values that lie inside of the roi
+        # and store their indices. See the notes for "roi" under Parameters
+        # for why the signs used for "x" are flipped around.
+        inside_roi = (x <= x_left) & (x >= x_right) & (y >= y_bottom) & (y <= y_top)
+
+        # Throw a value error if inside_roi is empty
+        if not t.any(inside_roi):
+            raise ValueError('The roi does not contain any positions from the dataset '
+                             '(i.e., patterns and translations will be empty).'
+                             ' Please redefine the bounds of the roi.')
+
+        # Update patterns and translations
+        self.patterns = self.patterns[inside_roi]
+        self.translations = self.translations[inside_roi]
