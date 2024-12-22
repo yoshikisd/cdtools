@@ -79,6 +79,7 @@ class Bragg2DPtycho(CDIModel):
             lens=False,
             units='um',
             dtype=t.float32,
+            obj_view_crop=0,
     ):
 
         # We need the detector geometry
@@ -146,6 +147,19 @@ class Bragg2DPtycho(CDIModel):
         
         self.probe = t.nn.Parameter(probe_guess / self.probe_norm)
         self.obj = t.nn.Parameter(obj_guess)
+
+        # NOTE: I think it makes sense to protect against obj_view_crop
+        # being zero or below, because there is nothing else to show outside
+        # the object array. No reason to throw an error if, e.g., the user
+        # asks for a big padding which goes outside of the actual object array.
+        # Just show the full array.
+        print(obj_view_crop)
+        if obj_view_crop > 0:
+            self.obj_view_slice = np.s_[obj_view_crop:-obj_view_crop,
+                                        obj_view_crop:-obj_view_crop]
+        else:
+            self.obj_view_slice = np.s_[:,:]
+
 
         if probe_support is None:
             probe_support = t.ones_like(self.probe[0], dtype=t.bool)
@@ -241,6 +255,7 @@ class Bragg2DPtycho(CDIModel):
             correct_tilt=True,
             lens=False,
             obj_padding=200,
+            obj_view_crop=None,
             units='um',
     ):
         wavelength = dataset.wavelength
@@ -353,9 +368,16 @@ class Bragg2DPtycho(CDIModel):
         probe_stack = [0.01 * probe_max * t.rand(probe.shape,dtype=probe.dtype) for i in range(n_modes - 1)]
         probe = t.stack([probe,] + probe_stack)
 
-
         obj = t.exp(1j*(randomize_ang * (t.rand(obj_size)-0.5)))
-                              
+
+        pfc = (probe_fourier_crop if probe_fourier_crop else 0)
+        if obj_view_crop is None:
+            obj_view_crop = min(probe.shape[-2], probe.shape[-1]) // 2 + pfc
+        if obj_view_crop < 0:
+            obj_view_crop += min(probe.shape[-2], probe.shape[-1]) // 2 + pfc
+
+        obj_view_crop += obj_padding
+        
         det_geo = dataset.detector_geometry
 
         translation_offsets = 0 * (t.rand((len(dataset),2)) - 0.5)
@@ -401,6 +423,7 @@ class Bragg2DPtycho(CDIModel):
                    propagate_probe=propagate_probe,
                    correct_tilt=correct_tilt,
                    lens=lens,
+                   obj_view_crop=obj_view_crop,
                    units=units,
                    )
                    
@@ -566,21 +589,21 @@ class Bragg2DPtycho(CDIModel):
          )),
         ('Object Amplitude, Surface Normal View', 
          lambda self, fig: p.plot_amplitude(
-             self.obj,
+             self.obj[self.obj_view_slice],
              fig=fig,
              basis=self.obj_basis,
              units=self.units,
          )),
         ('Object Phase, Surface Normal View',
          lambda self, fig: p.plot_phase(
-             self.obj,
+             self.obj[self.obj_view_slice],
              fig=fig,
              basis=self.obj_basis,
              units=self.units,
          )),
         ('Object Amplitude, Beam View', 
          lambda self, fig: p.plot_amplitude(
-             self.obj,
+             self.obj[self.obj_view_slice],
              fig=fig,
              basis=self.obj_basis,
              view_basis=beam_basis,
@@ -588,7 +611,7 @@ class Bragg2DPtycho(CDIModel):
          )),
         ('Object Phase, Beam View',
          lambda self, fig: p.plot_phase(
-             self.obj,
+             self.obj[self.obj_view_slice],
              fig=fig,
              basis=self.obj_basis,
              view_basis=beam_basis,
@@ -596,7 +619,7 @@ class Bragg2DPtycho(CDIModel):
          )),
         ('Object Amplitude, Detector View', 
          lambda self, fig: p.plot_amplitude(
-             self.obj,
+             self.obj[self.obj_view_slice],
              fig=fig,
              basis=self.obj_basis,
              view_basis=self.det_basis,
@@ -604,7 +627,7 @@ class Bragg2DPtycho(CDIModel):
          )),
         ('Object Phase, Detector View',
          lambda self, fig: p.plot_phase(
-             self.obj,
+             self.obj[self.obj_view_slice],
              fig=fig,
              basis=self.obj_basis,
              view_basis=self.det_basis,

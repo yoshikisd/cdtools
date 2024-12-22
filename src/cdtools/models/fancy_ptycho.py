@@ -103,9 +103,16 @@ class FancyPtycho(CDIModel):
         self.probe = t.nn.Parameter(probe_guess / self.probe_norm)
         self.obj = t.nn.Parameter(obj_guess)
 
-
-        self.obj_view_slice = np.s_[obj_view_crop:-obj_view_crop,
-                                    obj_view_crop:-obj_view_crop]
+        # NOTE: I think it makes sense to protect against obj_view_crop
+        # being zero or below, because there is nothing else to show outside
+        # the object array. No reason to throw an error if, e.g., the user
+        # asks for a big padding which goes outside of the actual object array.
+        # Just show the full array.
+        if obj_view_crop > 0:
+            self.obj_view_slice = np.s_[obj_view_crop:-obj_view_crop,
+                                        obj_view_crop:-obj_view_crop]
+        else:
+            self.obj_view_slice = np.s_[:,:]
         
         # TODO: perhaps not working anymore for fourier cropped probes
         if background is None:
