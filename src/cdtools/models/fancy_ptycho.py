@@ -505,6 +505,7 @@ class FancyPtycho(CDIModel):
             shift_probe=True,
             multiple_modes=True,
             probe_support=self.probe_support)
+        
         return exit_waves
 
 
@@ -522,7 +523,7 @@ class FancyPtycho(CDIModel):
             self.background,
             measurement=tools.measurements.incoherent_sum,
             saturation=self.saturation,
-            oversampling=int(self.oversampling),
+            oversampling=self.oversampling,
             simulate_finite_pixels=self.simulate_finite_pixels,
         )
 

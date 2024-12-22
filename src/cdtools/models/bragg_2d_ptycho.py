@@ -153,7 +153,7 @@ class Bragg2DPtycho(CDIModel):
         # the object array. No reason to throw an error if, e.g., the user
         # asks for a big padding which goes outside of the actual object array.
         # Just show the full array.
-        print(obj_view_crop)
+
         if obj_view_crop > 0:
             self.obj_view_slice = np.s_[obj_view_crop:-obj_view_crop,
                                         obj_view_crop:-obj_view_crop]
@@ -169,8 +169,8 @@ class Bragg2DPtycho(CDIModel):
 
         if background is None:
             raise NotImplementedError('Issues with this due to probe fourier padding')
-            background = 1e-6 * t.ones(self.probe[0].shape,
-                                       dtype=t.float32)
+            shape = [s//oversampling for s in self.probe[0]]
+            background = 1e-6 * t.ones(shape, dtype=t.float32)
 
         self.background = t.nn.Parameter(background)
 
@@ -204,10 +204,11 @@ class Bragg2DPtycho(CDIModel):
                 tools.propagators.generate_high_NA_k_intensity_map(
                     self.obj_basis,
                     self.get_detector_geometry()['basis'] / oversampling,
-                    self.background.shape,
+                    [oversampling * d for d in self.background.shape],
                     self.get_detector_geometry()['distance'],
                     self.wavelength,dtype=t.float32,
                     lens=lens)
+
             self.register_buffer('k_map',
                                  t.as_tensor(k_map, dtype=dtype))
             self.register_buffer('intensity_map',
@@ -326,7 +327,7 @@ class Bragg2DPtycho(CDIModel):
 
 
         obj_size, min_translation = tools.initializers.calc_object_setup(
-            det_shape,
+            [s * oversampling for s in det_shape],
             pix_translations,
             padding=obj_padding,
         )
@@ -496,11 +497,13 @@ class Bragg2DPtycho(CDIModel):
 
     
     def measurement(self, wavefields):
-        return tools.measurements.quadratic_background(wavefields,
-                            self.background,
-                            measurement=tools.measurements.incoherent_sum,
-                            saturation=self.saturation,
-                            oversampling=self.oversampling)
+        return tools.measurements.quadratic_background(
+            wavefields,
+            self.background,
+            measurement=tools.measurements.incoherent_sum,
+            saturation=self.saturation,
+            oversampling=self.oversampling,
+        )
 
     
     def loss(self, sim_data, real_data, mask=None):
