@@ -5,7 +5,7 @@ import torch as t
 import h5py
 import datetime
 from copy import deepcopy
-
+import pytest
 
 #
 # We start by testing the CDataset base class
@@ -340,3 +340,55 @@ def test_Ptycho2DDataset_downsample(test_ptycho_cxis):
                 assert np.allclose(np.array(dataset.background.shape) // factor,
                                    np.array(copied_dataset.background.shape))
         
+
+def test_Ptycho2DDataset_crop_2D_translations(ptycho_cxi_1):
+    # Grab dataset
+    cxi, expected = ptycho_cxi_1
+    dataset = Ptycho2DDataset.from_cxi(cxi)
+    copied_dataset = deepcopy(dataset)
+
+    # Test 1: Complain when the the bounds of an ROI are correctly defined,
+    #   but it does not contain any sample positions inside of it. The 
+    #   translations in ptycho_cxi_1 ranges from 0m to -300m in both x and y 
+    #   (it looks like a line scan). We select an ROI at (0, -300) which should 
+    #   not contain any translation positions.
+    with pytest.raises(ValueError) as excinfo:
+        copied_dataset.crop_2D_translations(roi=(0,-5,-295,-300))
+    assert('(i.e., patterns and translations will be empty)') in str(excinfo.value)
+
+    # Test 2: Draw an ROI that's centered in the middle of the x/y translation range,
+    #   but complain because the bounds of the ROI are incorrectly defined
+    x_left, y_top = dataset.translations[10,:2]
+    x_right, y_bottom = dataset.translations[-11,:2]
+
+    with pytest.raises(ValueError) as excinfo:
+        copied_dataset.crop_2D_translations(roi=(x_right,x_left,y_bottom,y_top))
+    assert('(i.e., patterns and translations will be empty)') in str(excinfo.value)
+
+    # Test 3: Basically Test 2, but don't complain when the bounds are set correctly
+    copied_dataset.crop_2D_translations(roi=(x_left,x_right,y_top,y_bottom))
+
+    # Test 4: Make sure that the first and last x/y elements in dataset.translate
+    #   match x_left, x_right, y_top, and y_bottom
+    assert t.allclose(t.tensor([x_left, y_top]), copied_dataset.translations[0,:2])
+
+    assert t.allclose(t.tensor([x_right, y_bottom]), copied_dataset.translations[-1,:2])
+
+    # Test 5: Check if the shape of dataset.patterns and dataset.translate is correct
+    #   (designed to be 20 fewer rows here)
+    expected_patterns_shape = np.concatenate([[dataset.patterns.shape[0] - 20], 
+                                             dataset.patterns.shape[-2:]])
+    
+    expected_translations_shape = np.concatenate([[dataset.translations.shape[0] - 20], 
+                                                 dataset.translations.shape[-1:]])
+
+    assert np.allclose(np.array(copied_dataset.patterns.shape),
+                       expected_patterns_shape)
+    
+    assert np.allclose(np.array(copied_dataset.translations.shape),
+                       expected_translations_shape)
+    
+    # Test 6: Check if the contents of dataset.patterns and dataset.translate is correct
+    assert t.allclose(copied_dataset.patterns, dataset.patterns[10:-10,:])
+
+    assert t.allclose(copied_dataset.translations, dataset.translations[10:-10,:])
