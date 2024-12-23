@@ -371,11 +371,17 @@ class Bragg2DPtycho(CDIModel):
 
         obj = t.exp(1j*(randomize_ang * (t.rand(obj_size)-0.5)))
 
-        pfc = (probe_fourier_crop if probe_fourier_crop else 0)
+        pfc = (probe_fourier_crop if probe_fourier_crop else [0,0])
         if obj_view_crop is None:
-            obj_view_crop = min(probe.shape[-2], probe.shape[-1]) // 2 + pfc
+            obj_view_crop = min(
+                probe.shape[-2] // 2 + pfc[0],
+                probe.shape[-1] // 2 + pfc[1]
+            )
         if obj_view_crop < 0:
-            obj_view_crop += min(probe.shape[-2], probe.shape[-1]) // 2 + pfc
+            obj_view_crop += min(
+                probe.shape[-2] // 2 + pfc[0],
+                probe.shape[-1] // 2 + pfc[1]
+            )
 
         obj_view_crop += obj_padding
         
