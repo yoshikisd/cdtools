@@ -269,8 +269,11 @@ class Ptycho2DDataset(CDataset):
         """Plots the mean diffraction pattern across the dataset
 
         The output is normalized so that the summed intensity on the
-        detector is equal to the total intensity of light that passed
+        detector is roughly equal to the total intensity of light that passed
         through the sample within each detector conjugate field of view.
+
+        If the scan points are colinear (which causes issues for this
+        estimation), the mean pattern is displayed unscaled.
 
         The plot is plotted as log base 10 of the output plus log_offset.
         By default, log_offset is set equal to 1, which is a good level for
