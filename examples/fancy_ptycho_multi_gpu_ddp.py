@@ -10,10 +10,10 @@ import os
 # While not strictly necessary, it's super useful to have in the event
 # the computation hangs by defining a timeout period. 
 import datetime 
-timeout = datetime.timedelta(seconds=60)   # Terminate if things hang for 60s.
+TIMEOUT = datetime.timedelta(seconds=60)   # Terminate if things hang for 60s.
 
 # We will need to specify what multiprocessing backend we want to use.
-# PyTorch supports a few backends (gloo, MPI, NCCL). We will use NCCL, or
+# PyTorch supports a few backends (such as gloo, MPI, NCCL). We will use NCCL, or
 # NVIDIA Collective Communications Library, as it's the fastest one.
 #
 # It's also the only one that works with the current multi-GPU implementation...
@@ -42,9 +42,9 @@ def multi_gpu_reconstruct(rank: int,
     init_process_group(backend=BACKEND,
                        rank=rank,
                        world_size=world_size,
-                       timeout=timeout)
+                       timeout=TIMEOUT)
     
-    filename = 'example_data/lab_ptycho_data.cxi'
+    filename = r'example_data/lab_ptycho_data.cxi'
     dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
     model = cdtools.models.FancyPtycho.from_dataset(
@@ -75,10 +75,8 @@ def multi_gpu_reconstruct(rank: int,
     # running optimization
     barrier()
     
-
     # Since our model is now wrapped in DDP, all CDTools methods have to be
     # called using 'model.module' rather than just 'model'.
-    #
     # We also need to pass the rank and world_size to Adam_optimize
     for loss in model.module.Adam_optimize(50, 
                                            dataset, 
@@ -115,7 +113,7 @@ def multi_gpu_reconstruct(rank: int,
         if rank == 0:
             print(model.module.report())
         
-        if model.epoch % 10 == 0:
+        if model.module.epoch % 10 == 0:
             if rank == 0:
                 model.module.inspect(dataset)
             barrier()
@@ -130,6 +128,12 @@ def multi_gpu_reconstruct(rank: int,
         model.module.inspect(dataset)
         model.module.compare(dataset)
         plt.show()
+    
+    # Again, set up another barrier to let all GPUs catch up
+    barrier()
+
+    # Always destroy the process group when you're done
+    destroy_process_group()
 
 # This will execute the multi_gpu_reconstruct upon running this file
 if __name__ == '__main__':
@@ -138,7 +142,7 @@ if __name__ == '__main__':
     os.environ['MASTER_PORT'] = '8888'
 
     # Define the number of GPUs to use.
-    world_size = 4
+    world_size = 2
 
     # Write a try/except statement to help the subprocesses (and GPUs)
     # terminate gracefully. Otherwise, you may have stuff loaded on
@@ -149,9 +153,6 @@ if __name__ == '__main__':
                 args=(world_size,),
                 nprocs=world_size,
                 join=True)
-        
-        # Always destroy the process group when you're done
-        destroy_process_group()
 
     except Exception as e:
         # If something breaks, we try to make sure that the
