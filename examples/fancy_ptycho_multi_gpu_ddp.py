@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group, barrier
 import torch.multiprocessing as mp
+import os
 
 # While not strictly necessary, it's super useful to have in the event
 # the computation hangs by defining a timeout period. 
@@ -129,3 +130,33 @@ def multi_gpu_reconstruct(rank: int,
         model.module.inspect(dataset)
         model.module.compare(dataset)
         plt.show()
+
+# This will execute the multi_gpu_reconstruct upon running this file
+if __name__ == '__main__':
+    # We need to add some stuff to the enviromnent 
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '8888'
+
+    # Define the number of GPUs to use.
+    world_size = 4
+
+    # Write a try/except statement to help the subprocesses (and GPUs)
+    # terminate gracefully. Otherwise, you may have stuff loaded on
+    # several GPU even after terminating.
+    try:
+        # Spawn the processes
+        mp.spawn(multi_gpu_reconstruct,
+                args=(world_size,),
+                nprocs=world_size,
+                join=True)
+        
+        # Always destroy the process group when you're done
+        destroy_process_group()
+
+    except Exception as e:
+        # If something breaks, we try to make sure that the
+        # process group is destroyed before the program fully
+        # terminates
+        print(e)
+        destroy_process_group()
+    
