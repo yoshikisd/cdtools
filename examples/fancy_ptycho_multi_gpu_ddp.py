@@ -96,7 +96,7 @@ def multi_gpu_reconstruct(rank: int,
         # We set up the model.inspect this way to only let GPU 0 plot and
         # prevent the other GPUs from running far ahead of GPU 0, which
         # seems to cause bugs (GPU processes dissapear from nvidia-smi)
-        if model.module..epoch % 10 == 0:
+        if model.module.epoch % 10 == 0:
             if rank == 0:
                 model.module.inspect(dataset)
             barrier()
