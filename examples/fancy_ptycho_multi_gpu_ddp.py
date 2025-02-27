@@ -19,6 +19,9 @@ TIMEOUT = datetime.timedelta(seconds=60)   # Terminate if things hang for 60s.
 # It's also the only one that works with the current multi-GPU implementation...
 BACKEND = 'nccl'
 
+filename = r'example_data/lab_ptycho_data.cxi'
+dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
+
 # We need to wrap the script inside a function in order to use "mp.spawn"
 # which will help distribute the work to multiple GPUs
 #
@@ -44,8 +47,6 @@ def multi_gpu_reconstruct(rank: int,
                        world_size=world_size,
                        timeout=TIMEOUT)
     
-    filename = r'example_data/lab_ptycho_data.cxi'
-    dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
     model = cdtools.models.FancyPtycho.from_dataset(
         dataset,
