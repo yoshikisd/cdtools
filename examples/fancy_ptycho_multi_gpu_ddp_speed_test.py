@@ -145,6 +145,7 @@ if __name__ == '__main__':
     # We need to add some stuff to the enviromnent 
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '8888'  # You can use any open port number
+    os.environ['NCCL_P2P_DISABLE'] = '1'
 
     # Set up a parent/child connection to get some info from the GPU-accelerated
     # function
