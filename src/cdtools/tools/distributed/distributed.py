@@ -16,23 +16,23 @@ import functools
 __all__ = ['spawn']
 
 
-# Set the default timeout to 60s
-WAIT_TIME = datetime.timedelta(seconds=60)
 
-
-def process_manager(rank, reconstructor, model, dataset, world_size, backend, timeout):
-    """A wrapper around the reconstruction script defined in a high-level
-    user interface. 
-    
-    This wraps around the reconstructor function, enabling multi-GPU operations
-    to be set up afterwards through torch.multiprocessing.spawn or
-    cdtools.tools.distributed.distributed.spawn
+def reconstructor_wrapper(rank, 
+                          reconstructor, 
+                          model, 
+                          dataset, 
+                          world_size, 
+                          backend, 
+                          timeout):
+    """Wraps functions containing reconstruction loops (i.e., for loss in model.Adam_optimize)
+    to enable multi-GPU operations to be set up. The wrapped function needs to passed to
+    torch.multiprocessing.spawn or cdtools.tools.distributed.distributed.spawn
 
     Parameters:
         rank: int
             Rank of the GPU, with value ranging from [0, world_size-1]
         reconstructor:
-            The wrapped reconstruction loop
+            The reconstruction loop function
         model: t.nn.Module
             The CDIModel
         dataset: t.utils.data.Dataset
@@ -56,6 +56,15 @@ def process_manager(rank, reconstructor, model, dataset, world_size, backend, ti
     device = f'cuda:{rank}'
     model.to(device=device)
     dataset.get_as(device=device) 
+
+    # Wrap the model with DistributedDataParallel
+    model = DDP(model,
+                device_ids=[rank],  # Tells DDP which GPU the model lives in
+                output_device=rank, # Tells DDP which GPU to output to
+                find_unused_parameters=True) # TODO: Understand what this is really doing...
+    
+    # Dayne's special sanity check: Don't start reconstructing until all GPUs have synced.
+    barrier()
     
     reconstructor(model, dataset, rank, world_size)         # Start the reconstruction loop
     barrier()                               # Wait for all GPUs to finish reconstructing
@@ -67,11 +76,12 @@ def spawn(reconstructor,
           dataset,
           world_size: int,
           backend: str = 'nccl',
-          timeout: datetime = WAIT_TIME,
+          timeout: int = 60,
           master_addr: str = 'localhost',
           master_port: str = '8888',
           nccl_p2p_disable: bool = True):
-    """A wrapper around torch.multiprocessing.spawn. 
+    """Spawns world_size processes that runs a reconstructor loop function.
+    A wrapper around torch.multiprocessing.spawn. 
     
     It includes the setup of OS environmental variables needed for
     initializing the distributed backend
@@ -88,6 +98,9 @@ def spawn(reconstructor,
         nccl_p2p_disable: bool
             Disable NCCL peer-2-peer communication
     """
+    # Convert timeout from int to datetime
+    timeout = datetime.timedelta(seconds=timeout)
+
     # Set up environment variables
     os.environ['MASTER_ADDR'] = master_addr
     os.environ['MASTER_PORT'] = master_port
@@ -96,7 +109,7 @@ def spawn(reconstructor,
     # Ensure a "graceful" termination of subprocesses if something goes wrong.
     try:
         print('\nStarting up multi-GPU reconstructions...')
-        mp.spawn(process_manager,
+        mp.spawn(reconstructor_wrapper,
                  args=(reconstructor, 
                        model,
                        dataset,

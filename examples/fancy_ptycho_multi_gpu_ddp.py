@@ -11,7 +11,6 @@ from cdtools.tools.distributed import distributed
 # While not strictly necessary, it's super useful to have in the event
 # the computation hangs by defining a timeout period. 
 import datetime 
-TIMEOUT = datetime.timedelta(seconds=60)   # Terminate if things hang for 60s.
 
 # We will need to specify what multiprocessing backend we want to use.
 # PyTorch supports a few backends (such as gloo, MPI, NCCL). We will use NCCL, or
@@ -45,35 +44,6 @@ def multi_gpu_reconstruct(model,
                           dataset,
                           rank: int, 
                           world_size: int):
-    """Perform the reconstruction using several GPUs
-    Parameters:
-        rank: int
-            The rank of the GPU to be used. Value should be within
-            [0, world_size-1]
-
-        world_size: int
-            The total number of GPUs to use
-    """
-    # We need to initialize the distributed process group
-    # before calling any other method
-
-
-    # We need to adjust the device string to also indicate which GPU this
-    # process is using
-    
-
-    # We now wrap the model with DistributedDataParallel (DDP), which allows
-    # data parallelism by synchronizing gradients across each copy of the
-    # model in the different GPUs.
-    model = DDP(model,
-                device_ids=[rank],  # Tells DDP which GPU the model lives in
-                output_device=rank, # Tells DDP which GPU to output to
-                find_unused_parameters=True) # TODO: Understand what this is really doing...
-
-    # As a sanity check, we wait for all GPUs to catch up to barrier() before
-    # running optimization
-    barrier()
-    
     # Since our model is now wrapped in DDP, all CDTools methods have to be
     # called using 'model.module' rather than just 'model'.
     # We also need to pass the rank and world_size to Adam_optimize
