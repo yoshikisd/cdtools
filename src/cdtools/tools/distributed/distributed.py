@@ -13,14 +13,14 @@ import datetime
 import os
 import functools
 
-__all__ = ['spawn', 'multi_gpu']
+__all__ = ['spawn']
 
 
 # Set the default timeout to 60s
 WAIT_TIME = datetime.timedelta(seconds=60)
 
 
-def process_manager(rank, reconstructor, world_size, backend, timeout):
+def process_manager(rank, reconstructor, model, dataset, world_size, backend, timeout):
     """A wrapper around the reconstruction script defined in a high-level
     user interface. 
     
@@ -30,8 +30,13 @@ def process_manager(rank, reconstructor, world_size, backend, timeout):
 
     Parameters:
         rank: int
+            Rank of the GPU, with value ranging from [0, world_size-1]
         reconstructor:
             The wrapped reconstruction loop
+        model: t.nn.Module
+            The CDIModel
+        dataset: t.utils.data.Dataset
+            The CDataset
         world_size: int
             Number of GPUs to use
         master_addr: str
@@ -41,17 +46,25 @@ def process_manager(rank, reconstructor, world_size, backend, timeout):
         nccl_p2p_disable: bool
             Disable NCCL peer-2-peer communication
     """
+    # Initialize the process group
     init_process_group(backend=backend,
                         rank=rank,
                         world_size=world_size,
                         timeout=timeout)
     
-    reconstructor(rank, world_size)
-    barrier()
-    destroy_process_group()
+    # Load the model to the appropriate GPU rank the process is using
+    device = f'cuda:{rank}'
+    model.to(device=device)
+    dataset.get_as(device=device) 
+    
+    reconstructor(model, dataset, rank, world_size)         # Start the reconstruction loop
+    barrier()                               # Wait for all GPUs to finish reconstructing
+    destroy_process_group()                 # Destroy the process group
 
 
 def spawn(reconstructor,
+          model,
+          dataset,
           world_size: int,
           backend: str = 'nccl',
           timeout: datetime = WAIT_TIME,
@@ -84,7 +97,12 @@ def spawn(reconstructor,
     try:
         print('\nStarting up multi-GPU reconstructions...')
         mp.spawn(process_manager,
-                 args=(reconstructor, world_size, backend, timeout),
+                 args=(reconstructor, 
+                       model,
+                       dataset,
+                       world_size,
+                       backend, 
+                       timeout),
                  nprocs=world_size,
                  join=True)
         print('Reconstructions complete. Stopping processes...')

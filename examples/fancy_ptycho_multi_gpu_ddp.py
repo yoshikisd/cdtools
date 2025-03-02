@@ -23,6 +23,17 @@ BACKEND = 'nccl'
 filename = r'example_data/lab_ptycho_data.cxi'
 dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
+model = cdtools.models.FancyPtycho.from_dataset(
+    dataset,
+    n_modes=3,
+    oversampling=2, 
+    probe_support_radius=120, 
+    propagation_distance=5e-3,
+    units='mm', 
+    obj_view_crop=-50,
+)
+
+
 # We need to wrap the script inside a function in order to use "mp.spawn"
 # which will help distribute the work to multiple GPUs
 #
@@ -30,7 +41,9 @@ dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 # that will work on the model using N-number of GPUs, (a.k.a., 'WORLD_SIZE')
 # Each process will be given to one GPU that's assigned a number called 
 # a RANK (which ranges from 0 to WORLD_SIZE-1).
-def multi_gpu_reconstruct(rank: int, 
+def multi_gpu_reconstruct(model,
+                          dataset,
+                          rank: int, 
                           world_size: int):
     """Perform the reconstruction using several GPUs
     Parameters:
@@ -44,21 +57,10 @@ def multi_gpu_reconstruct(rank: int,
     # We need to initialize the distributed process group
     # before calling any other method
 
-    model = cdtools.models.FancyPtycho.from_dataset(
-        dataset,
-        n_modes=3,
-        oversampling=2, 
-        probe_support_radius=120, 
-        propagation_distance=5e-3,
-        units='mm', 
-        obj_view_crop=-50,
-    )
 
     # We need to adjust the device string to also indicate which GPU this
     # process is using
-    device = f'cuda:{rank}'
-    model.to(device=device)
-    dataset.get_as(device=device)
+    
 
     # We now wrap the model with DistributedDataParallel (DDP), which allows
     # data parallelism by synchronizing gradients across each copy of the
@@ -129,5 +131,8 @@ def multi_gpu_reconstruct(rank: int,
 
 # This will execute the multi_gpu_reconstruct upon running this file
 if __name__ == '__main__':
-    distributed.spawn(multi_gpu_reconstruct, world_size = 4)
+    distributed.spawn(multi_gpu_reconstruct, 
+                      model=model,
+                      dataset=dataset,
+                      world_size = 4)
     
