@@ -27,7 +27,7 @@ BACKEND = 'nccl'
 def multi_gpu_reconstruct(rank: int, 
                           world_size: int,
                           conn,
-                          schedule=False) -> tuple[np.array, np.array]:
+                          schedule=False) -> tuple[np.ndarray, ndnp.array]:
     """Perform the reconstruction using several GPUs
     If only one GPU is used, we don't bother loading the the process group
     or doing any of the fancy stuff associated with multi-GPU operation.
