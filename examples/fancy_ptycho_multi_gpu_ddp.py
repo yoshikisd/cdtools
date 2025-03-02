@@ -43,11 +43,6 @@ def multi_gpu_reconstruct(rank: int,
     """
     # We need to initialize the distributed process group
     # before calling any other method
-    init_process_group(backend=BACKEND,
-                       rank=rank,
-                       world_size=world_size,
-                       timeout=TIMEOUT)
-    
 
     model = cdtools.models.FancyPtycho.from_dataset(
         dataset,
@@ -131,11 +126,6 @@ def multi_gpu_reconstruct(rank: int,
         model.module.compare(dataset)
         plt.show()
     
-    # Again, set up another barrier to let all GPUs catch up
-    barrier()
-
-    # Always destroy the process group when you're done
-    destroy_process_group()
 
 # This will execute the multi_gpu_reconstruct upon running this file
 if __name__ == '__main__':
