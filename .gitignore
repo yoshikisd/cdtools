@@ -9,3 +9,4 @@ build/*
 dist
 */example_data/*
 *.h5
+.DS_Store
