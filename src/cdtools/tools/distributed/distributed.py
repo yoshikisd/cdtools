@@ -11,46 +11,55 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.multiprocessing as mp
 import datetime
 import os
-import functools
 
-__all__ = ['spawn']
-
+__all__ = ['distributed_wrapper', 'spawn']
 
 
-def reconstructor_wrapper(rank, 
-                          reconstructor, 
-                          model, 
-                          dataset, 
-                          world_size, 
-                          backend, 
-                          timeout):
-    """Wraps functions containing reconstruction loops (i.e., for loss in model.Adam_optimize)
-    to enable multi-GPU operations to be set up. The wrapped function needs to passed to
-    torch.multiprocessing.spawn or cdtools.tools.distributed.distributed.spawn
+
+def distributed_wrapper(rank, 
+                        func, 
+                        model, 
+                        dataset, 
+                        world_size,
+                        backend='nccl', 
+                        timeout=600):
+    """Wraps functions containing reconstruction loops (i.e., for loss in 
+    model.Adam_optimize) to enable multi-GPU operations to be set up. The 
+    wrapped function needs to passed to `torch.multiprocessing.spawn` or 
+    `cdtools.tools.distributed.distributed.spawn`
 
     Parameters:
         rank: int
-            Rank of the GPU, with value ranging from [0, world_size-1]
-        reconstructor:
-            The reconstruction loop function
-        model: t.nn.Module
-            The CDIModel
-        dataset: t.utils.data.Dataset
-            The CDataset
+            Rank of the GPU, with value ranging from [0, world_size-1]. This
+            is defined by the spawning methods and not directly by the user.
+        func:
+            Function wrapping user-defined reconstruction loops
+        model: CDIModel
+            Model for CDI/ptychography reconstruction
+        dataset: Ptycho2DDataset
+            The dataset to reconstruct against
         world_size: int
             Number of GPUs to use
-        master_addr: str
-            IP address of the machine that will host the process with rank 0
-        master_port: str
-            A free port on the machine that will host the process with rank 0
-        nccl_p2p_disable: bool
-            Disable NCCL peer-2-peer communication
+        backend: str
+            Multi-gpu communication backend to use. Default is the 'nccl' backend,
+            which is the only supported backend for CDTools.
+            See https://pytorch.org/docs/stable/distributed.html for additional info
+            about PyTorch-supported backends.
+        timeout: int
+            Timeout for operations executed against the process group in seconds. 
+            Default is 10 minutes. After timeout has been reached, all subprocesses
+            will be aborted and the process calling this method will crash. 
+    
+    NOTE: While this would have been nice as a decorator function (integrated
+    with the spawner), this seems to cause problems with mp.spawn, which needs to
+    pickle the function.
     """
+    # Convert timeout from int to datetime
+    timeout = datetime.timedelta(seconds=timeout)
+
     # Initialize the process group
-    init_process_group(backend=backend,
-                        rank=rank,
-                        world_size=world_size,
-                        timeout=timeout)
+    init_process_group(backend=backend, rank=rank, 
+                       world_size=world_size, timeout=timeout)
     
     # Load the model to the appropriate GPU rank the process is using
     device = f'cuda:{rank}'
@@ -58,71 +67,71 @@ def reconstructor_wrapper(rank,
     dataset.get_as(device=device) 
 
     # Wrap the model with DistributedDataParallel
-    model = DDP(model,
-                device_ids=[rank],  # Tells DDP which GPU the model lives in
-                output_device=rank, # Tells DDP which GPU to output to
-                find_unused_parameters=True) # TODO: Understand what this is really doing...
+    model_DDP = DDP(model,
+                    device_ids=[rank],  # Tells DDP which GPU the model lives in
+                    output_device=rank, # Tells DDP which GPU to output to
+                    find_unused_parameters=True) # TODO: Understand what this is really doing...
     
-    # Dayne's special sanity check: Don't start reconstructing until all GPUs have synced.
-    barrier()
-    
-    reconstructor(model, dataset, rank, world_size)         # Start the reconstruction loop
-    barrier()                               # Wait for all GPUs to finish reconstructing
-    destroy_process_group()                 # Destroy the process group
+    # Don't start reconstructing until all GPUs have synced.
+    barrier()   
+    # Start the reconstruction loop
+    func(model_DDP, dataset, rank, world_size)        
+    # Wait for all GPUs to finish reconstructing
+    barrier()                               
+    # Destroy process group
+    destroy_process_group()        
 
 
-def spawn(reconstructor,
+def spawn(func,
           model,
           dataset,
           world_size: int,
+          master_addr: str,
+          master_port: str,
           backend: str = 'nccl',
-          timeout: int = 60,
-          master_addr: str = 'localhost',
-          master_port: str = '8888',
+          timeout: int = 600,
           nccl_p2p_disable: bool = True):
-    """Spawns world_size processes that runs a reconstructor loop function.
-    A wrapper around torch.multiprocessing.spawn. 
+    """Spawns subprocesses on `world_size` GPUs that runs reconstruction
+    loops wrapped around a function `func`.
     
-    It includes the setup of OS environmental variables needed for
-    initializing the distributed backend
+    This is a wrapper around `torch.multiprocessing.spawn` which includes 
+    the setup of OS environmental variables needed for initializing the 
+    distributed backend.
 
     Parameters:
-        reconstructor:
-            The wrapped reconstruction loop
+        func:
+            Function wrapping user-defined reconstruction loops
+        model: CDIModel
+            Model for CDI/ptychography reconstruction
+        dataset: Ptycho2DDataset
+            The dataset to reconstruct against
         world_size: int
             Number of GPUs to use
         master_addr: str
             IP address of the machine that will host the process with rank 0
         master_port: str
             A free port on the machine that will host the process with rank 0
+        backend: str
+            Multi-gpu communication backend to use. Default is the 'nccl' backend,
+            which is the only supported backend for CDTools.
+            See https://pytorch.org/docs/stable/distributed.html for additional info
+            about PyTorch-supported backends.
+        timeout: int
+            Timeout for operations executed against the process group in seconds. 
+            Default is 10 minutes. After timeout has been reached, all subprocesses
+            will be aborted and the process calling this method will crash.   
         nccl_p2p_disable: bool
             Disable NCCL peer-2-peer communication
     """
-    # Convert timeout from int to datetime
-    timeout = datetime.timedelta(seconds=timeout)
-
     # Set up environment variables
     os.environ['MASTER_ADDR'] = master_addr
     os.environ['MASTER_PORT'] = master_port
     os.environ['NCCL_P2P_DISABLE'] = str(int(nccl_p2p_disable))
 
     # Ensure a "graceful" termination of subprocesses if something goes wrong.
-    try:
-        print('\nStarting up multi-GPU reconstructions...')
-        mp.spawn(reconstructor_wrapper,
-                 args=(reconstructor, 
-                       model,
-                       dataset,
-                       world_size,
-                       backend, 
-                       timeout),
-                 nprocs=world_size,
-                 join=True)
-        print('Reconstructions complete. Stopping processes...')
-
-    except Exception as e:
-        # If something breaks, we try to make sure that the
-        # process group is destroyed before the program fully
-        # terminates
-        print(e)
-        destroy_process_group()
+    print('\nStarting up multi-GPU reconstructions...')
+    mp.spawn(distributed_wrapper,
+                args=(func, model, dataset, world_size, backend, timeout),
+                nprocs=world_size,
+                join=True)
+    print('Reconstructions complete...')

@@ -1,23 +1,9 @@
 import cdtools
 from matplotlib import pyplot as plt
 
-# To use multiple GPUs, we need to import a few additional packages
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed import init_process_group, destroy_process_group, barrier
-import torch.multiprocessing as mp
-import os
+# We need to import 2 additional functions
+from torch.distributed import barrier
 from cdtools.tools.distributed import distributed
-
-# While not strictly necessary, it's super useful to have in the event
-# the computation hangs by defining a timeout period. 
-import datetime 
-
-# We will need to specify what multiprocessing backend we want to use.
-# PyTorch supports a few backends (such as gloo, MPI, NCCL). We will use NCCL, or
-# NVIDIA Collective Communications Library, as it's the fastest one.
-#
-# It's also the only one that works with the current multi-GPU implementation...
-BACKEND = 'nccl'
 
 filename = r'example_data/lab_ptycho_data.cxi'
 dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
@@ -29,24 +15,32 @@ model = cdtools.models.FancyPtycho.from_dataset(
     probe_support_radius=120, 
     propagation_distance=5e-3,
     units='mm', 
-    obj_view_crop=-50,
-)
+    obj_view_crop=-50)
+
+# Remove or comment out lines moving the dataset and model to GPU.
+# This process will be handled by the cdtools.tools.distributed methods.
+
+#device = 'cuda'
+#model.to(device=device)
+#dataset.get_as(device=device)
 
 
-# We need to wrap the script inside a function in order to use "mp.spawn"
-# which will help distribute the work to multiple GPUs
+# Wrap the rest of the script inside of a function. This function will be
+# distributed across several GPUs for multiprocessing at the end.
 #
-# In fancier terms, we will use mp.spawn to create several processes
-# that will work on the model using N-number of GPUs, (a.k.a., 'WORLD_SIZE')
-# Each process will be given to one GPU that's assigned a number called 
-# a RANK (which ranges from 0 to WORLD_SIZE-1).
-def multi_gpu_reconstruct(model,
-                          dataset,
-                          rank: int, 
-                          world_size: int):
-    # Since our model is now wrapped in DDP, all CDTools methods have to be
-    # called using 'model.module' rather than just 'model'.
+# CDTools multi-GPU methods expects the function to be declared as...
+# 
+#       def func(model, dataset, rank, world_size):
+#
+# ...where rank is an integer from [0, world_size-1] assigned to each
+# GPU, and world_size is the total number of GPUs used.
+
+def multi_gpu_reconstruct(model, dataset, rank, world_size):
+
+    # All CDTools methods have to be called using 'model.module' 
+    # rather than 'model'.
     # We also need to pass the rank and world_size to Adam_optimize
+    # as shown below
     for loss in model.module.Adam_optimize(50, 
                                            dataset, 
                                            lr=0.02, 
@@ -55,22 +49,18 @@ def multi_gpu_reconstruct(model,
                                            num_workers=world_size):
         
         # We can still perform model.inspect and model.report, but we want
-        # to only let 1 GPU handle plotting/printing rather than get N copies
-        # from all N GPUs.
-        if rank == 0:
-            print(model.module.report())
+        # only 1 GPU handling plotting/printing.
+        if rank == 0: print(model.module.report())
         
         # We set up the model.inspect this way to only let GPU 0 plot and
-        # prevent the other GPUs from running far ahead of GPU 0, which
+        # prevent the other GPUs from running ahead of GPU 0, which
         # seems to cause bugs (GPU processes dissapear from nvidia-smi)
         if model.module.epoch % 10 == 0:
             if rank == 0:
                 model.module.inspect(dataset)
-            barrier()
+            barrier()   # Make all GPUs wait until everyone is caught up
 
-
-    # We set up another barrier to make sure all GPUs catch up before
-    # starting another reconstruction loop
+    # Make sure all GPUs catch up before starting another reconstruction loop
     barrier()
 
     for loss in model.module.Adam_optimize(50, 
@@ -79,30 +69,39 @@ def multi_gpu_reconstruct(model,
                                            batch_size=50,
                                            rank=rank,
                                            num_workers=world_size):
-        if rank == 0:
-            print(model.module.report())
+        if rank == 0: print(model.module.report())
         
         if model.module.epoch % 10 == 0:
             if rank == 0:
                 model.module.inspect(dataset)
             barrier()
-
-    # Again, set up another barrier to let all GPUs catch up
     barrier()
-    
-    model.module.tidy_probes() # TODO: Check how the multi-GPU implementation handles tidying probes.
 
-    # Only let one GPU handle plotting stuff.
+    # Get the model back from the distributed processing
     if rank == 0:
+        model.module.tidy_probes()
         model.module.inspect(dataset)
         model.module.compare(dataset)
         plt.show()
     
-
 # This will execute the multi_gpu_reconstruct upon running this file
+# Here, we're...
+#   - ...setting up `world_size=4` GPUs to run
+#   - ...telling CDTools the machine setting up all the connections (called
+#        the "rank 0 node/machine") is on address `master_addr`
+#   - ...telling CDTools we have a free port on `master_port` on the machine
+#        with rank 0.
+#   - ...going to wait 60 seconds for the GPUs to do something before 
+#        we terminate the reconstruction. If you want to inspect/compare
+#        the model after reconstruction, consider increasing the timeout.
+#
+# If you're using a single node (single machine/computer), you can try setting
+# master_addr = 'localhost'.
 if __name__ == '__main__':
     distributed.spawn(multi_gpu_reconstruct, 
                       model=model,
                       dataset=dataset,
-                      world_size = 4)
-    
+                      world_size = 4,
+                      master_addr='localhost',
+                      master_port='8888',
+                      timeout=60)
