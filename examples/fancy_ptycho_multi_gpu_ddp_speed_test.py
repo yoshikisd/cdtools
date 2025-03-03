@@ -10,6 +10,7 @@ This test is based on fancy_ptycho_multi_gpu_ddp.py and fancy_ptycho.py.
 '''
 
 import cdtools
+from typing import Tuple
 from matplotlib import pyplot as plt
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group, barrier
@@ -27,7 +28,7 @@ BACKEND = 'nccl'
 def multi_gpu_reconstruct(rank: int, 
                           world_size: int,
                           conn,
-                          schedule=False) -> tuple[np.ndarray, np.ndarray]:
+                          schedule=False) -> Tuple[np.ndarray, np.ndarray]:
     """Perform the reconstruction using several GPUs
     If only one GPU is used, we don't bother loading the the process group
     or doing any of the fancy stuff associated with multi-GPU operation.
