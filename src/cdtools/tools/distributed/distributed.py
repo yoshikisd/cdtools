@@ -1,7 +1,19 @@
-"""Contains wrapper functions to make reconstruction scripts compatible
+"""Contains functions to make reconstruction scripts compatible
 with multi-GPU distributive approaches in PyTorch.
 
+The functions in this module require parts of the user-written
+reconstruction script to be first wrapped in a function (as shown in 
+examples/fancy_ptycho_multi_gpu_ddp.py). The functions in this module
+are designed to wrap around/call these user-defined functions, enabling
+reconstructions to be performed across several GPUs.
 
+As of 20250302, the methods here are based on 
+torch.nn.parallel.DistributedDataParallel, which implements distributed
+data parallelism. In this scheme, replicas of the CDI/ptychography model
+are given to each device. These devices will synchronize gradients across
+each model replica. These methods however do not define how the Dataset is
+distributed across each device; this process can be handled by using
+DistributedSampler with the DataLoader.
 """
 
 import numpy as np
@@ -13,7 +25,6 @@ import datetime
 import os
 
 __all__ = ['distributed_wrapper', 'spawn']
-
 
 
 def distributed_wrapper(rank, 
