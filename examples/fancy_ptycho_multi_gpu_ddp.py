@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 from torch.distributed import barrier
 from cdtools.tools.distributed import distributed
 
-filename = r'/homes/dayne/repositories/cdtools_yoshikisd/cdtools/examples/example_data/lab_ptycho_data.cxi'#'example_data/lab_ptycho_data.cxi'
+filename = r'example_data/lab_ptycho_data.cxi'
 dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
 model = cdtools.models.FancyPtycho.from_dataset(
@@ -37,31 +37,20 @@ model = cdtools.models.FancyPtycho.from_dataset(
 
 def multi_gpu_reconstruct(model, dataset, rank, world_size):
 
-    # We need to pass the rank and world_size to Adam_optimize as shown below
-    for loss in model.Adam_optimize(100, 
-                                    dataset, 
-                                    lr=0.02, 
-                                    batch_size=10,
-                                    rank=rank,
-                                    num_workers=world_size):
+    for loss in model.Adam_optimize(100, dataset, lr=0.02, batch_size=10):
         
         # We can still perform model.report, but we want only 1 GPU printing stuff.
         if rank == 0: 
             print(model.report())
         
         # You don't need to add the `if rank == 0` here. 
-        if model.epoch % 10 == 0:
+        if model.epoch % 20 == 0:
             model.inspect(dataset)
 
-    for loss in model.Adam_optimize(100, 
-                                    dataset,  
-                                    lr=0.005, 
-                                    batch_size=50,
-                                    rank=rank,
-                                    num_workers=world_size):
+    for loss in model.Adam_optimize(100, dataset, lr=0.005, batch_size=50):
         if rank == 0: print(model.report())
         
-        if model.epoch % 10 == 0:
+        if model.epoch % 20 == 0:
             if rank == 0:
                 model.inspect(dataset)
 
