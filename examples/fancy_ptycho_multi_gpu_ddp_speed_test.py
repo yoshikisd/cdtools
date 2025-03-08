@@ -27,7 +27,7 @@ TIMEOUT = datetime.timedelta(seconds=10)   # Auto-terminate if things hang
 BACKEND = 'nccl'
 
 # Load the dataset
-filename = r'example_data/lab_ptycho_data.cxi'
+filename = r'examples/example_data/lab_ptycho_data.cxi'
 dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
 # Create the model
