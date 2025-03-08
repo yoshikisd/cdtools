@@ -18,7 +18,6 @@ from typing import Tuple
 from matplotlib import pyplot as plt
 from torch.distributed import destroy_process_group
 import torch.multiprocessing as mp
-import os
 import datetime 
 import time
 import numpy as np
@@ -54,13 +53,19 @@ def reconstruct(model: CDIModel,
     or doing any of the fancy stuff associated with multi-GPU operation.
 
     Parameters:
+        model: CDIModel
+                Model for CDI/ptychography reconstruction
+        dataset: Ptycho2DDataset
+            The dataset to reconstruct against
         rank: int
             The rank of the GPU to be used. Value should be within
             [0, world_size-1]
         world_size: int
             The total number of GPUs to use
-        conn: mp.Pipe
-            Connection to parent
+        conn: Connection
+            A Connection object representing one end of a communication pipe. This
+            parameter is needed if you're trying to get some values back from the
+            wrapped function.
         schedule: bool
             Toggles the use of the scheduler
     
@@ -102,16 +107,12 @@ def reconstruct(model: CDIModel,
             conn.send((time_history, loss_history))
 
     # Return the measured time and loss history if we're on a single GPU
-    if world_size == 1: return time_history, loss_history
+    if world_size == 1: 
+        return time_history, loss_history
 
 
 # This will execute the multi_gpu_reconstruct upon running this file
 if __name__ == '__main__':
-    
-    # Set up a parent/child connection to get some info from the GPU-accelerated
-    # function
-    parent_conn, child_conn = mp.Pipe()
-
     # Define the number of GPUs to use.
     world_sizes = [8, 4, 2, 1] 
 
@@ -122,65 +123,59 @@ if __name__ == '__main__':
     # for statistics
     runs = 5
 
+    # Set up a parent/child connection to get some info from the GPU-accelerated function
+    parent_conn, child_conn = mp.Pipe()
+
     # Write a try/except statement to help the subprocesses (and GPUs)
     # terminate gracefully. Otherwise, you may have stuff loaded on
     # several GPU even after terminating.
-    try:
-        for world_size in world_sizes:
-            print(f'Number of GPU(s): {world_size}')
-            # Make a list to store the values
-            time_list = []
-            loss_hist_list = []
+    for world_size in world_sizes:
+        print(f'Number of GPU(s): {world_size}')
+        # Make a list to store the values
+        time_list = []
+        loss_hist_list = []
 
-            for i in range(runs):
-                print(f'Resetting the model...')
-                print(f'Starting run {i+1}/{runs} on {world_size} GPU(s)')
-                model_copy = deepcopy(model)
-                if world_size == 1:
-                    final_time, loss_history = reconstruct(model=model_copy, 
-                                                           dataset=dataset,
-                                                           rank=0,
-                                                           world_size=1)
+        for i in range(runs):
+            print(f'Resetting the model...')
+            print(f'Starting run {i+1}/{runs} on {world_size} GPU(s)')
+            model_copy = deepcopy(model)
+            if world_size == 1:
+                final_time, loss_history = reconstruct(model=model_copy, 
+                                                        dataset=dataset,
+                                                        rank=0,
+                                                        world_size=1)
+                time_list.append(final_time)
+                loss_hist_list.append(loss_history)
+            else:
+                # Spawn the processes
+                distributed.spawn(reconstruct,
+                                    model=model_copy,
+                                    dataset=dataset,
+                                    world_size=world_size,
+                                    master_addr = 'localhost',
+                                    master_port = '8888',
+                                    timeout=300,
+                                    pipe=child_conn)
+                while parent_conn.poll():
+                    final_time, loss_history = parent_conn.recv()
                     time_list.append(final_time)
                     loss_hist_list.append(loss_history)
-                else:
-                    # Spawn the processes
-                    distributed.spawn(reconstruct,
-                                      model=model_copy,
-                                      dataset=dataset,
-                                      world_size=world_size,
-                                      master_addr = 'localhost',
-                                      master_port = '8888',
-                                      timeout=300,
-                                      pipe=child_conn)
-                    while parent_conn.poll():
-                        final_time, loss_history = parent_conn.recv()
-                        time_list.append(final_time)
-                        loss_hist_list.append(loss_history)
-                
             
-            # Calculate the statistics
-            time_mean = np.array(time_list).mean(axis=0)/60
-            time_std = np.array(time_list).std(axis=0)/60
-            loss_mean = np.array(loss_hist_list).mean(axis=0)
-            loss_std = np.array(loss_hist_list).std(axis=0)
+        
+        # Calculate the statistics
+        time_mean = np.array(time_list).mean(axis=0)/60
+        time_std = np.array(time_list).std(axis=0)/60
+        loss_mean = np.array(loss_hist_list).mean(axis=0)
+        loss_std = np.array(loss_hist_list).std(axis=0)
 
-            # Plot
-            plt.errorbar(time_mean, loss_mean, yerr=loss_std, xerr=time_std,
-                     label=f'{world_size} GPUs')
-            plt.yscale('log')
-            plt.xscale('linear')
+        # Plot
+        plt.errorbar(time_mean, loss_mean, yerr=loss_std, xerr=time_std,
+                    label=f'{world_size} GPUs')
+        plt.yscale('log')
+        plt.xscale('linear')
         
         plt.legend()
         plt.xlabel('Time (min)')
         plt.ylabel('Loss')
         plt.show()
-
-
-    except KeyboardInterrupt as e:
-        # If something breaks, we try to make sure that the
-        # process group is destroyed before the program fully
-        # terminates
-        print('Hang on a sec...')
-        destroy_process_group()
     
