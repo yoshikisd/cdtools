@@ -365,12 +365,14 @@ class CDIModel(t.nn.Module):
             The summed loss over the latest epoch, divided by the total diffraction pattern intensity
         """
 
-        # Check if multi-GPU operations are being conducted (i.e.,
-        # a process group is initialized)
-        is_multi_GPU = t.distributed.is_initialized()
-
         def run_epoch(stop_event=None):
             """Runs one full epoch of the reconstruction."""
+            # If we're using DistributedSampler (likely the case if you're using 
+            # multiple GPUs), we need to tell it which epoch we're on. Otherwise
+            # data shuffling will not work properly
+            if self.multi_gpu_used: 
+                data_loader.sampler.set_epoch(self.epoch)
+
             # First, initialize some tracking variables
             normalization = 0
             loss = 0
@@ -427,7 +429,7 @@ class CDIModel(t.nn.Module):
 
                 # This takes the step for this minibatch
                 loss += optimizer.step(closure).detach().cpu().numpy()
-
+                t.distributed.barrier() # Add this for checkpoint debugging
             
             loss /= normalization
 
@@ -455,11 +457,7 @@ class CDIModel(t.nn.Module):
                     else:
                         yield float('nan')
                     continue
-                
-                # If we're using DistributedSampler (likely the case if
-                # you're using multiple GPUs), we need to tell it
-                # which epoch we're on before running an epoch
-                if is_multi_GPU: data_loader.sampler.set_epoch(self.epoch)
+
                 yield run_epoch()
                     
                 
@@ -485,11 +483,6 @@ class CDIModel(t.nn.Module):
                     else:
                         yield float('nan')
                     continue
-                
-                # If we're using DistributedSampler, (likely the case if
-                # you're using multiple GPUs), we need to tell it which
-                # epoch we're on before running an epoch
-                if is_multi_GPU: data_loader.sampler.set_epoch(self.epoch)
 
                 calc = threading.Thread(target=target, name='calculator', daemon=True)
                 try:
@@ -589,10 +582,9 @@ class CDIModel(t.nn.Module):
                                          drop_last=False)
             # Now create the dataloader
             data_loader = torchdata.DataLoader(dataset,
-                                               batch_size=batch_size, # TODO: Recalculate the batch_size for multi-GPU operation
-                                               shuffle=False, # Shuffling is now handled by sampler
-                                               num_workers=0, # I'm not 100% sure what this does, but apparently making this >0 can cause bugs
-                                               drop_last=False, # TODO: Test out how this influences reconstructions
+                                               batch_size=batch_size,
+                                               num_workers=0, # Creating extra threads in children processes may cause problems. Leave this at 0.
+                                               drop_last=False,
                                                pin_memory=False,# I'm not 100% sure what this does, but apparently making this True can cause bugs
                                                sampler=sampler)
         else:
