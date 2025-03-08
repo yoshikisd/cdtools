@@ -77,6 +77,11 @@ def distributed_wrapper(rank,
     model.to(device=device)
     dataset.get_as(device=device) 
 
+    # Update the rank in the model and indicate we're using multiple GPUs
+    model.rank = rank
+    if world_size > 1: # In case we need to use 1 GPU for testing
+        model.multi_gpu_used = True
+
     # Wrap the model with DistributedDataParallel
     model_DDP = DDP(model,
                     device_ids=[rank],  # Tells DDP which GPU the model lives in

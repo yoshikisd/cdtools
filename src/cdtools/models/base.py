@@ -62,6 +62,12 @@ class CDIModel(t.nn.Module):
         self.training_history = ''
         self.epoch = 0
 
+        # These properties indicate to the CDIModel methods whether or not 
+        # multiple GPUs will be used. The purpose is to allow only 1 GPU to call
+        # certain methods to prevent the creation of redundant plots/reports/saves
+        self.rank = None # Rank of the subprocess running the GPU
+        self.multi_gpu_used = False     
+
     def from_dataset(self, dataset):
         raise NotImplementedError()
 
@@ -781,6 +787,10 @@ class CDIModel(t.nn.Module):
             Whether to update existing plots or plot new ones
 
         """
+        # FOR MULTI-GPU: Only run this method if it's called by the rank 0 GPU
+        if self.multi_gpu_used and self.rank != 0:
+            return
+
         # We find or create all the figures
         first_update = False
         if update and hasattr(self, 'figs') and self.figs:
@@ -890,6 +900,10 @@ class CDIModel(t.nn.Module):
         logarithmic : bool, default: False
             Whether to plot the diffraction on a logarithmic scale
         """
+
+        # FOR MULTI-GPU: Only run this method if it's called by the rank 0 GPU
+        if self.multi_gpu_used and self.rank != 0:
+            return
 
         fig, axes = plt.subplots(1,3,figsize=(12,5.3))
         fig.tight_layout(rect=[0.02, 0.09, 0.98, 0.96])

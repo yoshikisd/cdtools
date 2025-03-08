@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 from torch.distributed import barrier
 from cdtools.tools.distributed import distributed
 
-filename = r'example_data/lab_ptycho_data.cxi'
+filename = r'/homes/dayne/repositories/cdtools_yoshikisd/cdtools/examples/example_data/lab_ptycho_data.cxi'#'example_data/lab_ptycho_data.cxi'
 dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
 model = cdtools.models.FancyPtycho.from_dataset(
@@ -37,33 +37,23 @@ model = cdtools.models.FancyPtycho.from_dataset(
 
 def multi_gpu_reconstruct(model, dataset, rank, world_size):
 
-    # All CDTools methods have to be called using 'model.module' 
-    # rather than 'model'.
-    # We also need to pass the rank and world_size to Adam_optimize
-    # as shown below
-    for loss in model.Adam_optimize(50, 
+    # We need to pass the rank and world_size to Adam_optimize as shown below
+    for loss in model.Adam_optimize(100, 
                                     dataset, 
                                     lr=0.02, 
                                     batch_size=10,
                                     rank=rank,
                                     num_workers=world_size):
         
-        # We can still perform model.inspect and model.report, but we want
-        # only 1 GPU handling plotting/printing.
-        if rank == 0: print(model.report())
+        # We can still perform model.report, but we want only 1 GPU printing stuff.
+        if rank == 0: 
+            print(model.report())
         
-        # We set up the model.inspect this way to only let GPU 0 plot and
-        # prevent the other GPUs from running ahead of GPU 0, which
-        # seems to cause bugs (GPU processes dissapear from nvidia-smi)
+        # You don't need to add the `if rank == 0` here. 
         if model.epoch % 10 == 0:
-            if rank == 0:
-                model.inspect(dataset)
-            barrier()   # Make all GPUs wait until everyone is caught up
+            model.inspect(dataset)
 
-    # Make sure all GPUs catch up before starting another reconstruction loop
-    barrier()
-
-    for loss in model.Adam_optimize(50, 
+    for loss in model.Adam_optimize(100, 
                                     dataset,  
                                     lr=0.005, 
                                     batch_size=50,
@@ -74,15 +64,15 @@ def multi_gpu_reconstruct(model, dataset, rank, world_size):
         if model.epoch % 10 == 0:
             if rank == 0:
                 model.inspect(dataset)
-            barrier()
-    barrier()
 
-    # Get the model back from the distributed processing
-    if rank == 0:
-        model.tidy_probes()
-        model.inspect(dataset)
-        model.compare(dataset)
-        plt.show()
+    model.tidy_probes()
+    model.inspect(dataset)
+
+    # You don't need to add the `if rank == 0` here either...
+    model.compare(dataset)
+
+    # ...but you do have to add it here.
+    if rank == 0: plt.show()
     
 # This will execute the multi_gpu_reconstruct upon running this file
 # Here, we're...
@@ -101,7 +91,7 @@ if __name__ == '__main__':
     distributed.spawn(multi_gpu_reconstruct, 
                       model=model,
                       dataset=dataset,
-                      world_size = 4,
+                      world_size = 8,
                       master_addr='localhost',
                       master_port='8888',
                       timeout=60)
