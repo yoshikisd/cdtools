@@ -31,7 +31,6 @@ loss
 import torch as t
 from torch.utils import data as torchdata
 from torch.utils.data.distributed import DistributedSampler
-from torch.nn.parallel import DistributedDataParallel
 from matplotlib import pyplot as plt
 from matplotlib.widgets import Slider
 from matplotlib import ticker
@@ -398,7 +397,7 @@ class CDIModel(t.nn.Module):
                             exit()
 
                         # Run the simulation
-                        sim_patterns = self.forward(*inp)
+                        sim_patterns = self.forward(*inp) ## TODO: Do a deep dive plotting-per-iteration of this
 
                         # Calculate the loss
                         if hasattr(self, 'mask'):
