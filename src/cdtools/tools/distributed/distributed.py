@@ -21,19 +21,23 @@ import torch as t
 from torch.distributed import init_process_group, destroy_process_group, barrier
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.multiprocessing as mp
+from cdtools.models import CDIModel
+from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
 import datetime
 import os
+from typing import Callable
 
 __all__ = ['distributed_wrapper', 'spawn']
 
 
-def distributed_wrapper(rank, 
-                        func, 
-                        model, 
-                        dataset, 
-                        world_size,
-                        backend='nccl', 
-                        timeout=600):
+def distributed_wrapper(rank: int, 
+                        func: Callable[[CDIModel, Ptycho2DDataset, int, int]], 
+                        model: CDIModel, 
+                        dataset: Ptycho2DDataset, 
+                        world_size: int,
+                        backend: str = 'nccl', 
+                        timeout: int = 600,
+                        pipe=None):
     """Wraps functions containing reconstruction loops (i.e., for loss in 
     model.Adam_optimize) to enable multi-GPU operations to be set up. The 
     wrapped function needs to passed to `torch.multiprocessing.spawn` or 
@@ -43,8 +47,9 @@ def distributed_wrapper(rank,
         rank: int
             Rank of the GPU, with value ranging from [0, world_size-1]. This
             is defined by the spawning methods and not directly by the user.
-        func:
-            Function wrapping user-defined reconstruction loops
+        func: Callable[[CDIModel, Ptycho2DDataset, int, int]]
+            Function wrapping user-defined reconstruction loops. The function must
+            have the following format: func(model, dataset, rank, world_size).
         model: CDIModel
             Model for CDI/ptychography reconstruction
         dataset: Ptycho2DDataset
@@ -100,9 +105,9 @@ def distributed_wrapper(rank,
     destroy_process_group()        
 
 
-def spawn(func,
-          model,
-          dataset,
+def spawn(func: Callable[[CDIModel, Ptycho2DDataset, int, int]],
+          model: CDIModel,
+          dataset: Ptycho2DDataset,
           world_size: int,
           master_addr: str,
           master_port: str,
@@ -117,8 +122,9 @@ def spawn(func,
     distributed backend.
 
     Parameters:
-        func:
-            Function wrapping user-defined reconstruction loops
+        func: Callable[[CDIModel, Ptycho2DDataset, int, int]]
+            Function wrapping user-defined reconstruction loops. The function must
+            have the following format: func(model, dataset, rank, world_size).
         model: CDIModel
             Model for CDI/ptychography reconstruction
         dataset: Ptycho2DDataset
