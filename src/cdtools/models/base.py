@@ -65,8 +65,9 @@ class CDIModel(t.nn.Module):
         # These properties indicate to the CDIModel methods whether or not 
         # multiple GPUs will be used. The purpose is to allow only 1 GPU to call
         # certain methods to prevent the creation of redundant plots/reports/saves
-        self.rank = None # Rank of the subprocess running the GPU
-        self.multi_gpu_used = False     
+        self.rank = None                # Rank of the subprocess running the GPU
+        self.world_size = 1             # Total number of GPUs being used.
+        self.multi_gpu_used = False     # Self explanatory
 
     def from_dataset(self, dataset):
         raise NotImplementedError()
@@ -529,9 +530,7 @@ class CDIModel(t.nn.Module):
             subset=None,
             regularization_factor=None,
             thread=True,
-            calculation_width=10,
-            num_workers=1,
-            rank=None
+            calculation_width=10
     ):
         """Runs a round of reconstruction using the Adam optimizer
 
@@ -561,11 +560,7 @@ class CDIModel(t.nn.Module):
         thread : bool
             Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
         calculation_width : int
-            Default 10, how many translations to pass through at once for each round of gradient accumulation. Does not affect the result, only the calculation speed
-        num_workers: int
-            Default 1, how many GPUs to distribute calculations over
-        rank: int
-            Default None, the rank of the GPU to be used when performing multi-gpu operations. Value should be within [0, world_size-1]
+            Default 10, how many translations to pass through at once for each round of gradient accumulation. Does not affect the result, only the calculation speed 
         
         """
 
@@ -584,12 +579,12 @@ class CDIModel(t.nn.Module):
 
         # Make a dataloader suited for either single-GPU use or cases
         # where a process group (i.e., multiple GPUs) has been initialized
-        if num_workers > 1:
+        if self.multi_gpu_used:
             # First, create a sampler to load subsets of dataset to the GPUs
             # TODO: Test out drop_last to see how much that influences reconstructions
             sampler = DistributedSampler(dataset,
-                                         num_replicas=num_workers,
-                                         rank=rank,
+                                         num_replicas=self.world_size,
+                                         rank=self.rank,
                                          shuffle=True,
                                          drop_last=False)
             # Now create the dataloader

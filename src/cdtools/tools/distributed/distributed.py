@@ -68,6 +68,12 @@ def distributed_wrapper(rank,
     # Convert timeout from int to datetime
     timeout = datetime.timedelta(seconds=timeout)
 
+    # Update the rank in the model and indicate we're using multiple GPUs
+    model.rank = rank
+    model.world_size = world_size
+    if world_size > 1: # In case we need to use 1 GPU for testing
+        model.multi_gpu_used = True
+
     # Initialize the process group
     init_process_group(backend=backend, rank=rank, 
                        world_size=world_size, timeout=timeout)
@@ -76,11 +82,6 @@ def distributed_wrapper(rank,
     device = f'cuda:{rank}'
     model.to(device=device)
     dataset.get_as(device=device) 
-
-    # Update the rank in the model and indicate we're using multiple GPUs
-    model.rank = rank
-    if world_size > 1: # In case we need to use 1 GPU for testing
-        model.multi_gpu_used = True
 
     # Wrap the model with DistributedDataParallel
     model_DDP = DDP(model,
