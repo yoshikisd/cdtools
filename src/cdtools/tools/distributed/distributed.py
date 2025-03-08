@@ -21,6 +21,7 @@ import torch as t
 from torch.distributed import init_process_group, destroy_process_group, barrier
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.multiprocessing as mp
+from multiprocessing.connection import Connection
 from cdtools.models import CDIModel
 from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
 import datetime
@@ -31,15 +32,15 @@ __all__ = ['distributed_wrapper', 'spawn']
 
 
 def distributed_wrapper(rank: int, 
-                        func: Callable[[CDIModel, Ptycho2DDataset, int, int]], 
+                        func: Callable[[CDIModel, Ptycho2DDataset, int, int], None], 
                         model: CDIModel, 
                         dataset: Ptycho2DDataset, 
                         world_size: int,
                         backend: str = 'nccl', 
                         timeout: int = 600,
-                        pipe=None):
-    """Wraps functions containing reconstruction loops (i.e., for loss in 
-    model.Adam_optimize) to enable multi-GPU operations to be set up. The 
+                        pipe: Connection = None):
+    """Wraps functions containing reconstruction loops (i.e., `for loss in 
+    model.Adam_optimize`) to enable multi-GPU operations to be set up. The 
     wrapped function needs to passed to `torch.multiprocessing.spawn` or 
     `cdtools.tools.distributed.distributed.spawn`
 
@@ -65,10 +66,12 @@ def distributed_wrapper(rank: int,
             Timeout for operations executed against the process group in seconds. 
             Default is 10 minutes. After timeout has been reached, all subprocesses
             will be aborted and the process calling this method will crash. 
-    
-    NOTE: While this would have been nice as a decorator function (integrated
-    with the spawner), this seems to cause problems with mp.spawn, which needs to
-    pickle the function.
+        pipe: Connection
+            A Connection object representing one end of a communication pipe. This
+            parameter is needed if you're trying to get some values back from the
+            wrapped function.
+            BUG: Passing a CDIModel through connection generated with mp.Pipe or
+                 query will cause the connection to hang.
     """
     # Convert timeout from int to datetime
     timeout = datetime.timedelta(seconds=timeout)
@@ -98,14 +101,19 @@ def distributed_wrapper(rank: int,
     barrier()   
     # Start the reconstruction loop, but feed in model_DDP.module so we don't
     # have to change `model._` to `model.module._` in the CDTools script
-    func(model_DDP.module, dataset, rank, world_size)        
+    # We also need to check if we want to pass a pipe to the function
+    if pipe is None:
+        func(model_DDP.module, dataset, rank, world_size)    
+    else:
+        func(model_DDP.module, dataset, rank, world_size, pipe)   
+
     # Wait for all GPUs to finish reconstructing
     barrier()                               
     # Destroy process group
     destroy_process_group()        
 
 
-def spawn(func: Callable[[CDIModel, Ptycho2DDataset, int, int]],
+def spawn(func: Callable[[CDIModel, Ptycho2DDataset, int, int], None],
           model: CDIModel,
           dataset: Ptycho2DDataset,
           world_size: int,
@@ -113,7 +121,8 @@ def spawn(func: Callable[[CDIModel, Ptycho2DDataset, int, int]],
           master_port: str,
           backend: str = 'nccl',
           timeout: int = 600,
-          nccl_p2p_disable: bool = True):
+          nccl_p2p_disable: bool = True,
+          pipe: Connection = None):
     """Spawns subprocesses on `world_size` GPUs that runs reconstruction
     loops wrapped around a function `func`.
     
@@ -146,6 +155,12 @@ def spawn(func: Callable[[CDIModel, Ptycho2DDataset, int, int]],
             will be aborted and the process calling this method will crash.   
         nccl_p2p_disable: bool
             Disable NCCL peer-2-peer communication
+        pipe: Connection
+            A Connection object representing one end of a communication pipe. This
+            parameter is needed if you're trying to get some values back from the
+            wrapped function.
+            BUG: Passing a CDIModel through connection generated with mp.Pipe or
+                 query will cause the connection to hang.
     """
     # Set up environment variables
     os.environ['MASTER_ADDR'] = master_addr
@@ -155,7 +170,7 @@ def spawn(func: Callable[[CDIModel, Ptycho2DDataset, int, int]],
     # Ensure a "graceful" termination of subprocesses if something goes wrong.
     print('\nStarting up multi-GPU reconstructions...')
     mp.spawn(distributed_wrapper,
-                args=(func, model, dataset, world_size, backend, timeout),
+                args=(func, model, dataset, world_size, backend, timeout, pipe),
                 nprocs=world_size,
                 join=True)
     print('Reconstructions complete...')
