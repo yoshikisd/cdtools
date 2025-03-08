@@ -41,47 +41,47 @@ def multi_gpu_reconstruct(model, dataset, rank, world_size):
     # rather than 'model'.
     # We also need to pass the rank and world_size to Adam_optimize
     # as shown below
-    for loss in model.module.Adam_optimize(50, 
-                                           dataset, 
-                                           lr=0.02, 
-                                           batch_size=10,
-                                           rank=rank,
-                                           num_workers=world_size):
+    for loss in model.Adam_optimize(50, 
+                                    dataset, 
+                                    lr=0.02, 
+                                    batch_size=10,
+                                    rank=rank,
+                                    num_workers=world_size):
         
         # We can still perform model.inspect and model.report, but we want
         # only 1 GPU handling plotting/printing.
-        if rank == 0: print(model.module.report())
+        if rank == 0: print(model.report())
         
         # We set up the model.inspect this way to only let GPU 0 plot and
         # prevent the other GPUs from running ahead of GPU 0, which
         # seems to cause bugs (GPU processes dissapear from nvidia-smi)
-        if model.module.epoch % 10 == 0:
+        if model.epoch % 10 == 0:
             if rank == 0:
-                model.module.inspect(dataset)
+                model.inspect(dataset)
             barrier()   # Make all GPUs wait until everyone is caught up
 
     # Make sure all GPUs catch up before starting another reconstruction loop
     barrier()
 
-    for loss in model.module.Adam_optimize(50, 
-                                           dataset,  
-                                           lr=0.005, 
-                                           batch_size=50,
-                                           rank=rank,
-                                           num_workers=world_size):
-        if rank == 0: print(model.module.report())
+    for loss in model.Adam_optimize(50, 
+                                    dataset,  
+                                    lr=0.005, 
+                                    batch_size=50,
+                                    rank=rank,
+                                    num_workers=world_size):
+        if rank == 0: print(model.report())
         
-        if model.module.epoch % 10 == 0:
+        if model.epoch % 10 == 0:
             if rank == 0:
-                model.module.inspect(dataset)
+                model.inspect(dataset)
             barrier()
     barrier()
 
     # Get the model back from the distributed processing
     if rank == 0:
-        model.module.tidy_probes()
-        model.module.inspect(dataset)
-        model.module.compare(dataset)
+        model.tidy_probes()
+        model.inspect(dataset)
+        model.compare(dataset)
         plt.show()
     
 # This will execute the multi_gpu_reconstruct upon running this file

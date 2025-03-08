@@ -85,8 +85,9 @@ def distributed_wrapper(rank,
     
     # Don't start reconstructing until all GPUs have synced.
     barrier()   
-    # Start the reconstruction loop
-    func(model_DDP, dataset, rank, world_size)        
+    # Start the reconstruction loop, but feed in model_DDP.module so we don't
+    # have to change `model._` to `model.module._` in the CDTools script
+    func(model_DDP.module, dataset, rank, world_size)        
     # Wait for all GPUs to finish reconstructing
     barrier()                               
     # Destroy process group
