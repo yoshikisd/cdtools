@@ -16,18 +16,13 @@ from cdtools.tools.distributed import distributed
 from multiprocessing.connection import Connection
 from typing import Tuple
 from matplotlib import pyplot as plt
-from torch.distributed import destroy_process_group
 import torch.multiprocessing as mp
-import datetime 
 import time
 import numpy as np
 from copy import deepcopy
 
-TIMEOUT = datetime.timedelta(seconds=10)   # Auto-terminate if things hang
-BACKEND = 'nccl'
-
 # Load the dataset
-filename = r'examples/example_data/lab_ptycho_data.cxi'
+filename = r'example_data/lab_ptycho_data.cxi'
 dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
 # Create the model
@@ -87,12 +82,17 @@ def reconstruct(model: CDIModel,
 
 
     # Perform reconstructions on either single or multi-GPU workflows.
-    for loss in model.Adam_optimize(200, dataset, lr=0.02, batch_size=10):
+    for loss in model.Adam_optimize(100, dataset, lr=0.02, batch_size=10):
         if rank == 0:
             print(model.report())
             t_list.append(time.time() - t_start)
 
-    for loss in model.Adam_optimize(200, dataset, lr=0.005, batch_size=50):
+    for loss in model.Adam_optimize(100, dataset, lr=0.005, batch_size=50):
+        if rank == 0:
+            print(model.report())
+            t_list.append(time.time() - t_start)
+
+    for loss in model.Adam_optimize(100, dataset, lr=0.001, batch_size=50):
         if rank == 0:
             print(model.report())
             t_list.append(time.time() - t_start)
@@ -111,18 +111,13 @@ def reconstruct(model: CDIModel,
         return time_history, loss_history
 
 
-# This will execute the multi_gpu_reconstruct upon running this file
-if __name__ == '__main__':
-    # Define the number of GPUs to use.
-    world_sizes = [8, 4, 2, 1] 
-
-    # How many reconstruction runs to perform for statistics
-    runs = 5
-
+def run_test(world_size, runs):
     # Set up a parent/child connection to get some info from the GPU-accelerated function
     parent_conn, child_conn = mp.Pipe()
-
+    
     # Execute
+    # Plot
+    fig, (ax1,ax2) = plt.subplots(1,2)
     for world_size in world_sizes:
         print(f'Number of GPU(s): {world_size}')
         # Make a list to store the values
@@ -155,21 +150,37 @@ if __name__ == '__main__':
                     time_list.append(final_time)
                     loss_hist_list.append(loss_history)
             
-        
         # Calculate the statistics
         time_mean = np.array(time_list).mean(axis=0)/60
         time_std = np.array(time_list).std(axis=0)/60
         loss_mean = np.array(loss_hist_list).mean(axis=0)
         loss_std = np.array(loss_hist_list).std(axis=0)
 
-        # Plot
-        plt.errorbar(time_mean, loss_mean, yerr=loss_std, xerr=time_std,
-                    label=f'{world_size} GPUs')
-        plt.yscale('log')
-        plt.xscale('linear')
         
-        plt.legend()
-        plt.xlabel('Time (min)')
-        plt.ylabel('Loss')
-        plt.show()
+        ax1.errorbar(time_mean, loss_mean, yerr=loss_std, xerr=time_std,
+                    label=f'{world_size} GPUs')
+        ax2.plot(loss_mean, label=f'{world_size} GPUs')
+        
+    
+    ax1.set_yscale('log')
+    ax1.set_xscale('linear')
+    ax2.set_yscale('log')
+    ax2.set_xscale('linear')
+    ax1.legend()
+    ax2.legend()
+    ax1.set_xlabel('Time (min)')
+    ax1.set_ylabel('Loss')
+    ax2.set_xlabel('Epochs')
+    plt.show()
+
+# This will execute the multi_gpu_reconstruct upon running this file
+if __name__ == '__main__':
+    # Define the number of GPUs to use.
+    world_sizes = [8, 4] 
+
+    # How many reconstruction runs to perform for statistics
+    runs = 1
+
+    run_test(world_sizes, runs)
+    
     
