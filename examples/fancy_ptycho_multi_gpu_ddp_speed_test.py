@@ -87,12 +87,12 @@ def reconstruct(model: CDIModel,
 
 
     # Perform reconstructions on either single or multi-GPU workflows.
-    for loss in model.Adam_optimize(25, dataset, lr=0.02, batch_size=10, schedule=schedule):
+    for loss in model.Adam_optimize(200, dataset, lr=0.02, batch_size=10):
         if rank == 0:
             print(model.report())
             t_list.append(time.time() - t_start)
 
-    for loss in model.Adam_optimize(25, dataset, lr=0.005, batch_size=50, schedule=schedule):
+    for loss in model.Adam_optimize(200, dataset, lr=0.005, batch_size=50):
         if rank == 0:
             print(model.report())
             t_list.append(time.time() - t_start)
@@ -116,19 +116,13 @@ if __name__ == '__main__':
     # Define the number of GPUs to use.
     world_sizes = [8, 4, 2, 1] 
 
-    # Define if we want to use the scheduler or not
-    schedule=True
-
-    # Define how many iterations we want to perform of the reconstructions
-    # for statistics
+    # How many reconstruction runs to perform for statistics
     runs = 5
 
     # Set up a parent/child connection to get some info from the GPU-accelerated function
     parent_conn, child_conn = mp.Pipe()
 
-    # Write a try/except statement to help the subprocesses (and GPUs)
-    # terminate gracefully. Otherwise, you may have stuff loaded on
-    # several GPU even after terminating.
+    # Execute
     for world_size in world_sizes:
         print(f'Number of GPU(s): {world_size}')
         # Make a list to store the values
