@@ -37,7 +37,7 @@ model = cdtools.models.FancyPtycho.from_dataset(
 
 def multi_gpu_reconstruct(model, dataset, rank, world_size):
 
-    for loss in model.Adam_optimize(100, dataset, lr=0.02, batch_size=10):
+    for loss in model.Adam_optimize(50, dataset, lr=0.02, batch_size=10):
         
         # We can still perform model.report, but we want only 1 GPU printing stuff.
         if rank == 0: 
@@ -47,8 +47,9 @@ def multi_gpu_reconstruct(model, dataset, rank, world_size):
         if model.epoch % 20 == 0:
             model.inspect(dataset)
 
-    for loss in model.Adam_optimize(100, dataset, lr=0.005, batch_size=50):
-        if rank == 0: print(model.report())
+    for loss in model.Adam_optimize(50, dataset, lr=0.005, batch_size=50):
+        if rank == 0: 
+            print(model.report())
         
         if model.epoch % 20 == 0:
             if rank == 0:
@@ -80,7 +81,7 @@ if __name__ == '__main__':
     distributed.spawn(multi_gpu_reconstruct, 
                       model=model,
                       dataset=dataset,
-                      world_size = 8,
+                      world_size = 4,
                       master_addr='localhost',
                       master_port='8888',
-                      timeout=60)
+                      timeout=600)
