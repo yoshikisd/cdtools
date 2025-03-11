@@ -429,7 +429,6 @@ class CDIModel(t.nn.Module):
 
                 # This takes the step for this minibatch
                 loss += optimizer.step(closure).detach().cpu().numpy()
-                t.distributed.barrier() # Add this for checkpoint debugging
             
             loss /= normalization
 
