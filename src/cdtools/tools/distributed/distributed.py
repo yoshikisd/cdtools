@@ -35,7 +35,7 @@ def distributed_wrapper(rank: int,
                         func: Callable[[CDIModel, Ptycho2DDataset, int, int], None], 
                         model: CDIModel, 
                         dataset: Ptycho2DDataset, 
-                        world_size: int,
+                        device_ids: list[int],
                         backend: str = 'nccl', 
                         timeout: int = 600,
                         pipe: Connection = None):
@@ -55,8 +55,8 @@ def distributed_wrapper(rank: int,
             Model for CDI/ptychography reconstruction
         dataset: Ptycho2DDataset
             The dataset to reconstruct against
-        world_size: int
-            Number of GPUs to use
+        device_ids: list[int]
+            List of GPU IDs to use
         backend: str
             Multi-gpu communication backend to use. Default is the 'nccl' backend,
             which is the only supported backend for CDTools.
@@ -78,23 +78,28 @@ def distributed_wrapper(rank: int,
 
     # Update the rank in the model and indicate we're using multiple GPUs
     model.rank = rank
-    model.world_size = world_size
-    if world_size > 1: # In case we need to use 1 GPU for testing
+    model.device_id = device_ids[model.rank]
+    model.world_size = len(device_ids)
+
+    # Allow the process to only see the GPU is has been assigned
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(model.device_id) 
+
+    if model.world_size > 1: # In case we need to use 1 GPU for testing
         model.multi_gpu_used = True
 
     # Initialize the process group
     init_process_group(backend=backend, rank=rank, 
-                       world_size=world_size, timeout=timeout)
+                       world_size=model.world_size, timeout=timeout)
     
     # Load the model to the appropriate GPU rank the process is using
-    device = f'cuda:{rank}'
+    device='cuda'
     model.to(device=device)
     dataset.get_as(device=device) 
 
     # Wrap the model with DistributedDataParallel
     model_DDP = DDP(model,
-                    device_ids=[rank],  # Tells DDP which GPU the model lives in
-                    output_device=rank, # Tells DDP which GPU to output to
+                    device_ids=[model.device_id],  # Tells DDP which GPU the model lives in
+                    output_device=model.device_id, # Tells DDP which GPU to output to
                     find_unused_parameters=True) # TODO: Understand what this is really doing...
     
     # Don't start reconstructing until all GPUs have synced.
@@ -103,9 +108,9 @@ def distributed_wrapper(rank: int,
     # have to change `model._` to `model.module._` in the CDTools script
     # We also need to check if we want to pass a pipe to the function
     if pipe is None:
-        func(model_DDP.module, dataset, rank, world_size)    
+        func(model_DDP.module, dataset, rank, model.world_size)    
     else:
-        func(model_DDP.module, dataset, rank, world_size, pipe)   
+        func(model_DDP.module, dataset, rank, model.world_size, pipe)   
 
     # Wait for all GPUs to finish reconstructing
     barrier()                               
@@ -116,7 +121,7 @@ def distributed_wrapper(rank: int,
 def spawn(func: Callable[[CDIModel, Ptycho2DDataset, int, int], None],
           model: CDIModel,
           dataset: Ptycho2DDataset,
-          world_size: int,
+          device_ids: list[int],
           master_addr: str,
           master_port: str,
           backend: str = 'nccl',
@@ -138,8 +143,8 @@ def spawn(func: Callable[[CDIModel, Ptycho2DDataset, int, int], None],
             Model for CDI/ptychography reconstruction
         dataset: Ptycho2DDataset
             The dataset to reconstruct against
-        world_size: int
-            Number of GPUs to use
+        device_ids: list[int]
+            List of GPU IDs to use
         master_addr: str
             IP address of the machine that will host the process with rank 0
         master_port: str
@@ -170,7 +175,7 @@ def spawn(func: Callable[[CDIModel, Ptycho2DDataset, int, int], None],
     # Ensure a "graceful" termination of subprocesses if something goes wrong.
     print('\nStarting up multi-GPU reconstructions...')
     mp.spawn(distributed_wrapper,
-                args=(func, model, dataset, world_size, backend, timeout, pipe),
-                nprocs=world_size,
+                args=(func, model, dataset, device_ids, backend, timeout, pipe),
+                nprocs=len(device_ids),
                 join=True)
     print('Reconstructions complete...')

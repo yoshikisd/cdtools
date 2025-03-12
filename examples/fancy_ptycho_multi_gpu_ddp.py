@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 from torch.distributed import barrier
 from cdtools.tools.distributed import distributed
 
-filename = r'example_data/lab_ptycho_data.cxi'
+filename = r'examples/example_data/lab_ptycho_data.cxi'
 dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
 model = cdtools.models.FancyPtycho.from_dataset(
@@ -81,7 +81,7 @@ if __name__ == '__main__':
     distributed.spawn(multi_gpu_reconstruct, 
                       model=model,
                       dataset=dataset,
-                      world_size = 4,
+                      device_ids = [1,3,6,7],
                       master_addr='localhost',
                       master_port='8888',
-                      timeout=600)
+                      timeout=6000)

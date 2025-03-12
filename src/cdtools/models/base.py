@@ -66,6 +66,7 @@ class CDIModel(t.nn.Module):
         # multiple GPUs will be used. The purpose is to allow only 1 GPU to call
         # certain methods to prevent the creation of redundant plots/reports/saves
         self.rank = None                # Rank of the subprocess running the GPU
+        self.device_id = None           # ID of the GPU being used in multi-GPU 
         self.world_size = 1             # Total number of GPUs being used.
         self.multi_gpu_used = False     # Self explanatory
 

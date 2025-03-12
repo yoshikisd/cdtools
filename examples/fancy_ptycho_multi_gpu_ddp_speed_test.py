@@ -40,7 +40,7 @@ model = cdtools.models.FancyPtycho.from_dataset(
 def reconstruct(model: CDIModel,
                 dataset: Ptycho2DDataset,
                 rank: int, 
-                world_size: int,
+                device_ids: list[int],
                 conn: Connection = None,
                 schedule: bool = False) -> Tuple[np.ndarray, np.ndarray]:
     """Perform the reconstruction using several GPUs
@@ -54,9 +54,9 @@ def reconstruct(model: CDIModel,
             The dataset to reconstruct against
         rank: int
             The rank of the GPU to be used. Value should be within
-            [0, world_size-1]
-        world_size: int
-            The total number of GPUs to use
+            [0, #_of_GPUs_used-1]
+        device_ids: list[int]
+            List of GPU IDs to use
         conn: Connection
             A Connection object representing one end of a communication pipe. This
             parameter is needed if you're trying to get some values back from the
@@ -75,11 +75,12 @@ def reconstruct(model: CDIModel,
     # Start counting time
     t_start = time.time()
 
-    if world_size == 1:
-        device = 'cuda'
+    # Check if we're using only a single GPU
+    if not model.multi_gpu_used:
+        # Use the 1st GPU in device_ids
+        device = f'cuda:{device_ids[0]}'
         model.to(device=device)
         dataset.get_as(device=device)
-
 
     # Perform reconstructions on either single or multi-GPU workflows.
     for loss in model.Adam_optimize(100, dataset, lr=0.02, batch_size=10):
@@ -107,19 +108,34 @@ def reconstruct(model: CDIModel,
             conn.send((time_history, loss_history))
 
     # Return the measured time and loss history if we're on a single GPU
-    if world_size == 1: 
+    if not model.multi_gpu_used:
         return time_history, loss_history
 
 
-def run_test(world_size, runs):
+def run_test(world_sizes: int, 
+             device_ids: int, 
+             runs: int):
+    """Runs a series of reconstructions (defined in the local function 
+    `reconstruct`) using several GPUs and several trials per GPU count.
+
+    Parameters:
+        world_sizes: list[int]
+            Number of GPUs to use. User can specify several GPU counts in a list.
+        device_ids: list[int] or int
+            List of the GPU ID numbers to use for the study
+        runs: int
+            How many repeat reconstructions to perform
+    """
     # Set up a parent/child connection to get some info from the GPU-accelerated function
     parent_conn, child_conn = mp.Pipe()
     
     # Execute
-    # Plot
     fig, (ax1,ax2) = plt.subplots(1,2)
     for world_size in world_sizes:
-        print(f'Number of GPU(s): {world_size}')
+        # Get the GPU IDs to use
+        dev_id = device_ids[0:world_size] 
+        print(f'\nNumber of GPU(s): {world_size} | Using GPU IDs {*dev_id,}')
+
         # Make a list to store the values
         time_list = []
         loss_hist_list = []
@@ -132,7 +148,7 @@ def run_test(world_size, runs):
                 final_time, loss_history = reconstruct(model=model_copy, 
                                                         dataset=dataset,
                                                         rank=0,
-                                                        world_size=1)
+                                                        device_ids=dev_id)
                 time_list.append(final_time)
                 loss_hist_list.append(loss_history)
             else:
@@ -140,7 +156,7 @@ def run_test(world_size, runs):
                 distributed.spawn(reconstruct,
                                     model=model_copy,
                                     dataset=dataset,
-                                    world_size=world_size,
+                                    device_ids = dev_id,
                                     master_addr = 'localhost',
                                     master_port = '8888',
                                     timeout=300,
@@ -156,12 +172,14 @@ def run_test(world_size, runs):
         loss_mean = np.array(loss_hist_list).mean(axis=0)
         loss_std = np.array(loss_hist_list).std(axis=0)
 
-        
+        # Add another plot
         ax1.errorbar(time_mean, loss_mean, yerr=loss_std, xerr=time_std,
                     label=f'{world_size} GPUs')
-        ax2.plot(loss_mean, label=f'{world_size} GPUs')
+        ax2.errorbar(np.arange(0,loss_mean.shape[0]), loss_mean, yerr=loss_std,
+                    label=f'{world_size} GPUs')
         
-    
+    # Plot
+    fig.suptitle(f'Multi-GPU performance test | {runs} runs performed')
     ax1.set_yscale('log')
     ax1.set_xscale('linear')
     ax2.set_yscale('log')
@@ -176,11 +194,14 @@ def run_test(world_size, runs):
 # This will execute the multi_gpu_reconstruct upon running this file
 if __name__ == '__main__':
     # Define the number of GPUs to use.
-    world_sizes = [8, 4] 
+    world_sizes = [1, 2, 4] 
+
+    # Define which GPU IDs to use
+    device_ids = [7, 6, 5, 4]
 
     # How many reconstruction runs to perform for statistics
     runs = 1
 
-    run_test(world_sizes, runs)
-    
+    # Run the test
+    run_test(world_sizes, device_ids, runs)
     
