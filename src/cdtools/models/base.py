@@ -574,7 +574,6 @@ class CDIModel(t.nn.Module):
         # where a process group (i.e., multiple GPUs) has been initialized
         if self.multi_gpu_used:
             # First, create a sampler to load subsets of dataset to the GPUs
-            # TODO: Test out drop_last to see how much that influences reconstructions
             sampler = DistributedSampler(dataset,
                                          num_replicas=self.world_size,
                                          rank=self.rank,
@@ -582,7 +581,7 @@ class CDIModel(t.nn.Module):
                                          drop_last=False)
             # Now create the dataloader
             data_loader = torchdata.DataLoader(dataset,
-                                               batch_size=batch_size,
+                                               batch_size=batch_size//self.world_size,
                                                num_workers=0, # Creating extra threads in children processes may cause problems. Leave this at 0.
                                                drop_last=False,
                                                pin_memory=False,# I'm not 100% sure what this does, but apparently making this True can cause bugs
