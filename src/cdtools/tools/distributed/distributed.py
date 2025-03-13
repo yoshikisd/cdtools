@@ -26,7 +26,7 @@ from cdtools.models import CDIModel
 from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
 import datetime
 import os
-from typing import Callable
+from typing import Callable, List
 
 __all__ = ['distributed_wrapper', 'spawn']
 
@@ -35,7 +35,7 @@ def distributed_wrapper(rank: int,
                         func: Callable[[CDIModel, Ptycho2DDataset, int, int], None], 
                         model: CDIModel, 
                         dataset: Ptycho2DDataset, 
-                        device_ids: list[int],
+                        device_ids: List[int],
                         backend: str = 'nccl', 
                         timeout: int = 600,
                         pipe: Connection = None):
@@ -121,7 +121,7 @@ def distributed_wrapper(rank: int,
 def spawn(func: Callable[[CDIModel, Ptycho2DDataset, int, int], None],
           model: CDIModel,
           dataset: Ptycho2DDataset,
-          device_ids: list[int],
+          device_ids: List[int],
           master_addr: str,
           master_port: str,
           backend: str = 'nccl',

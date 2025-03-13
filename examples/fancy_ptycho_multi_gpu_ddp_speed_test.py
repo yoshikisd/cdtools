@@ -14,7 +14,7 @@ from cdtools.models import CDIModel
 from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
 from cdtools.tools.distributed import distributed
 from multiprocessing.connection import Connection
-from typing import Tuple
+from typing import Tuple, List
 from matplotlib import pyplot as plt
 import torch.multiprocessing as mp
 import time
@@ -40,7 +40,7 @@ model = cdtools.models.FancyPtycho.from_dataset(
 def reconstruct(model: CDIModel,
                 dataset: Ptycho2DDataset,
                 rank: int, 
-                device_ids: list[int],
+                device_ids: List[int],
                 conn: Connection = None,
                 schedule: bool = False) -> Tuple[np.ndarray, np.ndarray]:
     """Perform the reconstruction using several GPUs
@@ -200,7 +200,7 @@ if __name__ == '__main__':
     device_ids = [7, 6, 5, 4]
 
     # How many reconstruction runs to perform for statistics
-    runs = 1
+    runs = 3
 
     # Run the test
     run_test(world_sizes, device_ids, runs)
