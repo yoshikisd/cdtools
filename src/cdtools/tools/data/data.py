@@ -946,7 +946,7 @@ def nested_dict_to_torch(d, device=None):
         elif isinstance(value, str):
             new_dict[key] = value
         elif isinstance(value, Mapping):
-            new_dict[key] = nested_dict_to_torch(value, dtype=dtype)
+            new_dict[key] = nested_dict_to_torch(value, device=device)
         else:
             raise ValueError(f'{value} is not a number, numpy array, torch tensor, string, or mapping')
 
