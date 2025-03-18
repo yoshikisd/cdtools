@@ -289,3 +289,55 @@ def test_add_ptycho_translations(tmp_path):
     assert np.allclose(-translations, read_translations_1)
     assert np.allclose(-translations, read_translations_2)
     assert np.allclose(-translations, read_translations_3)
+
+
+def test_nested_dict_to_h5(tmp_path):
+    ### Tests both nested_dict_to_h5 and h5_to_nested_dict
+    example_tensor = t.as_tensor(np.array([1,4.5,7]))
+    example_array = np.ones([10,20,30])
+    example_scalar = 4.5
+    example_single_element_array = np.array([0.3])
+    example_string = 'testing'
+
+    test_dict_1 = {}
+    test_dict_2 = {
+        'example_tensor': example_tensor,
+        'example_array': example_array,
+        'example_scalar': example_scalar,
+        'example_single_element_array': example_single_element_array,
+        'example_string': example_string
+    }
+    test_dict_3 = {
+        'example_array': example_array,
+        'example_string': example_string,
+        'example_dict': test_dict_2
+    }
+
+    def check_dict_equality(truth, to_test):
+        for key in truth.keys():
+            if type(truth[key]) == type(test_dict_2):
+                check_dict_equality(truth[key], to_test[key])
+            elif type(truth[key]) == type(example_tensor):
+                assert type(to_test[key]) == type(example_array)
+                assert np.allclose(truth[key].numpy(), to_test[key])
+            elif type(truth[key]) == type(example_array):
+                assert type(to_test[key]) == type(example_array)
+                assert np.allclose(truth[key], to_test[key])
+            elif type(truth[key]) == type(example_scalar):
+                assert truth[key] == to_test[key]
+            elif type(truth[key]) == type(example_string):
+                assert truth[key] == to_test[key]
+
+
+    for test_dict in [test_dict_1, test_dict_2, test_dict_3]:
+        filename = tmp_path / 'example_dataset.h5'
+        data.nested_dict_to_h5(filename, test_dict)
+        roundtrip = data.h5_to_nested_dict(filename)
+        check_dict_equality(test_dict, roundtrip)
+                
+    
+def test_h5_to_nested_dict(test_ptycho_cxis):
+    for cxi, expected in test_ptycho_cxis:
+        # Just test that it runs without errors for these ones.
+        # A round-trip test is in test_nested_dict_to_h5
+        d = data.h5_to_nested_dict(cxi)
