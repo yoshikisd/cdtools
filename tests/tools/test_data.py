@@ -289,3 +289,78 @@ def test_add_ptycho_translations(tmp_path):
     assert np.allclose(-translations, read_translations_1)
     assert np.allclose(-translations, read_translations_2)
     assert np.allclose(-translations, read_translations_3)
+
+
+def test_nested_dict_to_h5(tmp_path, example_nested_dicts):
+    ### Tests both nested_dict_to_h5 and h5_to_nested_dict
+
+    def check_dict_equality(truth, to_test):
+        for key in truth.keys():
+            if isinstance(truth[key], dict):
+                check_dict_equality(truth[key], to_test[key])
+            elif t.is_tensor(truth[key]):
+                assert isinstance(to_test[key], np.ndarray)
+                assert np.allclose(truth[key].numpy(), to_test[key])
+            elif isinstance(truth[key], np.ndarray):
+                assert isinstance(to_test[key], np.ndarray)
+                assert np.allclose(truth[key], to_test[key])
+            elif isinstance(truth[key], (float, int, str)):
+                assert truth[key] == to_test[key]
+            else:
+                assert 0
+            
+    for test_dict in example_nested_dicts:
+        filename = tmp_path / 'example_dataset.h5'
+        data.nested_dict_to_h5(filename, test_dict)
+        roundtrip = data.h5_to_nested_dict(filename)
+        check_dict_equality(test_dict, roundtrip)
+                
+    
+def test_h5_to_nested_dict(test_ptycho_cxis):
+    for cxi, expected in test_ptycho_cxis:
+        # Just test that it runs without errors for these ones.
+        # A round-trip test is in test_nested_dict_to_h5
+        d = data.h5_to_nested_dict(cxi)
+
+def test_nested_dict_to_numpy(example_nested_dicts):
+
+    def check_dict_numpyness(truth, to_test): 
+        for key in truth.keys():
+            if isinstance(truth[key], dict):
+                check_dict_numpyness(truth[key], to_test[key])
+            elif t.is_tensor(truth[key]):
+                assert isinstance(to_test[key], np.ndarray)
+                assert np.allclose(truth[key].numpy(), to_test[key])
+            elif isinstance(truth[key], np.ndarray):
+                assert isinstance(to_test[key], np.ndarray)
+                assert np.allclose(truth[key], to_test[key])
+            elif isinstance(truth[key], (float, int, str)):
+                assert truth[key] == to_test[key]
+            else:
+                assert 0
+
+    for test_dict in example_nested_dicts:
+        numpy_dict = data.nested_dict_to_numpy(test_dict)
+        check_dict_numpyness(test_dict, numpy_dict)            
+        
+    
+def test_nested_dict_to_torch(example_nested_dicts):
+
+    def check_dict_torchiness(truth, to_test): 
+        for key in truth.keys():
+            if isinstance(truth[key], dict):
+                check_dict_torchiness(truth[key], to_test[key])
+            elif t.is_tensor(truth[key]):
+                assert t.is_tensor(to_test[key])
+                assert t.allclose(truth[key], to_test[key])
+            elif isinstance(truth[key], np.ndarray):
+                assert t.is_tensor(to_test[key])
+                assert t.allclose(t.as_tensor(truth[key]), to_test[key])
+            elif isinstance(truth[key], (float, int, str)):
+                assert truth[key] == to_test[key]
+            else:
+                assert 0
+
+    for test_dict in example_nested_dicts:
+        torch_dict = data.nested_dict_to_torch(test_dict)
+        check_dict_torchiness(test_dict, torch_dict)

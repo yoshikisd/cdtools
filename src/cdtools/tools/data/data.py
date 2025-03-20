@@ -796,7 +796,7 @@ def add_ptycho_translations(cxi_file, translations):
 
 
 def nested_dict_to_h5(h5_file, d):
-    """saves a nested dictionary to an h5 file object
+    """Saves a nested dictionary to an h5 file object
 
     Parameters
     ----------
@@ -813,7 +813,7 @@ def nested_dict_to_h5(h5_file, d):
     
     for key in d.keys():
         value = d[key]
-        if isinstance(value, numbers.Number):
+        if isinstance(value, (numbers.Number, np.bool_)):
             arr = np.array(value)
             h5_file.create_dataset(key, data=arr)
         elif isinstance(value, np.ndarray):
@@ -832,14 +832,17 @@ def nested_dict_to_h5(h5_file, d):
 
 
 def h5_to_nested_dict(h5_file):
-    """saves a nested dictionary to an h5 file object
+    """Loads a nested dictionary from an h5 file object
 
     Parameters
     ----------
     h5_file : h5py.File
         A file object, or path to a file, to load from
+
+    Returns
+    -------
     d : dict
-        A mapping whose keys are all strings and whose values are only numpy arrays, pytorch tensors, scalars, python strings, or other mappings meeting the same conditions
+        A dictionary whose keys are all strings and whose values are numpy arrays, scalars, or python strings. Will raise an error if the data cannot be loaded into this format
     """
     
     # If a bare string is passed
@@ -852,11 +855,13 @@ def h5_to_nested_dict(h5_file):
         value = h5_file[key]
         if isinstance(value, h5py.Dataset):
             arr = value[()]
-            if arr.dtype == object:
+            # Strings stored via nested_dict_to_h5 will wind up as bytes objs
+            if type(arr) == type(b''):
+                d[key] = arr.decode('utf-8')
+            # Some strings in h5 files seem to be stored this way
+            elif hasattr(arr, 'dtype') and arr.dtype == object:
                 d[key] = arr.ravel()[0].decode('utf-8')
-            elif arr.ndim == 0:
-                # TODO is this needed with arr = value[()]?
-                d[key] = arr.ravel()[0] 
+            # This is the default case: it's an array of numbers
             else:
                 d[key] = arr
             
@@ -870,16 +875,24 @@ def h5_to_nested_dict(h5_file):
 
 
 def nested_dict_to_numpy(d):
+    """Sends all array like objects in a nested dict to numpy arrays
 
+    Parameters
+    ----------
+    d : dict
+        A mapping whose keys are all strings and whose values are only numpy arrays, pytorch tensors, scalars, or other mappings meeting the same conditions
+
+    Returns
+    -------
+    new_dict : dict
+        A new dictionary with all array like objects sent to numpy 
+    """
+    
     new_dict = {}
     for key in d.keys():
         value = d[key]
-        if isinstance(value, numbers.Number):
-            new_dict[key] = value
         # bools are an instance of number, but not np.bool_...
-        elif isinstance(value, np.bool_):
-            new_dict[key] = value
-        elif isinstance(value, np.ndarray):
+        if isinstance(value, (numbers.Number, np.bool_, np.ndarray)):
             new_dict[key] = value
         elif t.is_tensor(value):
             new_dict[key] = value.cpu().numpy()
@@ -888,29 +901,45 @@ def nested_dict_to_numpy(d):
         elif isinstance(value, Mapping):
             new_dict[key] = nested_dict_to_numpy(value)
         else:
-            raise ValueError(f'{value} is not a number, numpy array, torch tensor, or mapping')
+            raise ValueError(f'{value} is not a number, numpy array, torch tensor, string, or mapping')
 
     return new_dict
 
-def nested_dict_to_torch(d):
+def nested_dict_to_torch(d, device=None):
+    """Sends all array like objects in a nested dict to pytorch tensors
+
+    This will also send all the tensors to a specific device, if specified.
+    There is no option to send all tensors to a specific dtype, as tensors
+    are often a mixture of integer, floating point, and complex types. In
+    the future, this may support a "precision" option to send all tensors to
+    a specified precision.
     
+    Parameters
+    ----------
+    d : dict
+        A mapping whose keys are all strings and whose values are only numpy arrays, pytorch tensors, scalars, or other mappings meeting the same conditions
+    device : torch.device
+        A valid device argument for torch.Tensor.to
+    
+    Returns
+    -------
+    new_dict : dict
+        A new dictionary with all array like objects sent to torch tensors 
+    """
+
     new_dict = {}
     for key in d.keys():
         value = d[key]
-        if isinstance(value, numbers.Number):
-            new_dict[key] = t.as_tensor(value)
         # bools are an instance of number, but not np.bool_...
-        elif isinstance(value, np.bool_):
-            new_dict[key] = t.as_tensor(value)
-        elif isinstance(value, np.ndarray):
-            new_dict[key] = t.as_tensor(value)
+        if isinstance(value, (numbers.Number, np.bool_, np.ndarray)):
+            new_dict[key] = t.as_tensor(value, device=device)
         elif t.is_tensor(value):
-            new_dict[key] = value
+            new_dict[key] = value.to(device=device)
         elif isinstance(value, str):
             new_dict[key] = value
         elif isinstance(value, Mapping):
-            new_dict[key] = nested_dict_to_numpy(value)
+            new_dict[key] = nested_dict_to_torch(value, device=device)
         else:
-            raise ValueError(f'{value} is not a number, numpy array, torch tensor, or mapping')
+            raise ValueError(f'{value} is not a number, numpy array, torch tensor, string, or mapping')
 
     return new_dict
