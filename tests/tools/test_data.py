@@ -296,17 +296,15 @@ def test_nested_dict_to_h5(tmp_path, example_nested_dicts):
 
     def check_dict_equality(truth, to_test):
         for key in truth.keys():
-            if type(truth[key]) == type({'a': 1}):
+            if isinstance(truth[key], dict):
                 check_dict_equality(truth[key], to_test[key])
-            elif type(truth[key]) == type(t.as_tensor(np.array([1]))):
-                assert type(to_test[key]) == type(np.array([1]))
+            elif t.is_tensor(truth[key]):
+                assert isinstance(to_test[key], np.ndarray)
                 assert np.allclose(truth[key].numpy(), to_test[key])
-            elif type(truth[key]) == type(np.array([1])):
-                assert type(to_test[key]) == type(np.array([1]))
+            elif isinstance(truth[key], np.ndarray):
+                assert isinstance(to_test[key], np.ndarray)
                 assert np.allclose(truth[key], to_test[key])
-            elif type(truth[key]) == type(1.3) or \
-                 type(truth[key]) == type(1) or \
-                 type(truth[key]) == type('1'):
+            elif isinstance(truth[key], (float, int, str)):
                 assert truth[key] == to_test[key]
             else:
                 assert 0
@@ -328,17 +326,15 @@ def test_nested_dict_to_numpy(example_nested_dicts):
 
     def check_dict_numpyness(truth, to_test): 
         for key in truth.keys():
-            if type(truth[key]) == type({'a': 1}):
+            if isinstance(truth[key], dict):
                 check_dict_numpyness(truth[key], to_test[key])
-            elif type(truth[key]) == type(t.as_tensor(np.array([1]))):
-                assert type(to_test[key]) == type(np.array([1]))
+            elif t.is_tensor(truth[key]):
+                assert isinstance(to_test[key], np.ndarray)
                 assert np.allclose(truth[key].numpy(), to_test[key])
-            elif type(truth[key]) == type(np.array([1])):
-                assert type(to_test[key]) == type(np.array([1]))
+            elif isinstance(truth[key], np.ndarray):
+                assert isinstance(to_test[key], np.ndarray)
                 assert np.allclose(truth[key], to_test[key])
-            elif type(truth[key]) == type(1.3) or \
-                 type(truth[key]) == type(1) or \
-                 type(truth[key]) == type('1'):
+            elif isinstance(truth[key], (float, int, str)):
                 assert truth[key] == to_test[key]
             else:
                 assert 0
@@ -352,17 +348,15 @@ def test_nested_dict_to_torch(example_nested_dicts):
 
     def check_dict_torchiness(truth, to_test): 
         for key in truth.keys():
-            if type(truth[key]) == type({'a': 1}):
+            if isinstance(truth[key], dict):
                 check_dict_torchiness(truth[key], to_test[key])
-            elif type(truth[key]) == type(t.as_tensor(np.array([1]))):
-                assert type(to_test[key]) == type(t.as_tensor(np.array([1])))
+            elif t.is_tensor(truth[key]):
+                assert t.is_tensor(to_test[key])
                 assert t.allclose(truth[key], to_test[key])
-            elif type(truth[key]) == type(np.array([1])):
-                assert type(to_test[key]) == type(t.as_tensor(np.array([1])))
+            elif isinstance(truth[key], np.ndarray):
+                assert t.is_tensor(to_test[key])
                 assert t.allclose(t.as_tensor(truth[key]), to_test[key])
-            elif type(truth[key]) == type(1.3) or \
-                 type(truth[key]) == type(1) or \
-                 type(truth[key]) == type('1'):
+            elif isinstance(truth[key], (float, int, str)):
                 assert truth[key] == to_test[key]
             else:
                 assert 0

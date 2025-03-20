@@ -813,7 +813,7 @@ def nested_dict_to_h5(h5_file, d):
     
     for key in d.keys():
         value = d[key]
-        if isinstance(value, numbers.Number):
+        if isinstance(value, (numbers.Number, np.bool_)):
             arr = np.array(value)
             h5_file.create_dataset(key, data=arr)
         elif isinstance(value, np.ndarray):
@@ -832,7 +832,7 @@ def nested_dict_to_h5(h5_file, d):
 
 
 def h5_to_nested_dict(h5_file):
-    """Saves a nested dictionary to an h5 file object
+    """Loads a nested dictionary from an h5 file object
 
     Parameters
     ----------
@@ -842,7 +842,7 @@ def h5_to_nested_dict(h5_file):
     Returns
     -------
     d : dict
-        A dictionary whose keys are all strings and whose values are numpy arrays, scalars, or python strings. Will raise an error if the data cannot be loadedinto this format
+        A dictionary whose keys are all strings and whose values are numpy arrays, scalars, or python strings. Will raise an error if the data cannot be loaded into this format
     """
     
     # If a bare string is passed
@@ -884,19 +884,15 @@ def nested_dict_to_numpy(d):
 
     Returns
     -------
-    d_out : dict
+    new_dict : dict
         A new dictionary with all array like objects sent to numpy 
     """
     
     new_dict = {}
     for key in d.keys():
         value = d[key]
-        if isinstance(value, numbers.Number):
-            new_dict[key] = value
         # bools are an instance of number, but not np.bool_...
-        elif isinstance(value, np.bool_):
-            new_dict[key] = value
-        elif isinstance(value, np.ndarray):
+        if isinstance(value, (numbers.Number, np.bool_, np.ndarray)):
             new_dict[key] = value
         elif t.is_tensor(value):
             new_dict[key] = value.cpu().numpy()
@@ -927,19 +923,15 @@ def nested_dict_to_torch(d, device=None):
     
     Returns
     -------
-    d_out : dict
+    new_dict : dict
         A new dictionary with all array like objects sent to torch tensors 
     """
 
     new_dict = {}
     for key in d.keys():
         value = d[key]
-        if isinstance(value, numbers.Number):
-            new_dict[key] = t.as_tensor(value, device=device)
         # bools are an instance of number, but not np.bool_...
-        elif isinstance(value, np.bool_):
-            new_dict[key] = t.as_tensor(value, device=device)
-        elif isinstance(value, np.ndarray):
+        if isinstance(value, (numbers.Number, np.bool_, np.ndarray)):
             new_dict[key] = t.as_tensor(value, device=device)
         elif t.is_tensor(value):
             new_dict[key] = value.to(device=device)
