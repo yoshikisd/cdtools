@@ -18,8 +18,6 @@ __all__ = ['hann_window', 'centroid', 'centroid_sq', 'sinc_subpixel_shift',
 def hann_window(im):
     """ Applies a hann window to a 2D image to apodize it
 
-    TODO: update for pytorch
-    
     Parameters
     ----------
     im: np.array
@@ -30,9 +28,10 @@ def hann_window(im):
     apodidzed : np.array
         The image, apodized by a hann window
     """
-    Xs, Ys = np.mgrid[:im.shape[0],:im.shape[1]]
-    Xhann = np.sin(np.pi*Xs/(im.shape[1]-1))**2
-    Yhann = np.sin(np.pi*Ys/(im.shape[0]-1))**2
+    #Xs, Ys = np.mgrid[:im.shape[0],:im.shape[1]]
+    Xs, Ys = t.meshgrid(t.arange(im.shape[0]),t.arange(im.shape[1]), indexing='ij')
+    Xhann = t.sin(t.pi*Xs/(im.shape[1]-1))**2
+    Yhann = t.sin(t.pi*Ys/(im.shape[0]-1))**2
     Hann = Xhann * Yhann
     return im * Hann
 
