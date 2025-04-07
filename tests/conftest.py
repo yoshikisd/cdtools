@@ -1,4 +1,5 @@
 import numpy as np
+import torch as t
 import h5py
 import pytest
 import datetime
@@ -365,4 +366,26 @@ def lab_ptycho_cxi(pytestconfig):
         '/examples/example_data/lab_ptycho_data.cxi'
 
 
+@pytest.fixture(scope='module')
+def example_nested_dicts(pytestconfig):
+    example_tensor = t.as_tensor(np.array([1,4.5,7]))
+    example_array = np.ones([10,20,30])
+    example_scalar = 4.5
+    example_single_element_array = np.array([0.3])
+    example_string = 'testing'
 
+    test_dict_1 = {}
+    test_dict_2 = {
+        'example_tensor': example_tensor,
+        'example_array': example_array,
+        'example_scalar': example_scalar,
+        'example_single_element_array': example_single_element_array,
+        'example_string': example_string
+    }
+    test_dict_3 = {
+        'example_array': example_array,
+        'example_string': example_string,
+        'example_dict': test_dict_2
+    }
+
+    return [test_dict_1, test_dict_2, test_dict_3]
