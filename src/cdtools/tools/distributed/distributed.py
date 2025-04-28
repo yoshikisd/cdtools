@@ -95,25 +95,15 @@ def distributed_wrapper(rank: int,
     device='cuda'
     model.to(device=device)
     dataset.get_as(device=device) 
-
-    # Wrap the model with DistributedDataParallel
-    model_DDP = DDP(model,
-                    device_ids=[model.device_id],  # Tells DDP which GPU the model lives in
-                    output_device=model.device_id, # Tells DDP which GPU to output to
-                    find_unused_parameters=True) # TODO: Understand what this is really doing...
     
-    # Don't start reconstructing until all GPUs have synced.
-    barrier()   
     # Start the reconstruction loop, but feed in model_DDP.module so we don't
     # have to change `model._` to `model.module._` in the CDTools script
     # We also need to check if we want to pass a pipe to the function
     if pipe is None:
-        func(model_DDP.module, dataset, rank, model.world_size)    
+        func(model, dataset, rank, model.world_size)    
     else:
-        func(model_DDP.module, dataset, rank, model.world_size, pipe)   
-
-    # Wait for all GPUs to finish reconstructing
-    barrier()                               
+        func(model, dataset, rank, model.world_size, pipe)   
+                         
     # Destroy process group
     destroy_process_group()        
 

@@ -31,6 +31,7 @@ loss
 import torch as t
 from torch.utils import data as torchdata
 from torch.utils.data.distributed import DistributedSampler
+import torch.distributed as dist
 from matplotlib import pyplot as plt
 from matplotlib.widgets import Slider
 from matplotlib import ticker
@@ -417,7 +418,22 @@ class CDIModel(t.nn.Module):
 
                         # And accumulate the gradients
                         loss.backward()
-                        total_loss += loss.detach()
+
+                        # For multi-GPU optimization, we need to average and
+                        # sync the gradients + losses across all participating
+                        # GPUs with an all-reduce call.
+                        if self.multi_gpu_used:
+                            for param in self.parameters():
+                                if param.requires_grad:
+                                    dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM) 
+                                    param.grad.data /= self.world_size
+                            
+                            # Sum the loss value across all devices for reporting
+                            dist.all_reduce(loss, op=dist.ReduceOp.SUM) 
+                        
+                        # Normalize the accumulating total loss by the number of GPUs used
+                        total_loss += loss.detach() // self.world_size
+                        
 
                     # If we have a regularizer, we can calculate it separately,
                     # and the gradients will add to the minibatch gradient
@@ -425,6 +441,15 @@ class CDIModel(t.nn.Module):
                        and hasattr(self, 'regularizer'):
                         loss = self.regularizer(regularization_factor)
                         loss.backward()
+
+                        # For multi-GPU optimization, we need to average and
+                        # sync the gradients + losses across all participating
+                        # GPUs with an all-reduce call.
+                        if self.multi_gpu_used:
+                            for param in self.parameters():
+                                if param.requires_grad:
+                                    dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM) 
+                                    param.grad.data /= self.world_size
                     
                     return total_loss
 
