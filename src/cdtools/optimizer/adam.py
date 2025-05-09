@@ -135,7 +135,7 @@ class Adam(Reconstructor):
         else:
             self.scheduler = None
 
-
+        # This is analagous to making a call to CDIModel.AD_optimize
         return super(Adam, self).optimize(iterations,
                                             regularization_factor,
                                             thread,
