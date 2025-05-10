@@ -1,4 +1,5 @@
 import cdtools
+import cdtools.optimizer
 from matplotlib import pyplot as plt
 
 # We need to import 2 additional functions
@@ -16,7 +17,7 @@ model = cdtools.models.FancyPtycho.from_dataset(
     propagation_distance=5e-3,
     units='mm', 
     obj_view_crop=-50)
-
+model.background.requires_grad=True
 # Remove or comment out lines moving the dataset and model to GPU.
 # This process will be handled by the cdtools.tools.distributed methods.
 
@@ -36,7 +37,7 @@ model = cdtools.models.FancyPtycho.from_dataset(
 # GPU, and world_size is the total number of GPUs used.
 
 def multi_gpu_reconstruct(model, dataset, rank, world_size):
-
+    """
     for loss in model.Adam_optimize(50, dataset, lr=0.02, batch_size=10):
         
         # We can still perform model.report, but we want only 1 GPU printing stuff.
@@ -54,8 +55,17 @@ def multi_gpu_reconstruct(model, dataset, rank, world_size):
         if model.epoch % 20 == 0:
             if rank == 0:
                 model.inspect(dataset)
+    """
+    recon = cdtools.optimizer.Adam(model,dataset)
+    if rank == 0:
+        model.inspect(dataset)
 
-    model.tidy_probes()
+    for loss in recon.optimize(50, lr=0.02, batch_size=50):
+        if rank == 0: print(model.report())
+        # Plotting is expensive, so we only do it every tenth epoch
+        if model.epoch % 10 == 0 and rank == 0:
+            model.inspect(dataset)
+    #model.tidy_probes()
     model.inspect(dataset)
 
     # You don't need to add the `if rank == 0` here either...
@@ -81,7 +91,7 @@ if __name__ == '__main__':
     distributed.spawn(multi_gpu_reconstruct, 
                       model=model,
                       dataset=dataset,
-                      device_ids = [1,3,6,7],
+                      device_ids = [0,1,2,3],
                       master_addr='localhost',
                       master_port='8888',
-                      timeout=6000)
+                      timeout=30)
