@@ -11,6 +11,7 @@ This test is based on fancy_ptycho_multi_gpu_ddp.py and fancy_ptycho.py.
 
 import cdtools
 from cdtools.models import CDIModel
+import cdtools.optimizer
 from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
 from cdtools.tools.distributed import distributed
 import torch.multiprocessing as mp
@@ -73,36 +74,38 @@ def reconstruct(model: CDIModel,
         model.to(device=device)
         dataset.get_as(device=device)
 
+    # Set up the Reconstructor with the Adam optimizer
+    recon = cdtools.optimizer.Adam(model,dataset)
 
     # Perform reconstructions on either single or multi-GPU workflows.
     if TEST == 'fancy_ptycho':
-        for loss in model.Adam_optimize(50, dataset, lr=0.02, batch_size=40):
+        for loss in recon.optimize(50, lr=0.02, batch_size=40):
             if rank == 0:
                 print(model.report())
                 t_list.append(time.time() - t_start)
 
-        for loss in model.Adam_optimize(25, dataset, lr=0.005, batch_size=40):
+        for loss in recon.optimize(25, lr=0.005, batch_size=40):
             if rank == 0:
                 print(model.report())
                 t_list.append(time.time() - t_start)
 
-        for loss in model.Adam_optimize(25, dataset, lr=0.001, batch_size=40):
+        for loss in recon.optimize(25, lr=0.001, batch_size=40):
             if rank == 0:
                 print(model.report())
                 t_list.append(time.time() - t_start)
 
     elif TEST == 'gold_balls':
-        for loss in model.Adam_optimize(20, dataset, lr=0.005, batch_size=50):
+        for loss in recon.optimize(20, lr=0.005, batch_size=50):
             if rank == 0: 
                 print(model.report())
                 t_list.append(time.time() - t_start)
 
-        for loss in model.Adam_optimize(50, dataset, lr=0.002, batch_size=100):
+        for loss in recon.optimize(50, lr=0.002, batch_size=100):
             if rank == 0:
                 print(model.report())
                 t_list.append(time.time() - t_start)
 
-        for loss in model.Adam_optimize(100, dataset, lr=0.001, batch_size=100):
+        for loss in recon.optimize(100, lr=0.001, batch_size=100):
             if rank == 0:
                 print(model.report())
                 t_list.append(time.time() - t_start)
@@ -255,10 +258,10 @@ def run_test(world_sizes: int,
 # This will execute the multi_gpu_reconstruct upon running this file
 if __name__ == '__main__':
     # Define the number of GPUs to use.
-    world_sizes = [1, 2, 4, 6] 
+    world_sizes = [1, 2, 4] 
 
     # Define which GPU IDs to use
-    device_ids = [7, 6, 5, 4, 3, 2, 1]
+    device_ids = [1, 2, 5, 7]
 
     # How many reconstruction runs to perform for statistics
     runs = 3
