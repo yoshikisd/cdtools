@@ -21,7 +21,7 @@ from cdtools.tools.data import nested_dict_to_h5, h5_to_nested_dict, nested_dict
 from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
 from cdtools.models import CDIModel
 import torch.distributed as dist
-from typing import Tuple, List
+from typing import Tuple, List, Union
 
 __all__ = ['Reconstructor']
 
@@ -132,10 +132,10 @@ class Reconstructor:
 
 
     def optimize(self,
-                 iterations,
-                 regularization_factor=None,
-                 thread=True,
-                 calculation_width=10):
+                 iterations: int,
+                 regularization_factor: Union[float, List[float]] = None,
+                 thread: bool = True,
+                 calculation_width: int = 10):
         """
         Runs a round of reconstruction using the provided optimizer
         
