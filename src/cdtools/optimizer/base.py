@@ -2,17 +2,15 @@
 optimization ('reconstructions') on ptychographic/CDI models.
 
 The Reconstructor class is designed to resemble so-called
-'Trainer' classes that (in the language of the AI/ML folks) that
-handles the 'training' of a model given some dataset and optimizer.
+'Trainer' classes that (in the language of the AI/ML folks) handles
+the 'training' of a model given some dataset and optimizer.
 
-The subclasses of the Reconstructor class are required to implement
+The subclasses of Reconstructor are required to implement
 their own data loaders and optimizer adjusters
 """
 
 import torch as t
 from torch.utils import data as torchdata
-from torch.utils.data.distributed import DistributedSampler
-from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 import threading
 import queue
@@ -27,38 +25,52 @@ from typing import Tuple, List
 __all__ = ['Reconstructor']
 
 class Reconstructor:
+    """
+    Reconstructor handles the optimization ('reconstruction') of ptychographic
+    models given a CDIModel (or subclass) and corresponding Ptycho2DDataset.
+    
+    This is a base model that defines all functions Reconstructor subclasses
+    must implement.
+
+    Parameters
+    ----------
+    model: CDIModel
+        Model for CDI/ptychography reconstruction
+    dataset: Ptycho2DDataset
+        The dataset to reconstruct against
+    subset : list(int) or int
+        Optional, a pattern index or list of pattern indices to use
+
+    Important attributes:
+    - **model** -- Always points to the core model used.
+    - **multi_gpu_used** -- Whether or not multi-GPU computation will be performed
+      using a distributed data approach. This attribute will be pulled from the
+      CDIModel (this flag is automatically set when using cdtools.tools.distributed.spawn).
+    - **optimizer** -- A `torch.optim.Optimizer` that must be defined when initializing the
+      Reconstructor subclass.
+    - **scheduler** -- A `torch.optim.lr_scheduler` that must be defined when creating the
+      `Reconstructor` subclass through the `setup_scheduler` method.
+    - **data_loader** -- A torch.utils.data.DataLoader that must be defined when creating
+      the Reconstructor subclass through the `setup_dataloader` method.
+    """
     def __init__(self,
                  model: CDIModel,
                  dataset: Ptycho2DDataset,
-                 subset: List[int] = None,
-                 thread: bool = True):
-        
-        # Store parameters as attributes
+                 subset: List[int] = None):
+        # Store parameters as attributes of Reconstructor
+        self.subset = subset
         self.multi_gpu_used = model.multi_gpu_used
         self.world_size = model.world_size
         self.rank = model.rank
-        self.subset = subset
-        self.thread = thread
 
-        # Initialize some attributes that must be defined by other methods
-        self.optimizer = None
-        self.scheduler = None
-        self.data_loader = None
-        #self.epoch = model.epoch
+        # Initialize attributes that must be defined by the subclasses
+        self.optimizer = None       # Defined in the __init__ of the subclass as a torch.optim.Optimizer
+        self.scheduler = None       # Defined in the setup_scheduler method
+        self.data_loader = None     # Defined in the setup_dataloader method
         
-        # Store either the original or DDP-wrapped model, along with
-        # references to model attributes/methods
-        """ For now, don't do DDP-wrapping; check if porting the bits
-        and pieces from CDIModel works before doing DDP.
-        if self.multi_gpu_used:
-            self.model = DDP(model, 
-                             device_ids=[0]) # This is used if CUDA_VISIBLE_DEVICES is manually set
-            store_references(self.model.module)
-        
-        else:
-        """
+        # Store the original model
+        # TODO: Include DDP support + wrapping
         self.model = model
-        #store_model_attributes(self.model)
 
         # Store the dataset
         if subset is not None:
@@ -71,24 +83,19 @@ class Reconstructor:
 
         
     def setup_dataloader(self, **kwargs):
-        """Sets up the dataloader 
+        """
+        Sets up the dataloader. 
 
         The dataloader needs to be defined manually for each subclass.
-        While each subclass will likely use similar calls to 
         """
         raise NotImplementedError()
 
 
     def adjust_optimizer(self, **kwargs):
-        """This is to allow us to set up parameters for whatever optimizer we're
-        interested in using.
+        """
+        Change hyperparameters for the utilized optimizer.
 
-        The different optimization schemes (Adam, LBFGS, SGD) seem to take in 
-        different hyperparameters. This function is intended to modify the
-        parameters
-
-        This is not defined here. For each optimizer, the keyword
-        arguments should be manually defined as parameters
+        For each optimizer, the keyword arguments should be manually defined as parameters.
         """
         raise NotImplementedError()
 
@@ -98,7 +105,8 @@ class Reconstructor:
                  regularization_factor=None,
                  thread=True,
                  calculation_width=10):
-        """Runs a round of reconstruction using the provided optimizer
+        """
+        Runs a round of reconstruction using the provided optimizer
         
         Formerly CDIModel.AD_optimize
 
@@ -117,12 +125,6 @@ class Reconstructor:
         ----------
         iterations : int
             How many epochs of the algorithm to run
-        data_loader : torch.utils.data.DataLoader
-            A data loader loading the CDataset to reconstruct
-        optimizer : torch.optim.Optimizer
-            The optimizer to run the reconstruction with
-        scheduler : torch.optim.lr_scheduler._LRScheduler
-            Optional, a learning rate scheduler to use
         regularization_factor : float or list(float)
             Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
         thread : bool
@@ -190,7 +192,7 @@ class Reconstructor:
 
                         # For multi-GPU optimization, we need to average and
                         # sync the gradients + losses across all participating
-                        # GPUs with an all-reduce call.
+                        # GPUs with an all-reduce call.               
                         if self.multi_gpu_used:
                             for param in self.model.parameters():
                                 if param.requires_grad:
@@ -199,8 +201,7 @@ class Reconstructor:
                             
                             # Sum the loss value across all devices for reporting
                             dist.all_reduce(loss, op=dist.ReduceOp.SUM) 
-                        
-                        # Normalize the accumulating total loss by the number of GPUs used
+                        # Normalize the accumulating total loss by the numer of GPUs used
                         total_loss += loss.detach() // self.model.world_size
                         
 
