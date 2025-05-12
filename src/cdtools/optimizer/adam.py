@@ -32,6 +32,8 @@ class Adam(Reconstructor):
         The dataset to reconstruct against
     subset : list(int) or int
         Optional, a pattern index or list of pattern indices to use
+    schedule : bool
+        Optional, create a learning rate scheduler (torch.optim.lr_scheduler._LRScheduler)
 
     Important attributes:
     - **model** -- Always points to the core model used.
@@ -48,12 +50,21 @@ class Adam(Reconstructor):
     def __init__(self,
                  model: CDIModel,
                  dataset: Ptycho2DDataset,
-                 subset: List[int] = None):
+                 subset: List[int] = None,
+                 schedule: bool = False):
 
         super().__init__(model, dataset, subset)
         
         # Define the optimizer for use in this subclass
         self.optimizer = t.optim.Adam(self.model.parameters())
+
+        # Define the scheduler
+        if schedule:
+            self.scheduler = t.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 
+                                                                    factor=0.2,
+                                                                    threshold=1e-9)
+        else:
+            self.scheduler = None
         
 
     def setup_dataloader(self,
@@ -155,17 +166,7 @@ class Adam(Reconstructor):
 
         # The optimizer is created in self.__init__, but the 
         # hyperparameters need to be set up with self.adjust_optimizer
-        self.adjust_optimizer(lr,
-                              betas,
-                              amsgrad)
-
-        # Define the scheduler
-        if schedule:
-            self.scheduler = t.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 
-                                                                    factor=0.2,
-                                                                    threshold=1e-9)
-        else:
-            self.scheduler = None
+        self.adjust_optimizer(lr, betas, amsgrad)
 
         # This is analagous to making a call to CDIModel.AD_optimize
         return super(Adam, self).optimize(iterations,

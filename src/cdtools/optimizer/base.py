@@ -48,8 +48,8 @@ class Reconstructor:
       CDIModel (this flag is automatically set when using cdtools.tools.distributed.spawn).
     - **optimizer** -- A `torch.optim.Optimizer` that must be defined when initializing the
       Reconstructor subclass.
-    - **scheduler** -- A `torch.optim.lr_scheduler` that must be defined when creating the
-      `Reconstructor` subclass through the `setup_scheduler` method.
+    - **scheduler** -- A `torch.optim.lr_scheduler` that may be defined when initializing the
+      `Reconstructor` subclass.
     - **data_loader** -- A torch.utils.data.DataLoader that must be defined when creating
       the Reconstructor subclass through the `setup_dataloader` method.
     """
@@ -65,7 +65,7 @@ class Reconstructor:
 
         # Initialize attributes that must be defined by the subclasses
         self.optimizer = None       # Defined in the __init__ of the subclass as a torch.optim.Optimizer
-        self.scheduler = None       # Defined in the setup_scheduler method
+        self.scheduler = None       # Defined in the __init__ of the subclass as a torch.optim.lr_scheduler
         self.data_loader = None     # Defined in the setup_dataloader method
         
         # Store the original model
