@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from cdtools.tools.data import nested_dict_to_h5, h5_to_nested_dict, nested_dict_to_numpy, nested_dict_to_torch
 from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
 from cdtools.models import CDIModel
-from typing import Tuple, List
+from typing import Tuple, List, Union
 from cdtools.optimizer import Reconstructor
 
 __all__ = ['Adam']
@@ -42,74 +42,24 @@ class Adam(Reconstructor):
       CDIModel (this flag is automatically set when using cdtools.tools.distributed.spawn).
     - **optimizer** -- This class by default uses `torch.optim.Adam` to perform
       optimizations.
-    - **scheduler** -- A `torch.optim.lr_scheduler` that must be defined when creating the
-      `Reconstructor` subclass through the `setup_scheduler` method.
-    - **data_loader** -- A torch.utils.data.DataLoader that must be defined when creating
-      the Reconstructor subclass through the `setup_dataloader` method.
+    - **scheduler** -- A `torch.optim.lr_scheduler` that is defined during the `optimize` method.
+    - **data_loader** -- A torch.utils.data.DataLoader that is defined by calling the 
+      `setup_dataloader` method.
     """
     def __init__(self,
                  model: CDIModel,
                  dataset: Ptycho2DDataset,
-                 subset: List[int] = None,
-                 schedule: bool = False):
+                 subset: List[int] = None):
 
         super().__init__(model, dataset, subset)
         
         # Define the optimizer for use in this subclass
         self.optimizer = t.optim.Adam(self.model.parameters())
-
-        # Define the scheduler
-        if schedule:
-            self.scheduler = t.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 
-                                                                    factor=0.2,
-                                                                    threshold=1e-9)
-        else:
-            self.scheduler = None
-        
-
-    def setup_dataloader(self,
-                         batch_size: int = 15,
-                         shuffle: bool = True):
-        """
-        Sets up the dataloader.
-
-        Parameters
-        ----------
-        batch_size : int
-            Optional, the size of the minibatches to use
-        shuffle : bool
-            Optional, enable/disable shuffling of the dataset. This option
-            is intended for diagnostic purposes and should be left as True.
-        """
-        # Make a dataloader suited for either single-GPU use or cases
-        # where a process group (i.e., multiple GPUs) has been initialized
-        if self.multi_gpu_used:
-            # First, create a sampler to load subsets of dataset to the GPUs
-            self.sampler = DistributedSampler(self.dataset,
-                                              num_replicas=self.world_size,
-                                              rank=self.rank,
-                                              shuffle=shuffle,
-                                              drop_last=False)
-            # Now create the dataloader
-            self.data_loader = torchdata.DataLoader(self.dataset,
-                                                    batch_size=batch_size//self.world_size,
-                                                    num_workers=0, # Creating extra threads in children processes may cause problems. Leave this at 0.
-                                                    drop_last=False,
-                                                    pin_memory=False,
-                                                    sampler=self.sampler)
-        else:
-            self.data_loader = torchdata.DataLoader(self.dataset,
-                                                    batch_size=batch_size,
-                                                    shuffle=shuffle)
-        # Store the optimizer parameters
-        #self.hyperparameters['lr'] = lr
-        #self.hyperparameters['betas'] = betas
-        #self.hyperparameters['amsgrad'] = amsgrad
     
     def adjust_optimizer(self,
-                         lr=0.005,
-                         betas=(0.9, 0.999),
-                         amsgrad=False):
+                         lr: int = 0.005,
+                         betas: Tuple[float] = (0.9, 0.999),
+                         amsgrad: bool = False):
         """
         Change hyperparameters for the utilized optimizer.
 
@@ -120,7 +70,7 @@ class Adam(Reconstructor):
             typically the highest possible value with any chance of being stable
         betas : tuple
             Optional, the beta_1 and beta_2 to use. Default is (0.9, 0.999).
-        amsgrad: bool
+        amsgrad : bool
             Optional, whether to use the AMSGrad variant of this algorithm
         """
         for param_group in self.optimizer.param_groups:
@@ -130,16 +80,16 @@ class Adam(Reconstructor):
 
 
     def optimize(self,
-                 iterations,
-                 batch_size=15,
-                 lr=0.005,
-                 betas=(0.9, 0.999),
-                 schedule=False,
-                 amsgrad=False,
-                 subset=None,
-                 regularization_factor = None,
-                 thread=True,
-                 calculation_width=10):
+                 iterations: int,
+                 batch_size: int = 15,
+                 lr: float = 0.005,
+                 betas: Tuple[float] = (0.9, 0.999),
+                 schedule: bool = False,
+                 amsgrad: bool = False,
+                 regularization_factor: Union[float, List[float]] = None,
+                 thread: bool = True,
+                 calculation_width: int = 10,
+                 shuffle: bool = True):
         """
         Runs a round of reconstruction using the Adam optimizer
 
@@ -149,6 +99,34 @@ class Adam(Reconstructor):
         (formerly `CDIModel.AD_optimize`) to run a round of reconstruction
         once the dataloader and optimizer hyperparameters have been
         set up.
+
+        Parameters
+        ----------
+        iterations : int
+            How many epochs of the algorithm to run
+        batch_size : int
+            Optional, the size of the minibatches to use
+        lr : float
+            Optional, The learning rate (alpha) to use. Default is 0.005. 0.05 is 
+            typically the highest possible value with any chance of being stable
+        betas : tuple
+            Optional, the beta_1 and beta_2 to use. Default is (0.9, 0.999).
+        schedule : bool
+            Optional, create a learning rate scheduler (torch.optim.lr_scheduler._LRScheduler)
+        amsgra : bool
+            Optional, whether to use the AMSGrad variant of this algorithm
+        regularization_factor : float or list(float)
+            Optional, if the model has a regularizer defined, the set of parameters to pass 
+            the regularizer method
+        thread : bool
+            Default True, whether to run the computation in a separate thread to allow 
+            interaction with plots during computation
+        calculation_width : int
+            Default 10, how many translations to pass through at once for each round of 
+            gradient accumulation. Does not affect the result, only the calculation speed 
+        shuffle : bool
+            Optional, enable/disable shuffling of the dataset. This option
+            is intended for diagnostic purposes and should be left as True.
         """
         # Update the training history
         self.model.training_history += (
@@ -157,19 +135,25 @@ class Adam(Reconstructor):
             f'{regularization_factor}, and schedule = {schedule}.\n'
         )
 
-        # The subset statement is contained in Reconstructor.__init__
+        # 1) The subset statement is contained in Reconstructor.__init__
 
-        # The dataloader step is handled by self.dataloader
-        # TODO: Figure out a way to adjust the batch_size without
-        #       creating a brand-spanking-new one each time
-        self.setup_dataloader(batch_size)
+        # 2) Set up / re-initialize the data laoder
+        self.setup_dataloader(batch_size=batch_size, shuffle=shuffle)
 
-        # The optimizer is created in self.__init__, but the 
-        # hyperparameters need to be set up with self.adjust_optimizer
+        # 3) The optimizer is created in self.__init__, but the 
+        #    hyperparameters need to be set up with self.adjust_optimizer
         self.adjust_optimizer(lr, betas, amsgrad)
 
-        # This is analagous to making a call to CDIModel.AD_optimize
+        # 4) Set up the scheduler
+        if schedule:
+            self.scheduler = t.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 
+                                                                    factor=0.2,
+                                                                    threshold=1e-9)
+        else:
+            self.scheduler = None
+
+        # 5) This is analagous to making a call to CDIModel.AD_optimize
         return super(Adam, self).optimize(iterations,
-                                            regularization_factor,
-                                            thread,
-                                            calculation_width)
+                                          regularization_factor,
+                                          thread,
+                                          calculation_width)

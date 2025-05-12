@@ -11,6 +11,7 @@ their own data loaders and optimizer adjusters
 
 import torch as t
 from torch.utils import data as torchdata
+from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 import threading
 import queue
@@ -48,10 +49,9 @@ class Reconstructor:
       CDIModel (this flag is automatically set when using cdtools.tools.distributed.spawn).
     - **optimizer** -- A `torch.optim.Optimizer` that must be defined when initializing the
       Reconstructor subclass.
-    - **scheduler** -- A `torch.optim.lr_scheduler` that may be defined when initializing the
-      `Reconstructor` subclass.
-    - **data_loader** -- A torch.utils.data.DataLoader that must be defined when creating
-      the Reconstructor subclass through the `setup_dataloader` method.
+    - **scheduler** -- A `torch.optim.lr_scheduler` that may be defined during the `optimize` method.
+    - **data_loader** -- A torch.utils.data.DataLoader that is defined by calling the 
+      `setup_dataloader` method.
     """
     def __init__(self,
                  model: CDIModel,
@@ -65,8 +65,8 @@ class Reconstructor:
 
         # Initialize attributes that must be defined by the subclasses
         self.optimizer = None       # Defined in the __init__ of the subclass as a torch.optim.Optimizer
-        self.scheduler = None       # Defined in the __init__ of the subclass as a torch.optim.lr_scheduler
-        self.data_loader = None     # Defined in the setup_dataloader method
+        self.scheduler = None       # Defined as a torch.optim.lr_scheduler
+        self.data_loader = None     # Defined as a torch.utils.data.DataLoader in the setup_dataloader method
         
         # Store the original model
         # TODO: Include DDP support + wrapping
@@ -82,14 +82,45 @@ class Reconstructor:
         self.dataset = dataset
 
         
-    def setup_dataloader(self, **kwargs):
+    def setup_dataloader(self, 
+                         batch_size: int = None,
+                         shuffle: bool = True):
         """
-        Sets up the dataloader. 
+        Sets up / re-initializes the dataloader. 
 
-        The dataloader needs to be defined manually for each subclass.
+        Parameters
+        ----------
+        batch_size : int
+            Optional, the size of the minibatches to use
+        shuffle : bool
+            Optional, enable/disable shuffling of the dataset. This option
+            is intended for diagnostic purposes and should be left as True.
         """
-        raise NotImplementedError()
+        if self.multi_gpu_used:
+            # NOTE: Multi-GPU implementation is intended for use with Adam. All other subclasses
+            # and optimizers have not been tested yet.
 
+            # First, create a sampler to load subsets of dataset to the GPUs
+            self.sampler = DistributedSampler(self.dataset,
+                                              num_replicas=self.world_size,
+                                              rank=self.rank,
+                                              shuffle=shuffle,
+                                              drop_last=False)
+            # Now create the dataloader
+            self.data_loader = torchdata.DataLoader(self.dataset,
+                                                    batch_size=batch_size//self.world_size,
+                                                    num_workers=0, # Creating extra threads in children processes may cause problems. Leave this at 0.
+                                                    drop_last=False,
+                                                    pin_memory=False,
+                                                    sampler=self.sampler)
+        else:
+            if batch_size is not None:
+                self.data_loader = torchdata.DataLoader(self.dataset,
+                                                        batch_size=batch_size,
+                                                        shuffle=shuffle)
+            else:
+                self.data_loader = torchdata.Dataloader(self.dataset)
+    
 
     def adjust_optimizer(self, **kwargs):
         """
