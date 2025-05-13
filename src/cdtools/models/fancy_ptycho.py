@@ -95,6 +95,10 @@ class FancyPtycho(CDIModel):
         else:
             self.qe_mask = t.nn.Parameter(
                 t.as_tensor(qe_mask, dtype=dtype))
+            # I want the ability to optimize over this, but experience shows
+            # that it is wildly unstable, so I think it's best to keep
+            # gradients turned off by default
+            self.qe_mask.requires_grad=False
             
         probe_guess = t.as_tensor(probe_guess, dtype=t.complex64)
         obj_guess = t.as_tensor(obj_guess, dtype=t.complex64)
@@ -386,7 +390,10 @@ class FancyPtycho(CDIModel):
             mask = None
 
         if use_qe_mask:
-            qe_mask = t.ones(mask.shape, dtype=t.float32)
+            if hasattr(dataset, 'qe_mask') and dataset.qe_mask is not None:
+                qe_mask = t.as_tensor(dataset.qe_mask, dtype=t.float32)
+            else:
+                qe_mask = t.ones(dataset.patterns.shape[-2:], dtype=t.float32)
         else:
             qe_mask = None
             

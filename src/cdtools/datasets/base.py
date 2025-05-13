@@ -34,10 +34,16 @@ class CDataset(torchdata.Dataset):
     needed to allow for easy mixing of data on the CPU and GPU.
     """
 
-    def __init__(self, entry_info=None, sample_info=None,
-                 wavelength=None,
-                 detector_geometry=None, mask=None,
-                 background=None):
+    def __init__(
+            self,
+            entry_info=None,
+            sample_info=None,
+            wavelength=None,
+            detector_geometry=None,
+            mask=None,
+            qe_mask=None,
+            background=None,
+    ):
 
         """The __init__ function allows construction from python objects.
 
@@ -73,6 +79,12 @@ class CDataset(torchdata.Dataset):
             self.mask = t.tensor(mask, dtype=t.bool)
         else:
             self.mask = None
+
+        if qe_mask is not None:
+            self.qe_mask = t.as_tensor(qe_mask, dtype=t.float32)
+        else:
+            self.qe_mask = None
+
         if background is not None:
             self.background = t.tensor(background, dtype=t.float32)
         else:
