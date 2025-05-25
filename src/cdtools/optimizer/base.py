@@ -12,6 +12,7 @@ their own data loaders and optimizer adjusters
 import torch as t
 from torch.utils import data as torchdata
 from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel
 import torch.distributed as dist
 import threading
 import queue
@@ -69,7 +70,10 @@ class Reconstructor:
         self.data_loader = None     # Defined as a torch.utils.data.DataLoader in the setup_dataloader method
         
         # Store the original model
-        # TODO: Include DDP support + wrapping
+        # If we detect several GPUs, then wrap the model with DDP
+        if self.multi_gpu_used:
+            model = DistributedDataParallel(model,
+                                            device_ids=[0])
         self.model = model
 
         # Store the dataset
@@ -175,7 +179,7 @@ class Reconstructor:
             # multiple GPUs), we need to tell it which epoch we're on. Otherwise
             # data shuffling will not work properly
             if self.multi_gpu_used: 
-                self.data_loader.sampler.set_epoch(self.model.epoch)
+                self.data_loader.sampler.set_epoch(self.model.module.epoch)
 
             # First, initialize some tracking variables
             normalization = 0
@@ -214,9 +218,9 @@ class Reconstructor:
 
                         # Calculate the loss
                         if hasattr(self, 'mask'):
-                            loss = self.model.loss(pats,sim_patterns, mask=self.model.mask)
+                            loss = self.model.module.loss(pats,sim_patterns, mask=self.model.mask)
                         else:
-                            loss = self.model.loss(pats,sim_patterns)
+                            loss = self.model.module.loss(pats,sim_patterns)
 
                         # And accumulate the gradients
                         loss.backward()
@@ -224,16 +228,16 @@ class Reconstructor:
                         # For multi-GPU optimization, we need to average and
                         # sync the gradients + losses across all participating
                         # GPUs with an all-reduce call.               
-                        if self.multi_gpu_used:
-                            for param in self.model.parameters():
-                                if param.requires_grad:
-                                    dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM) 
-                                    param.grad.data /= self.model.world_size
+                        #if self.multi_gpu_used:
+                        #    for param in self.model.parameters():
+                        #        if param.requires_grad:
+                        #            dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM) 
+                        #            param.grad.data /= self.model.module.world_size
                             
                             # Sum the loss value across all devices for reporting
-                            dist.all_reduce(loss, op=dist.ReduceOp.SUM) 
+                        #    dist.all_reduce(loss, op=dist.ReduceOp.SUM) 
                         # Normalize the accumulating total loss by the numer of GPUs used
-                        total_loss += loss.detach() // self.model.world_size
+                        total_loss += loss.detach() // self.model.module.world_size
                         
 
                     # If we have a regularizer, we can calculate it separately,
@@ -246,11 +250,12 @@ class Reconstructor:
                         # For multi-GPU optimization, we need to average and
                         # sync the gradients + losses across all participating
                         # GPUs with an all-reduce call.
-                        if self.multi_gpu_used:
-                            for param in self.model.parameters():
-                                if param.requires_grad:
-                                    dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM) 
-                                    param.grad.data /= self.model.world_size
+                        # NOTE 20250524: Commented out for DDP test
+                        #if self.multi_gpu_used:
+                        #    for param in self.model.parameters():
+                        #        if param.requires_grad:
+                        #            dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM) 
+                        #            param.grad.data /= self.model.world_size
                     
                     return total_loss
 
@@ -263,10 +268,10 @@ class Reconstructor:
             if self.scheduler is not None:
                 self.scheduler.step(loss)
 
-            self.model.loss_history.append(loss)
-            self.model.epoch = len(self.model.loss_history)
+            self.model.module.loss_history.append(loss)
+            self.model.module.epoch = len(self.model.module.loss_history)
             self.model.latest_iteration_time = time.time() - t0
-            self.model.training_history += self.model.report() + '\n'
+            self.model.module.training_history += self.model.module.report() + '\n'
             return loss
 
         # We store the current optimizer as a model parameter so that
@@ -276,10 +281,10 @@ class Reconstructor:
         # If we don't want to run in a different thread, this is easy
         if not thread:
             for it in range(iterations):
-                if self.model.skip_computation():
+                if self.model.module.skip_computation():
                     self.epoch = self.epoch + 1
-                    if len(self.model.loss_history) >= 1:
-                        yield self.model.loss_history[-1]
+                    if len(self.model.module.loss_history) >= 1:
+                        yield self.model.module.loss_history[-1]
                     else:
                         yield float('nan')
                     continue
@@ -302,10 +307,10 @@ class Reconstructor:
 
             # And this actually starts and monitors the thread
             for it in range(iterations):
-                if self.model.skip_computation():
-                    self.model.epoch = self.model.epoch + 1                    
-                    if len(self.model.loss_history) >= 1:
-                        yield self.model.loss_history[-1]
+                if self.model.module.skip_computation():
+                    self.model.module.epoch = self.model.module.epoch + 1                    
+                    if len(self.model.module.loss_history) >= 1:
+                        yield self.model.module.loss_history[-1]
                     else:
                         yield float('nan')
                     continue

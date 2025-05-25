@@ -129,7 +129,7 @@ class Adam(Reconstructor):
             is intended for diagnostic purposes and should be left as True.
         """
         # Update the training history
-        self.model.training_history += (
+        self.model.module.training_history += (
             f'Planning {iterations} epochs of Adam, with a learning rate = '
             f'{lr}, batch size = {batch_size}, regularization_factor = '
             f'{regularization_factor}, and schedule = {schedule}.\n'
