@@ -73,7 +73,7 @@ class Reconstructor:
         # If we detect several GPUs, then wrap the model with DDP
         if self.multi_gpu_used:
             model = DistributedDataParallel(model,
-                                            device_ids=[self.rank])
+                                            device_ids=[0])
         self.model = model
 
         # Store the dataset
