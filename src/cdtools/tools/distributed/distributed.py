@@ -82,7 +82,7 @@ def distributed_wrapper(rank: int,
     model.world_size = len(device_ids)
 
     # Allow the process to only see the GPU is has been assigned
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(model.device_id) 
+    #os.environ['CUDA_VISIBLE_DEVICES'] = str(model.device_id) 
 
     if model.world_size > 1: # In case we need to use 1 GPU for testing
         model.multi_gpu_used = True
@@ -92,7 +92,7 @@ def distributed_wrapper(rank: int,
                        world_size=model.world_size, timeout=timeout)
     
     # Load the model to the appropriate GPU rank the process is using
-    device='cuda'
+    device=f'cuda:{model.rank}'
     model.to(device=device)
     dataset.get_as(device=device) 
     
