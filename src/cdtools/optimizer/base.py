@@ -270,7 +270,7 @@ class Reconstructor:
 
             self.model.module.loss_history.append(loss)
             self.model.module.epoch = len(self.model.module.loss_history)
-            self.model.latest_iteration_time = time.time() - t0
+            self.model.module.latest_iteration_time = time.time() - t0
             self.model.module.training_history += self.model.module.report() + '\n'
             return loss
 
