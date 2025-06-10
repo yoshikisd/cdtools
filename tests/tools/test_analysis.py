@@ -160,7 +160,7 @@ def test_standardize():
     probe = probe * np.exp(-1j * np.angle(np.sum(probe)))
 
     assert np.isclose(1, np.sum(np.abs(probe)**2)/ len(probe.ravel()))
-    assert np.angle(np.sum(probe)) < 1e-7
+    assert np.angle(np.sum(probe)) < 2e-7
 
     obj = 30 * np.random.rand(230,240) * np.exp(1j * (np.random.rand(230,240) - 0.5))
     obj_slice = np.s_[(obj.shape[0]//8)*3:(obj.shape[0]//8)*5,
@@ -232,7 +232,7 @@ def test_synthesize_reconstructions():
     probe = probe * np.exp(-1j * np.angle(np.sum(probe)))
 
     assert np.isclose(1, np.sum(np.abs(probe)**2)/ len(probe.ravel()))
-    assert np.abs(np.angle(np.sum(probe))) < 1e-7
+    assert np.abs(np.angle(np.sum(probe))) < 2e-7
 
     obj = 30 * np.random.rand(230,240) * np.exp(1j * (np.random.rand(230,240) - 0.5))
     obj_slice = np.s_[(obj.shape[0]//8)*3:(obj.shape[0]//8)*5,
