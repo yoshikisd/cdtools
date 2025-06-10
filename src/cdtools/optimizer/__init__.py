@@ -4,13 +4,8 @@
 
 # We define __all__ to be sure that import * only imports what we want
 __all__ = [
-    'CDIModel',
-    'SimplePtycho',
-    'FancyPtycho',
-    'Bragg2DPtycho',
-    'Multislice2DPtycho',
-    'MultislicePtycho',
-    'RPI',
+    'Reconstructor',
+    'Adam'
 ]
 
 from cdtools.optimizer.base import Reconstructor
