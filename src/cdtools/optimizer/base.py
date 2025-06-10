@@ -20,7 +20,7 @@ from contextlib import contextmanager
 from cdtools.tools.data import nested_dict_to_h5, h5_to_nested_dict, nested_dict_to_numpy, nested_dict_to_torch
 from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
 from cdtools.models import CDIModel
-import torch.distributed as dist
+import cdtools.tools.distributed as cdtdist
 from typing import Tuple, List, Union
 
 __all__ = ['Optimizer']
@@ -69,7 +69,6 @@ class Optimizer:
         self.data_loader = None     # Defined as a torch.utils.data.DataLoader in the setup_dataloader method
         
         # Store the original model
-        # TODO: Include DDP support + wrapping
         self.model = model
 
         # Store the dataset
@@ -78,7 +77,6 @@ class Optimizer:
             if type(subset) == type(1):
                 subset = [subset]
             dataset = torchdata.Subset(dataset, subset)
-        
         self.dataset = dataset
 
         
@@ -97,9 +95,6 @@ class Optimizer:
             is intended for diagnostic purposes and should be left as True.
         """
         if self.multi_gpu_used:
-            # NOTE: Multi-GPU implementation is intended for use with Adam. All other subclasses
-            # and optimizers have not been tested yet.
-
             # First, create a sampler to load subsets of dataset to the GPUs
             self.sampler = DistributedSampler(self.dataset,
                                               num_replicas=self.world_size,
@@ -130,6 +125,118 @@ class Optimizer:
         """
         raise NotImplementedError()
 
+    def _run_epoch(self, 
+                   stop_event: threading.Event = None,
+                   regularization_factor: Union[float, List[float]] = None,
+                   calculation_width: int = 10):
+        """
+        Runs one full epoch of the reconstruction. Intended to be called
+        by Optimizer.optimize.
+
+        Parameters
+        ----------
+        stop_event : threading.Event
+            Default None, causes the reconstruction to stop when an exception
+            occurs in Optimizer.optimize.
+        regularization_factor : float or list(float)
+            Optional, if the model has a regularizer defined, the set of 
+            parameters to pass the regularizer method
+        calculation_width : int
+            Default 10, how many translations to pass through at once for each 
+            round of gradient accumulation. This does not affect the result, but 
+            may affect the calculation speed.
+
+        Yields
+        ------
+        loss : float
+            The summed loss over the latest epoch, divided by the total diffraction 
+            pattern intensity
+        """
+        # If we're using DistributedSampler (i.e., multi-GPU useage), we need to 
+        # tell it which epoch we're on. Otherwise data shuffling will not work properly
+        if self.multi_gpu_used: 
+            self.data_loader.sampler.set_epoch(self.model.epoch)
+
+        # Initialize some tracking variables
+        normalization = 0
+        loss = 0
+        N = 0
+        t0 = time.time()
+
+        # The data loader is responsible for setting the minibatch
+        # size, so each set is a minibatch
+        for inputs, patterns in self.data_loader:
+            normalization += t.sum(patterns).cpu().numpy()
+            N += 1
+            def closure():
+                self.optimizer.zero_grad()
+
+                # We further break up the minibatch into a set of chunks.
+                # This lets us use larger minibatches than can fit
+                # on the GPU at once, while still doing batch processing
+                # for efficiency
+                input_chunks = [[inp[i:i + calculation_width]
+                                    for inp in inputs]
+                                for i in range(0, len(inputs[0]),
+                                                calculation_width)]
+                pattern_chunks = [patterns[i:i + calculation_width]
+                                    for i in range(0, len(inputs[0]),
+                                                    calculation_width)]
+
+                total_loss = 0
+                for inp, pats in zip(input_chunks, pattern_chunks):
+                    # This check allows for graceful exit when threading
+                    if stop_event is not None and stop_event.is_set():
+                        exit()
+
+                    # Run the simulation
+                    sim_patterns = self.model.forward(*inp) 
+
+                    # Calculate the loss
+                    if hasattr(self, 'mask'):
+                        loss = self.model.loss(pats,sim_patterns, mask=self.model.mask)
+                    else:
+                        loss = self.model.loss(pats,sim_patterns)
+
+                    # And accumulate the gradients
+                    loss.backward()
+
+                    # For multi-GPU, average and sync the gradients + losses across all 
+                    # participating GPUs with an all-reduce call. Also sum the losses.             
+                    if self.multi_gpu_used:
+                        cdtdist.sync_and_avg_gradients(self.model)
+                        dist.all_reduce(loss, op=dist.ReduceOp.SUM) 
+
+                    # Normalize the accumulating total loss by the numer of GPUs used
+                    total_loss += loss.detach() // self.model.world_size
+
+                # If we have a regularizer, we can calculate it separately,
+                # and the gradients will add to the minibatch gradient
+                if regularization_factor is not None and hasattr(self.model, 'regularizer'):
+                    loss = self.model.regularizer(regularization_factor)
+                    loss.backward()
+
+                    # For multi-GPU optimization, average and sync the gradients + 
+                    # losses across all participating GPUs with an all-reduce call.
+                    if self.multi_gpu_used:
+                        cdtdist.sync_and_avg_gradients(self.model)
+                
+                return total_loss
+
+            # This takes the step for this minibatch
+            loss += self.optimizer.step(closure).detach().cpu().numpy()
+        
+        loss /= normalization
+
+        # We step the scheduler after the full epoch
+        if self.scheduler is not None:
+            self.scheduler.step(loss)
+
+        self.model.loss_history.append(loss)
+        self.model.epoch = len(self.model.loss_history)
+        self.model.latest_iteration_time = time.time() - t0
+        self.model.training_history += self.model.report() + '\n'
+        return loss
 
     def optimize(self,
                  iterations: int,
@@ -169,106 +276,6 @@ class Optimizer:
             The summed loss over the latest epoch, divided by the total diffraction pattern intensity
         """
 
-        def run_epoch(stop_event=None):
-            """Runs one full epoch of the reconstruction."""
-            # If we're using DistributedSampler (likely the case if you're using 
-            # multiple GPUs), we need to tell it which epoch we're on. Otherwise
-            # data shuffling will not work properly
-            if self.multi_gpu_used: 
-                self.data_loader.sampler.set_epoch(self.model.epoch)
-
-            # First, initialize some tracking variables
-            normalization = 0
-            loss = 0
-            N = 0
-            t0 = time.time()
-
-            # The data loader is responsible for setting the minibatch
-            # size, so each set is a minibatch
-            for inputs, patterns in self.data_loader:
-                normalization += t.sum(patterns).cpu().numpy()
-                N += 1
-                def closure():
-                    self.optimizer.zero_grad()
-
-                    # We further break up the minibatch into a set of chunks.
-                    # This lets us use larger minibatches than can fit
-                    # on the GPU at once, while still doing batch processing
-                    # for efficiency
-                    input_chunks = [[inp[i:i + calculation_width]
-                                     for inp in inputs]
-                                    for i in range(0, len(inputs[0]),
-                                                   calculation_width)]
-                    pattern_chunks = [patterns[i:i + calculation_width]
-                                      for i in range(0, len(inputs[0]),
-                                                     calculation_width)]
-
-                    total_loss = 0
-                    for inp, pats in zip(input_chunks, pattern_chunks):
-                        # This check allows for graceful exit when threading
-                        if stop_event is not None and stop_event.is_set():
-                            exit()
-
-                        # Run the simulation
-                        sim_patterns = self.model.forward(*inp) 
-
-                        # Calculate the loss
-                        if hasattr(self, 'mask'):
-                            loss = self.model.loss(pats,sim_patterns, mask=self.model.mask)
-                        else:
-                            loss = self.model.loss(pats,sim_patterns)
-
-                        # And accumulate the gradients
-                        loss.backward()
-
-                        # For multi-GPU optimization, we need to average and
-                        # sync the gradients + losses across all participating
-                        # GPUs with an all-reduce call.               
-                        if self.multi_gpu_used:
-                            for param in self.model.parameters():
-                                if param.requires_grad:
-                                    dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM) 
-                                    param.grad.data /= self.model.world_size
-                            
-                            # Sum the loss value across all devices for reporting
-                            dist.all_reduce(loss, op=dist.ReduceOp.SUM) 
-                        # Normalize the accumulating total loss by the numer of GPUs used
-                        total_loss += loss.detach() // self.model.world_size
-                        
-
-                    # If we have a regularizer, we can calculate it separately,
-                    # and the gradients will add to the minibatch gradient
-                    if regularization_factor is not None \
-                       and hasattr(self.model, 'regularizer'):
-                        loss = self.model.regularizer(regularization_factor)
-                        loss.backward()
-
-                        # For multi-GPU optimization, we need to average and
-                        # sync the gradients + losses across all participating
-                        # GPUs with an all-reduce call.
-                        if self.multi_gpu_used:
-                            for param in self.model.parameters():
-                                if param.requires_grad:
-                                    dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM) 
-                                    param.grad.data /= self.model.world_size
-                    
-                    return total_loss
-
-                # This takes the step for this minibatch
-                loss += self.optimizer.step(closure).detach().cpu().numpy()
-            
-            loss /= normalization
-
-            # We step the scheduler after the full epoch
-            if self.scheduler is not None:
-                self.scheduler.step(loss)
-
-            self.model.loss_history.append(loss)
-            self.model.epoch = len(self.model.loss_history)
-            self.model.latest_iteration_time = time.time() - t0
-            self.model.training_history += self.model.report() + '\n'
-            return loss
-
         # We store the current optimizer as a model parameter so that
         # it can be saved and loaded for checkpointing
         self.current_optimizer = self.optimizer
@@ -284,8 +291,7 @@ class Optimizer:
                         yield float('nan')
                     continue
 
-                yield run_epoch()
-                    
+                yield self._run_epoch()
                 
         # But if we do want to thread, it's annoying:
         else:
@@ -294,7 +300,7 @@ class Optimizer:
             stop_event = threading.Event()
             def target():
                 try:
-                    result_queue.put(run_epoch(stop_event))
+                    result_queue.put(self._run_epoch(stop_event))
                 except Exception as e:
                     # If something bad happens, put the exception into the
                     # result queue

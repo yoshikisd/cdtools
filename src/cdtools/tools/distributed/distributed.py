@@ -20,6 +20,7 @@ import numpy as np
 import torch as t
 from torch.distributed import init_process_group, destroy_process_group, barrier
 from torch.nn.parallel import DistributedDataParallel as DDP
+import torch.distributed as dist
 import torch.multiprocessing as mp
 from multiprocessing.connection import Connection
 from cdtools.models import CDIModel
@@ -28,8 +29,21 @@ import datetime
 import os
 from typing import Callable, List
 
-__all__ = ['distributed_wrapper', 'spawn']
+__all__ = ['sync_and_avg_gradients', 'distributed_wrapper', 'spawn']
 
+def sync_and_avg_gradients(model):
+    """
+    Synchronizes the average of the model parameter gradients across all
+    participating GPUs.
+
+    Parameters:
+        model: CDIModel
+            Model for CDI/ptychography reconstruction  
+    """
+    for param in model.parameters():
+        if param.requires_grad:
+            dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM) 
+            param.grad.data /= model.world_size
 
 def distributed_wrapper(rank: int, 
                         func: Callable[[CDIModel, Ptycho2DDataset, int, int], None], 
@@ -39,7 +53,8 @@ def distributed_wrapper(rank: int,
                         backend: str = 'nccl', 
                         timeout: int = 600,
                         pipe: Connection = None):
-    """Wraps functions containing reconstruction loops (i.e., `for loss in 
+    """
+    Wraps functions containing reconstruction loops (i.e., `for loss in 
     model.Adam_optimize`) to enable multi-GPU operations to be set up. The 
     wrapped function needs to passed to `torch.multiprocessing.spawn` or 
     `cdtools.tools.distributed.distributed.spawn`
@@ -118,7 +133,8 @@ def spawn(func: Callable[[CDIModel, Ptycho2DDataset, int, int], None],
           timeout: int = 600,
           nccl_p2p_disable: bool = True,
           pipe: Connection = None):
-    """Spawns subprocesses on `world_size` GPUs that runs reconstruction
+    """
+    Spawns subprocesses on `world_size` GPUs that runs reconstruction
     loops wrapped around a function `func`.
     
     This is a wrapper around `torch.multiprocessing.spawn` which includes 
