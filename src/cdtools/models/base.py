@@ -43,6 +43,7 @@ from scipy import io
 from contextlib import contextmanager
 from cdtools.tools.data import nested_dict_to_h5, h5_to_nested_dict, nested_dict_to_numpy, nested_dict_to_torch
 
+
 __all__ = ['CDIModel']
 
 
@@ -70,6 +71,7 @@ class CDIModel(t.nn.Module):
         self.device_id = None           # ID of the GPU being used in multi-GPU 
         self.world_size = 1             # Total number of GPUs being used.
         self.multi_gpu_used = False     # Self explanatory
+
 
     def from_dataset(self, dataset):
         raise NotImplementedError()
@@ -550,7 +552,8 @@ class CDIModel(t.nn.Module):
             thread=True,
             calculation_width=10
     ):
-        """Runs a round of reconstruction using the Adam optimizer
+        """Runs a round of reconstruction using the Adam optimizer from
+        cdtools.optimizer.Adam.
 
         This is generally accepted to be the most robust algorithm for use
         with ptychography. Like all the other optimization routines,
@@ -566,7 +569,9 @@ class CDIModel(t.nn.Module):
         batch_size : int
             Optional, the size of the minibatches to use
         lr : float
-            Optional, The learning rate (alpha) to use. Defaultis 0.005. 0.05 is typically the highest possible value with any chance of being stable
+            Optional, The learning rate (alpha) to use. Defaultis 0.005. 
+            0.05 is typically the highest possible value with any chance 
+            of being stable
         betas : tuple
             Optional, the beta_1 and beta_2 to use. Default is (0.9, 0.999).
         schedule : float
@@ -574,66 +579,43 @@ class CDIModel(t.nn.Module):
         subset : list(int) or int
             Optional, a pattern index or list of pattern indices to use
         regularization_factor : float or list(float)
-            Optional, if the model has a regularizer defined, the set of parameters to pass the regularizer method
+            Optional, if the model has a regularizer defined, the set of 
+            parameters to pass the regularizer method
         thread : bool
-            Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
+            Default True, whether to run the computation in a separate thread 
+            to allow interaction with plots during computation
         calculation_width : int
-            Default 10, how many translations to pass through at once for each round of gradient accumulation. Does not affect the result, only the calculation speed 
+            Default 10, how many translations to pass through at once for 
+            each round of gradient accumulation. Does not affect the result, 
+            only the calculation speed 
         
         """
+        # We want to have model.Adam_optimize call AND store cdtoptim.Adam.optimize
+        # to be able to perform reconstructions without creating a new
+        # optimizer each time we update the hyperparameters.
+        # 
+        # The only way to do this is to make cdtoptim.Adam an attribute
+        # of the model. But since cdtoptim.Adam also depends on CDIModel,
+        # this seems to give rise to a circular import error unless
+        # we import cdtools.optimizer within this method:
+        import cdtools.optimizer as cdtoptim
 
-        self.training_history += (
-            f'Planning {iterations} epochs of Adam, with a learning rate = '
-            f'{lr}, batch size = {batch_size}, regularization_factor = '
-            f'{regularization_factor}, and schedule = {schedule}.\n'
-        )
+        # Next, we want to create an Optimizer.Adam if one does not already exist.
+        if not hasattr(self, 'optimizer'):
+            self.optimizer = cdtoptim.Adam(model=self, 
+                                           dataset=dataset, 
+                                           subset=subset)
         
-
-        if subset is not None:
-            # if subset is just one pattern, turn into a list for convenience
-            if type(subset) == type(1):
-                subset = [subset]
-            dataset = torchdata.Subset(dataset, subset)
-
-        # Make a dataloader suited for either single-GPU use or cases
-        # where a process group (i.e., multiple GPUs) has been initialized
-        if self.multi_gpu_used:
-            # First, create a sampler to load subsets of dataset to the GPUs
-            sampler = DistributedSampler(dataset,
-                                         num_replicas=self.world_size,
-                                         rank=self.rank,
-                                         shuffle=True,
-                                         drop_last=False)
-            # Now create the dataloader
-            data_loader = torchdata.DataLoader(dataset,
-                                               batch_size=batch_size//self.world_size,
-                                               num_workers=0, # Creating extra threads in children processes may cause problems. Leave this at 0.
-                                               drop_last=False,
-                                               pin_memory=False,# I'm not 100% sure what this does, but apparently making this True can cause bugs
-                                               sampler=sampler)
-        else:
-            data_loader = torchdata.DataLoader(dataset,
-                                            batch_size=batch_size,
-                                            shuffle=True)
-
-        # Define the optimizer
-        optimizer = t.optim.Adam(
-            self.parameters(),
-            lr = lr,
-            betas=betas,
-            amsgrad=amsgrad)
-
-        # Define the scheduler
-        if schedule:
-            scheduler = t.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2,threshold=1e-9)
-        else:
-            scheduler = None
-
-        return self.AD_optimize(iterations, data_loader, optimizer,
-                                scheduler=scheduler,
-                                regularization_factor=regularization_factor,
-                                thread=thread,
-                                calculation_width=calculation_width)
+        # Run some reconstructions
+        return self.optimizer.optimize(iterations=iterations,
+                                       batch_size=batch_size,
+                                       lr=lr,
+                                       betas=betas,
+                                       schedule=schedule,
+                                       amsgrad=amsgrad,
+                                       regularization_factor=regularization_factor,
+                                       thread=thread,
+                                       calculation_width=calculation_width)
 
 
     def LBFGS_optimize(self, iterations, dataset,
