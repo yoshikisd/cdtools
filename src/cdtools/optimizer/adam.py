@@ -1,8 +1,8 @@
-"""This module contains the Adam Optimizer subclass for performing
+"""This module contains the Adam Reconstructor subclass for performing
 optimization ('reconstructions') on ptychographic/CDI models using
 the Adam optimizer.
 
-The Optimizer class is designed to resemble so-called
+The Reconstructor class is designed to resemble so-called
 'Trainer' classes that (in the language of the AI/ML folks) handles
 the 'training' of a model given some dataset and optimizer.
 """
@@ -15,13 +15,13 @@ from cdtools.tools.data import nested_dict_to_h5, h5_to_nested_dict, nested_dict
 from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
 from cdtools.models import CDIModel
 from typing import Tuple, List, Union
-from cdtools.optimizer import Optimizer
+from cdtools.optimizer import Reconstructor
 
 __all__ = ['Adam']
 
-class Adam(Optimizer):
+class Adam(Reconstructor):
     """
-    The Adam Optimizer subclass handles the optimization ('reconstruction') of 
+    The Adam Reconstructor subclass handles the optimization ('reconstruction') of 
     ptychographic models and datasets using the Adam optimizer.
 
     Parameters
@@ -95,7 +95,7 @@ class Adam(Optimizer):
 
         Formerly `CDIModel.Adam_optimize`
         
-        This calls the Optimizer.optimize superclass method
+        This calls the Reconstructor.optimize superclass method
         (formerly `CDIModel.AD_optimize`) to run a round of reconstruction
         once the dataloader and optimizer hyperparameters have been
         set up.
@@ -135,7 +135,7 @@ class Adam(Optimizer):
             f'{regularization_factor}, and schedule = {schedule}.\n'
         )
 
-        # 1) The subset statement is contained in Optimizer.__init__
+        # 1) The subset statement is contained in Reconstructor.__init__
 
         # 2) Set up / re-initialize the data laoder
         self.setup_dataloader(batch_size=batch_size, shuffle=shuffle)

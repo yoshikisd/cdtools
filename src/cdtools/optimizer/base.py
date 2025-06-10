@@ -1,11 +1,11 @@
-"""This module contains the base Optimizer class for performing
+"""This module contains the base Reconstructor class for performing
 optimization ('reconstructions') on ptychographic/CDI models.
 
-The Optimizer class is designed to resemble so-called
+The Reconstructor class is designed to resemble so-called
 'Trainer' classes that (in the language of the AI/ML folks) handles
 the 'training' of a model given some dataset and optimizer.
 
-The subclasses of Optimizer are required to implement
+The subclasses of Reconstructor are required to implement
 their own data loaders and optimizer adjusters
 """
 
@@ -23,14 +23,14 @@ from cdtools.models import CDIModel
 import cdtools.tools.distributed as cdtdist
 from typing import Tuple, List, Union
 
-__all__ = ['Optimizer']
+__all__ = ['Reconstructor']
 
-class Optimizer:
+class Reconstructor:
     """
-    Optimizer handles the optimization ('reconstruction') of ptychographic
+    Reconstructor handles the optimization ('reconstruction') of ptychographic
     models given a CDIModel (or subclass) and corresponding Ptycho2DDataset.
     
-    This is a base model that defines all functions Optimizer subclasses
+    This is a base model that defines all functions Reconstructor subclasses
     must implement.
 
     Parameters
@@ -48,7 +48,7 @@ class Optimizer:
       using a distributed data approach. This attribute will be pulled from the
       CDIModel (this flag is automatically set when using cdtools.tools.distributed.spawn).
     - **optimizer** -- A `torch.optim.Optimizer` that must be defined when initializing the
-      Optimizer subclass.
+      Reconstructor subclass.
     - **scheduler** -- A `torch.optim.lr_scheduler` that may be defined during the `optimize` method.
     - **data_loader** -- A torch.utils.data.DataLoader that is defined by calling the 
       `setup_dataloader` method.
@@ -57,7 +57,7 @@ class Optimizer:
                  model: CDIModel,
                  dataset: Ptycho2DDataset,
                  subset: List[int] = None):
-        # Store parameters as attributes of Optimizer
+        # Store parameters as attributes of Reconstructor
         self.subset = subset
         self.multi_gpu_used = model.multi_gpu_used
         self.world_size = model.world_size
