@@ -380,7 +380,7 @@ class Ptycho2DDataset(CDataset):
         the dataset is downsampled with the data. The background is downsampled
         using the same method as the data.
 
-        If there is no quantum efficiency mask, then the mask is downsapled so
+        If there is no quantum efficiency mask, then the mask is downsampled so
         that any output pixel containing a masked pixel will be masked. If there
         is a quantum efficiency mask, then the quantum efficiency mask is
         downsampled using the same method as the data, and the mask is

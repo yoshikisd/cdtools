@@ -196,22 +196,15 @@ def quadratic_background(
     sim_patterns : torch.Tensor
         A real MxN array storing the wavefield's intensities
     """
-
-    if detector_slice is None:
-        raw_intensity = measurement(
-            wavefield,
-            *args,
-            epsilon=epsilon,
-            oversampling=oversampling,
-            simulate_finite_pixels=simulate_finite_pixels)
-    else:
-        raw_intensity = measurement(
-            wavefield,
-            *args,
-            detector_slice=detector_slice,
-            epsilon=epsilon,
-            oversampling=oversampling,
-            simulate_finite_pixels=simulate_finite_pixels)
+    
+    raw_intensity = measurement(
+        wavefield,
+        *args,
+        detector_slice=detector_slice,
+        epsilon=epsilon,
+        oversampling=oversampling,
+        simulate_finite_pixels=simulate_finite_pixels
+    )
 
     if qe_mask is None:
         output = raw_intensity + background**2
