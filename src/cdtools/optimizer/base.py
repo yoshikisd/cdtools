@@ -238,6 +238,7 @@ class Optimizer:
         self.model.training_history += self.model.report() + '\n'
         return loss
 
+
     def optimize(self,
                  iterations: int,
                  regularization_factor: Union[float, List[float]] = None,
@@ -291,7 +292,8 @@ class Optimizer:
                         yield float('nan')
                     continue
 
-                yield self._run_epoch()
+                yield self._run_epoch(regularization_factor=regularization_factor,
+                                      calculation_width=calculation_width)
                 
         # But if we do want to thread, it's annoying:
         else:
@@ -300,7 +302,9 @@ class Optimizer:
             stop_event = threading.Event()
             def target():
                 try:
-                    result_queue.put(self._run_epoch(stop_event))
+                    result_queue.put(self._run_epoch(stop_event=stop_event,
+                                                     regularization_factor=regularization_factor,
+                                                     calculation_width=calculation_width))
                 except Exception as e:
                     # If something bad happens, put the exception into the
                     # result queue
