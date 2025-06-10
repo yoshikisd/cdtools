@@ -1,32 +1,32 @@
 """Contains functions to make reconstruction scripts compatible
 with multi-GPU distributive approaches in PyTorch.
 
-The functions in this module require parts of the user-written
+Multi-GPU computing here is based on distributed data parallelism, where
+each GPU is given identical copies of a model and performs optimization
+using different parts of the dataset. After the parameter gradients
+are calculated (`loss.backwards()`) on each GPU, the gradients need to be
+synchronized and averaged across all participating GPUs. 
+
+The functions in this module assist with both gradient synchronization and
+setting up conditions necessary to perform distributive computing. Some
+functions in this module require parts of the user-written
 reconstruction script to be first wrapped in a function (as shown in 
 examples/fancy_ptycho_multi_gpu_ddp.py). The functions in this module
 are designed to wrap around/call these user-defined functions, enabling
 reconstructions to be performed across several GPUs.
 
-As of 20250302, the methods here are based on 
-torch.nn.parallel.DistributedDataParallel, which implements distributed
-data parallelism. In this scheme, replicas of the CDI/ptychography model
-are given to each device. These devices will synchronize gradients across
-each model replica. These methods however do not define how the Dataset is
+NOTE: These methods however do not define how the Dataset is
 distributed across each device; this process can be handled by using
 DistributedSampler with the DataLoader.
 """
 
-import numpy as np
-import torch as t
-from torch.distributed import init_process_group, destroy_process_group, barrier
-from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import datetime
+import os
 from multiprocessing.connection import Connection
 from cdtools.models import CDIModel
 from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
-import datetime
-import os
 from typing import Callable, List
 
 __all__ = ['sync_and_avg_gradients', 'distributed_wrapper', 'spawn']
@@ -103,8 +103,8 @@ def distributed_wrapper(rank: int,
         model.multi_gpu_used = True
 
     # Initialize the process group
-    init_process_group(backend=backend, rank=rank, 
-                       world_size=model.world_size, timeout=timeout)
+    dist.init_process_group(backend=backend, rank=rank, 
+                            world_size=model.world_size, timeout=timeout)
     
     # Load the model to the appropriate GPU rank the process is using
     device='cuda'
@@ -120,7 +120,7 @@ def distributed_wrapper(rank: int,
         func(model, dataset, rank, model.world_size, pipe)   
                          
     # Destroy process group
-    destroy_process_group()        
+    dist.destroy_process_group()        
 
 
 def spawn(func: Callable[[CDIModel, Ptycho2DDataset, int, int], None],
