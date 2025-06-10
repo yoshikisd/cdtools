@@ -11,7 +11,6 @@ This test is based on fancy_ptycho_multi_gpu_ddp.py and fancy_ptycho.py.
 
 import cdtools
 from cdtools.models import CDIModel
-import cdtools.optimizer
 from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
 from cdtools.tools.distributed import distributed
 import torch.multiprocessing as mp
@@ -74,8 +73,8 @@ def reconstruct(model: CDIModel,
         model.to(device=device)
         dataset.get_as(device=device)
 
-    # Set up the Reconstructor with the Adam optimizer
-    recon = cdtools.optimizer.Adam(model,dataset)
+    # Set up the Reconstructor with the Adam reconstructor
+    recon = cdtools.reconstructors.Adam(model,dataset)
 
     # Perform reconstructions on either single or multi-GPU workflows.
     if TEST == 'fancy_ptycho':
@@ -140,9 +139,9 @@ def run_test(world_sizes: int,
     """
     # Load the dataset and model
     if TEST == 'fancy_ptycho':
-        filename = 'cdtools/examples/example_data/lab_ptycho_data.cxi'
+        filename = 'examples/example_data/lab_ptycho_data.cxi'
     elif TEST == 'gold_balls':
-        filename = 'cdtools/examples/example_data/AuBalls_700ms_30nmStep_3_6SS_filter.cxi'
+        filename = 'examples/example_data/AuBalls_700ms_30nmStep_3_6SS_filter.cxi'
 
     dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
     
@@ -264,7 +263,7 @@ if __name__ == '__main__':
     device_ids = [1, 2, 5, 7]
 
     # How many reconstruction runs to perform for statistics
-    runs = 3
+    runs = 1
 
     # Run the test
     run_test(world_sizes, device_ids, runs)

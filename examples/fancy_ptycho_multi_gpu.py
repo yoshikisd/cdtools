@@ -1,5 +1,4 @@
 import cdtools
-import cdtools.optimizer
 from matplotlib import pyplot as plt
 
 # We need to import 2 additional functions
@@ -56,7 +55,7 @@ def multi_gpu_reconstruct(model, dataset, rank, world_size):
             if rank == 0:
                 model.inspect(dataset)
     """
-    recon = cdtools.optimizer.Adam(model,dataset)
+    recon = cdtools.reconstructors.Adam(model,dataset)
     if rank == 0:
         model.inspect(dataset)
 

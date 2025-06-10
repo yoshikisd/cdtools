@@ -8,6 +8,6 @@ __all__ = [
     'Adam'
 ]
 
-from cdtools.optimizer.base import Reconstructor
-from cdtools.optimizer.adam import Adam
+from cdtools.reconstructors.base import Reconstructor
+from cdtools.reconstructors.adam import Adam
 

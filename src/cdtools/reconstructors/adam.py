@@ -15,7 +15,7 @@ from cdtools.tools.data import nested_dict_to_h5, h5_to_nested_dict, nested_dict
 from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
 from cdtools.models import CDIModel
 from typing import Tuple, List, Union
-from cdtools.optimizer import Reconstructor
+from cdtools.reconstructors import Reconstructor
 
 __all__ = ['Adam']
 

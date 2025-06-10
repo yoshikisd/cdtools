@@ -1,5 +1,4 @@
 import cdtools
-import cdtools.optimizer
 from matplotlib import pyplot as plt
 
 filename = 'examples/example_data/lab_ptycho_data.cxi'
@@ -22,7 +21,7 @@ dataset.get_as(device=device)
 
 # An Adam Reconstructor object is created to perform Adam 
 # optimization on the FancyPtycho model and dataset
-recon = cdtools.optimizer.Adam(model, dataset)
+recon = cdtools.reconstructors.Adam(model, dataset)
 
 # The learning rate parameter sets the alpha for Adam.
 # The beta parameters are (0.9, 0.999) by default

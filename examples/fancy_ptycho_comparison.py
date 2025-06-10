@@ -7,7 +7,6 @@ class
 
 
 import cdtools
-import cdtools.optimizer
 import torch as t
 import numpy as np
 import time
@@ -38,13 +37,13 @@ def reload_model():
     return copy.deepcopy(model_original)
     
 
-# For running the optimizer class
+# For running the reconstructors class
 numiter = 5
 
 # Set stuff up for plots
 fig, (ax1,ax2) = plt.subplots(1,2)
 
-for option in ('old_method', 'optimizer'):
+for option in ('old_method', 'reconstructors'):
     time_list = []
     loss_hist_list = []
 
@@ -63,8 +62,8 @@ for option in ('old_method', 'optimizer'):
             print(model.report())
             local_time_list.append(time.time() - t_start)
 
-        if option == 'optimizer':
-            recon = cdtools.optimizer.Adam(model, dataset)
+        if option == 'reconstructors':
+            recon = cdtools.reconstructors.Adam(model, dataset)
             for loss in recon.optimize(20, lr=0.005, batch_size=50):
                 report_n_record()
             for loss in recon.optimize(20, lr=0.002, batch_size=100):

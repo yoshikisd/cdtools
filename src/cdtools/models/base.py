@@ -598,13 +598,13 @@ class CDIModel(t.nn.Module):
         # of the model. But since cdtoptim.Adam also depends on CDIModel,
         # this seems to give rise to a circular import error unless
         # we import cdtools.optimizer within this method:
-        import cdtools.optimizer as cdtoptim
+        from cdtools.reconstructors import Adam
 
         # Next, we want to create an Optimizer.Adam if one does not already exist.
         if not hasattr(self, 'optimizer'):
-            self.optimizer = cdtoptim.Adam(model=self, 
-                                           dataset=dataset, 
-                                           subset=subset)
+            self.optimizer = Adam(model=self, 
+                                  dataset=dataset, 
+                                  subset=subset)
         
         # Run some reconstructions
         return self.optimizer.optimize(iterations=iterations,
