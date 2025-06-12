@@ -872,7 +872,13 @@ class CDIModel(t.nn.Module):
             updating = True if len(axes[0].images) >= 1 else False
 
             inputs, output = dataset[idx:idx+1]
-            sim_data = self.forward(*inputs).detach().cpu().numpy()[0]
+            sim_data = self.forward(*inputs).detach().cpu().numpy()
+            # The length of sim_data.shape changes when you're doing 
+            # either a ptycho (3) or an RPI (2) reconstruction.
+            # We need to make sure that sim_data is 2D.
+            if len(sim_data.shape) > 2:
+                sim_data = sim_data[0]
+
             meas_data = output.detach().cpu().numpy()[0]
             if hasattr(self, 'mask') and self.mask is not None:
                 mask = self.mask.detach().cpu().numpy()
