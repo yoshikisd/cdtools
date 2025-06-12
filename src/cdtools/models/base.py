@@ -696,6 +696,13 @@ class CDIModel(t.nn.Module):
             Optional, the learning rate to use
         momentum : float
             Optional, the length of the history to use.
+        dampening : float
+            Optional, dampening for the momentum
+        weight_decay : float
+            Optional, weight decay (L2 penalty)
+        nesterov : bool
+            Optional, enables Nesterov momentum. Only applicable when momentum 
+            is non-zero. 
         subset : list(int) or int
             Optional, a pattern index or list of pattern indices to use
         regularization_factor : float or list(float)
@@ -703,23 +710,24 @@ class CDIModel(t.nn.Module):
         thread : bool
             Default True, whether to run the computation in a separate thread to allow interaction with plots during computation
         calculation_width : int
-            Default 1, how many translations to pass through at once for each round of gradient accumulation
+            Default 10, how many translations to pass through at once for each round of gradient accumulation
 
         """
-
-        if subset is not None:
-            # if just one pattern, turn into a list for convenience
-            if type(subset) == type(1):
-                subset = [subset]
-            dataset = torchdata.Subset(dataset, subset)
-
-        # Make a dataloader
-        if batch_size is not None:
-            data_loader = torchdata.DataLoader(dataset, batch_size=batch_size,
-                                               shuffle=True)
-        else:
-            data_loader = torchdata.DataLoader(dataset)
-
+        # We want to have model.SGD_optimize call AND store cdtools.reconstructors.SGD
+        # to be able to perform reconstructions without creating a new
+        # optimizer each time we update the hyperparameters.
+        # 
+        # The only way to do this is to make the SGD reconstructor an attribute
+        # of the model. But since the SGD reconstructor also depends on CDIModel,
+        # this seems to give rise to a circular import error unless
+        # we import cdtools.reconstructors within this method:
+        from cdtools.reconstructors import SGD
+        
+        # Next, we want to create an Optimizer.Adam if one does not already exist.
+        if not hasattr(self, 'optimizer'):
+            self.optimizer = SGD(model=self, 
+                                 dataset=dataset, 
+                                 subset=subset)
 
         # Define the optimizer
         optimizer = t.optim.SGD(self.parameters(),
@@ -727,11 +735,18 @@ class CDIModel(t.nn.Module):
                                 dampening=dampening,
                                 weight_decay=weight_decay,
                                 nesterov=nesterov)
-
-        return self.AD_optimize(iterations, data_loader, optimizer,
-                                regularization_factor=regularization_factor,
-                                thread=thread,
-                                calculation_width=calculation_width)
+    
+        # Run some reconstructions
+        return self.optimizer.optimize(iterations=iterations,
+                                       batch_size=batch_size,
+                                       lr=lr,
+                                       momentum=momentum,
+                                       dampening=dampening,
+                                       weight_decay=weight_decay,
+                                       nesterov=nesterov,
+                                       regularization_factor=regularization_factor,
+                                       thread=thread,
+                                       calculation_width=calculation_width)
 
 
     def report(self):
