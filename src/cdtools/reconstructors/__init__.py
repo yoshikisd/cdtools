@@ -5,9 +5,10 @@
 # We define __all__ to be sure that import * only imports what we want
 __all__ = [
     'Reconstructor',
-    'Adam'
+    'Adam',
+    'LBFGS'
 ]
 
 from cdtools.reconstructors.base import Reconstructor
 from cdtools.reconstructors.adam import Adam
-
+from cdtools.reconstructors.lbfgs import LBFGS

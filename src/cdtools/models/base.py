@@ -590,14 +590,14 @@ class CDIModel(t.nn.Module):
             only the calculation speed 
         
         """
-        # We want to have model.Adam_optimize call AND store cdtoptim.Adam.optimize
+        # We want to have model.Adam_optimize call AND store cdtools.reconstructors.Adam
         # to be able to perform reconstructions without creating a new
         # optimizer each time we update the hyperparameters.
         # 
-        # The only way to do this is to make cdtoptim.Adam an attribute
-        # of the model. But since cdtoptim.Adam also depends on CDIModel,
+        # The only way to do this is to make the Adam reconstructor an attribute
+        # of the model. But since the Adam reconstructor also depends on CDIModel,
         # this seems to give rise to a circular import error unless
-        # we import cdtools.optimizer within this method:
+        # we import cdtools.reconstructors within this method:
         from cdtools.reconstructors import Adam
 
         # Next, we want to create an Optimizer.Adam if one does not already exist.
@@ -650,26 +650,29 @@ class CDIModel(t.nn.Module):
             Default True, whether to run the computation in a separate thread to allow interaction with plots during computation.
 
         """
-        if subset is not None:
-            # if just one pattern, turn into a list for convenience
-            if type(subset) == type(1):
-                subset = [subset]
-            dataset = torchdata.Subset(dataset, subset)
+        # We want to have model.LBFGS_optimize call AND store cdtools.reconstructors.LBFGS
+        # to be able to perform reconstructions without creating a new
+        # optimizer each time we update the hyperparameters.
+        # 
+        # The only way to do this is to make the LBFGS reconstructor an attribute
+        # of the model. But since the LBFGS reconstructor also depends on CDIModel,
+        # this seems to give rise to a circular import error unless
+        # we import cdtools.reconstructors within this method:
+        from cdtools.reconstructors import LBFGS
 
-        # Make a dataloader. This basically does nothing but load all the
-        # data at once
-        data_loader = torchdata.DataLoader(dataset, batch_size=len(dataset))
-
-
-        # Define the optimizer
-        optimizer = t.optim.LBFGS(self.parameters(),
-                                  lr = lr, history_size=history_size,
-                                  line_search_fn=line_search_fn)
-
-        return self.AD_optimize(iterations, data_loader, optimizer,
-                                regularization_factor=regularization_factor,
-                                thread=thread,
-                                calculation_width=calculation_width)
+        # Next, we want to create an Optimizer.Adam if one does not already exist.
+        if not hasattr(self, 'optimizer'):
+            self.optimizer = LBFGS(model=self, 
+                                   dataset=dataset, 
+                                   subset=subset)
+        
+        # Run some reconstructions
+        return self.optimizer.optimize(iterations=iterations,
+                                       lr=lr,
+                                       history_size=history_size,
+                                       regularization_factor=regularization_factor,
+                                       thread=thread,
+                                       calculation_width=calculation_width)
 
 
     def SGD_optimize(self, iterations, dataset, batch_size=None,
