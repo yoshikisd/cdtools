@@ -77,6 +77,7 @@ class Ptycho2DDataset(CDataset):
             self.intensities = t.as_tensor(intensities, dtype=t.float32)
         else:
             self.intensities = None
+
             
     def __len__(self):
         return self.patterns.shape[0]
@@ -269,8 +270,11 @@ class Ptycho2DDataset(CDataset):
         """Plots the mean diffraction pattern across the dataset
 
         The output is normalized so that the summed intensity on the
-        detector is equal to the total intensity of light that passed
+        detector is roughly equal to the total intensity of light that passed
         through the sample within each detector conjugate field of view.
+
+        If the scan points are colinear (which causes issues for this
+        estimation), the mean pattern is displayed unscaled.
 
         The plot is plotted as log base 10 of the output plus log_offset.
         By default, log_offset is set equal to 1, which is a good level for
@@ -372,10 +376,19 @@ class Ptycho2DDataset(CDataset):
         equal to the sum of a <factor> x <factor> region of pixels in the
         input pattern. This summation is done by pytorch.functional.avg_pool2d.
         
-        Any mask and background data which is stored with the dataset is
-        downsampled with the data. The background is downsampled using the same
-        method as the data. The mask is expanded so that any output pixel
-        containing a masked pixel will be masked.
+        Any mask, quantum efficiency, and background data which is stored with
+        the dataset is downsampled with the data. The background is downsampled
+        using the same method as the data.
+
+        If there is no quantum efficiency mask, then the mask is downsampled so
+        that any output pixel containing a masked pixel will be masked. If there
+        is a quantum efficiency mask, then the quantum efficiency mask is
+        downsampled using the same method as the data, and the mask is
+        downsampled to include any pixels for which there is at least one valid
+        pixel.
+
+        To avoid leakage of data from masked pixels, the data is first
+        multiplied by the mask before downsampling.
         
         Parameters
         ----------
@@ -383,17 +396,41 @@ class Ptycho2DDataset(CDataset):
             Default 2, the factor to downsample by
 
         """
-        self.patterns = t.nn.functional.avg_pool2d(
-            self.patterns.unsqueeze(0), factor, divisor_override=1)[0]
-        self.mask = t.logical_not(t.nn.functional.max_pool2d(
-            (1-self.mask.to(dtype=t.uint8)).unsqueeze(0).unsqueeze(0),
-            factor
-        )[0,0].to(dtype=t.bool))
+        if hasattr(self, 'mask') and self.mask is not None:
+            self.patterns = t.nn.functional.avg_pool2d(
+                (self.mask * self.patterns).unsqueeze(0),
+                factor, divisor_override=1)[0]
+        else:
+            self.patterns = t.nn.functional.avg_pool2d(
+                self.patterns.unsqueeze(0),
+                factor, divisor_override=1)[0]
+            
+
+        # If we have a QE mask, we want to include all pixels for which at
+        # least one of the input pixels was unmasked, because we can account
+        # for the masked pixels through quantum efficiency
+        if hasattr(self, 'qe_mask') and self.qe_mask is not None:
+            self.qe_mask = t.nn.functional.avg_pool2d(
+                (self.mask * self.qe_mask).unsqueeze(0).unsqueeze(0),
+                factor)[0,0]
+            self.mask = t.nn.functional.max_pool2d(
+                self.mask.to(dtype=t.uint8).unsqueeze(0).unsqueeze(0),
+                factor)[0,0].to(dtype=t.bool)
+            
+        # But if there is no QE mask, we need to only preserve pixels for
+        # which all input pixels were unmasked
+        elif hasattr(self, 'mask') and self.mask is not None:
+            self.mask = t.logical_not(t.nn.functional.max_pool2d(
+                (1-self.mask.to(dtype=t.uint8)).unsqueeze(0).unsqueeze(0),
+                factor
+            )[0,0].to(dtype=t.bool))
         
         self.detector_geometry['basis'] = \
             self.detector_geometry['basis'] * factor
 
-        if self.background is not None:
+
+        
+        if hasattr(self, 'background') and self.background is not None:
             self.background = t.nn.functional.avg_pool2d(
                 self.background.unsqueeze(0).unsqueeze(0),
                 factor,
