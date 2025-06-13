@@ -84,7 +84,7 @@ class SGD(Reconstructor):
     def optimize(self,
                  iterations: int,
                  batch_size: int = None,
-                 lr: float = 0.01,
+                 lr: float = 2e-7,
                  momentum: float = 0,
                  dampening: float = 0,
                  weight_decay: float = 0,
@@ -106,30 +106,29 @@ class SGD(Reconstructor):
         Parameters
         ----------
         iterations : int
-            How many epochs of the algorithm to run
+            How many epochs of the algorithm to run.
         batch_size : int
-            Optional, the size of the minibatches to use. Default is 
+            Optional, the size of the minibatches to use.  
         lr : float
-            Optional, The learning rate (alpha) to use. Default is 0.005. 0.05 is 
-            typically the highest possible value with any chance of being stable
+            Optional, The learning rate to use. The default is 2e-7.
         momentum : float
             Optional, the length of the history to use.
         dampening : float
-            Optional, dampening for the momentum
+            Optional, dampening for the momentum.
         weight_decay : float
-            Optional, weight decay (L2 penalty)
+            Optional, weight decay (L2 penalty).
         nesterov : bool
             Optional, enables Nesterov momentum. Only applicable when momentum 
             is non-zero. 
         regularization_factor : float or list(float)
             Optional, if the model has a regularizer defined, the set of parameters to pass 
-            the regularizer method
+            the regularizer method.
         thread : bool
             Default True, whether to run the computation in a separate thread to allow 
-            interaction with plots during computation
+            interaction with plots during computation.
         calculation_width : int
             Default 10, how many translations to pass through at once for each round of 
-            gradient accumulation. Does not affect the result, only the calculation speed 
+            gradient accumulation. Does not affect the result, only the calculation speed. 
         shuffle : bool
             Optional, enable/disable shuffling of the dataset. This option
             is intended for diagnostic purposes and should be left as True.

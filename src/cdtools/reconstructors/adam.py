@@ -113,7 +113,7 @@ class Adam(Reconstructor):
             Optional, the beta_1 and beta_2 to use. Default is (0.9, 0.999).
         schedule : bool
             Optional, create a learning rate scheduler (torch.optim.lr_scheduler._LRScheduler)
-        amsgra : bool
+        amsgrad : bool
             Optional, whether to use the AMSGrad variant of this algorithm
         regularization_factor : float or list(float)
             Optional, if the model has a regularizer defined, the set of parameters to pass 

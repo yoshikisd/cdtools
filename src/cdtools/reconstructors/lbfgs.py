@@ -112,9 +112,6 @@ class LBFGS(Reconstructor):
         calculation_width : int
             Default 10, how many translations to pass through at once for each round of 
             gradient accumulation. Does not affect the result, only the calculation speed 
-        shuffle : bool
-            Optional, enable/disable shuffling of the dataset. This option
-            is intended for diagnostic purposes and should be left as True.
         """
         # 1) The subset statement is contained in Reconstructor.__init__
 

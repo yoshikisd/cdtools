@@ -18,7 +18,7 @@ import queue
 import time
 from contextlib import contextmanager
 from cdtools.tools.data import nested_dict_to_h5, h5_to_nested_dict, nested_dict_to_numpy, nested_dict_to_torch
-from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
+from cdtools.datasets import CDataset
 from cdtools.models import CDIModel
 import cdtools.tools.distributed as cdtdist
 from typing import Tuple, List, Union
@@ -28,7 +28,7 @@ __all__ = ['Reconstructor']
 class Reconstructor:
     """
     Reconstructor handles the optimization ('reconstruction') of ptychographic
-    models given a CDIModel (or subclass) and corresponding Ptycho2DDataset.
+    models given a CDIModel (or subclass) and corresponding CDataset.
     
     This is a base model that defines all functions Reconstructor subclasses
     must implement.
@@ -37,7 +37,7 @@ class Reconstructor:
     ----------
     model: CDIModel
         Model for CDI/ptychography reconstruction
-    dataset: Ptycho2DDataset
+    dataset: CDataset
         The dataset to reconstruct against
     subset : list(int) or int
         Optional, a pattern index or list of pattern indices to use
@@ -55,8 +55,8 @@ class Reconstructor:
     """
     def __init__(self,
                  model: CDIModel,
-                 dataset: Ptycho2DDataset,
-                 subset: List[int] = None):
+                 dataset: CDataset,
+                 subset: Union[int, List[int]] = None):
         # Store parameters as attributes of Reconstructor
         self.subset = subset
         self.multi_gpu_used = model.multi_gpu_used
