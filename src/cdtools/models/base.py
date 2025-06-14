@@ -44,6 +44,7 @@ from contextlib import contextmanager
 from cdtools.tools.data import nested_dict_to_h5, h5_to_nested_dict, nested_dict_to_numpy, nested_dict_to_torch
 from cdtools.datasets import CDataset
 from typing import List, Union, Tuple
+import os
 
 __all__ = ['CDIModel']
 
@@ -65,14 +66,14 @@ class CDIModel(t.nn.Module):
         self.training_history = ''
         self.epoch = 0
 
-        # These properties indicate to the CDIModel methods whether or not 
-        # multiple GPUs will be used. The purpose is to allow only 1 GPU to call
-        # certain methods to prevent the creation of redundant plots/reports/saves
-        self.rank = None                # Rank of the subprocess running the GPU
-        self.device_id = None           # ID of the GPU being used in multi-GPU 
-        self.world_size = 1             # Total number of GPUs being used.
-        self.multi_gpu_used = False     # Self explanatory
-
+        # These attributes indicate to the CDIModel methods whether or not 
+        # multi-GPU calculations are being performed. These flags help
+        # trigger multi-GPU-specific function calls (i.e., all_reduce) and
+        # prevent redundant plots/reports/saves during multi-GPU use.
+        self.rank = int(os.environ.get('RANK'))       # Rank of the subprocess running the GPU
+        self.world_size = int(os.environ.get('WORLD_SIZE'))   # Total number of GPUs being used.
+        self.multi_gpu_used = int(self.world_size) > 1                # Self explanatory
+        
 
     def from_dataset(self, dataset):
         raise NotImplementedError()

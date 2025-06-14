@@ -25,8 +25,6 @@ import torch.multiprocessing as mp
 import datetime
 import os
 from multiprocessing.connection import Connection
-from cdtools.models import CDIModel
-from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
 from typing import Callable, List
 
 __all__ = ['sync_and_avg_gradients', 'distributed_wrapper', 'spawn']
@@ -45,10 +43,9 @@ def sync_and_avg_gradients(model):
             dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM) 
             param.grad.data /= model.world_size
 
+
 def distributed_wrapper(rank: int, 
-                        func: Callable[[CDIModel, Ptycho2DDataset, int, int], None], 
-                        model: CDIModel, 
-                        dataset: Ptycho2DDataset, 
+                        func: Callable[[int, int], None], 
                         device_ids: List[int],
                         backend: str = 'nccl', 
                         timeout: int = 600,
@@ -66,10 +63,6 @@ def distributed_wrapper(rank: int,
         func: Callable[[CDIModel, Ptycho2DDataset, int, int]]
             Function wrapping user-defined reconstruction loops. The function must
             have the following format: func(model, dataset, rank, world_size).
-        model: CDIModel
-            Model for CDI/ptychography reconstruction
-        dataset: Ptycho2DDataset
-            The dataset to reconstruct against
         device_ids: list[int]
             List of GPU IDs to use
         backend: str
@@ -91,41 +84,46 @@ def distributed_wrapper(rank: int,
     # Convert timeout from int to datetime
     timeout = datetime.timedelta(seconds=timeout)
 
+    # Define the world_size
+    world_size = len(device_ids)
+
     # Update the rank in the model and indicate we're using multiple GPUs
-    model.rank = rank
-    model.device_id = device_ids[model.rank]
-    model.world_size = len(device_ids)
+    #model.rank = rank
+    #model.device_id = device_ids[model.rank]
+    #model.world_size = len(device_ids)
 
     # Allow the process to only see the GPU is has been assigned
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(model.device_id) 
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(rank) 
 
-    if model.world_size > 1: # In case we need to use 1 GPU for testing
-        model.multi_gpu_used = True
-
+    # Within the called reconstruction function/script, we need to somehow
+    # set up the multi-GPU model flags (model.rank, model.world_size,
+    # and model.multi_gpu_used).
+    #
+    # One way to do this (without having to modify CDIModel here or explicitly
+    # setting up the CDIModel attributes in the reconstruction script) is to
+    # create environment variables for each subprocess. Then, when a model
+    # is created within each subprocess, it can loop up its own local environment
+    # variable and set the rank/world_size/multi_gpu_used flags accordingly.
+    os.environ['WORLD_SIZE'] = str(world_size)
+    os.environ['RANK'] = str(rank)
+    os.environ['NCCL_P2P_DISABLE'] = str(int(True))
+    
     # Initialize the process group
     dist.init_process_group(backend=backend, rank=rank, 
-                            world_size=model.world_size, timeout=timeout)
+                            world_size=world_size, timeout=timeout)
     
-    # Load the model to the appropriate GPU rank the process is using
-    device='cuda'
-    model.to(device=device)
-    dataset.get_as(device=device) 
-    
-    # Start the reconstruction loop, but feed in model_DDP.module so we don't
-    # have to change `model._` to `model.module._` in the CDTools script
+    # Run the reconstruction script
     # We also need to check if we want to pass a pipe to the function
     if pipe is None:
-        func(model, dataset, rank, model.world_size)    
+        func()    
     else:
-        func(model, dataset, rank, model.world_size, pipe)   
+        func(pipe)   
                          
     # Destroy process group
     dist.destroy_process_group()        
 
 
-def spawn(func: Callable[[CDIModel, Ptycho2DDataset, int, int], None],
-          model: CDIModel,
-          dataset: Ptycho2DDataset,
+def spawn(func: Callable[[int, int], None],
           device_ids: List[int],
           master_addr: str,
           master_port: str,
@@ -145,10 +143,6 @@ def spawn(func: Callable[[CDIModel, Ptycho2DDataset, int, int], None],
         func: Callable[[CDIModel, Ptycho2DDataset, int, int]]
             Function wrapping user-defined reconstruction loops. The function must
             have the following format: func(model, dataset, rank, world_size).
-        model: CDIModel
-            Model for CDI/ptychography reconstruction
-        dataset: Ptycho2DDataset
-            The dataset to reconstruct against
         device_ids: list[int]
             List of GPU IDs to use
         master_addr: str
@@ -179,9 +173,10 @@ def spawn(func: Callable[[CDIModel, Ptycho2DDataset, int, int], None],
     os.environ['NCCL_P2P_DISABLE'] = str(int(nccl_p2p_disable))
 
     # Ensure a "graceful" termination of subprocesses if something goes wrong.
-    print('\nStarting up multi-GPU reconstructions...')
+    print('\nStarting up multi-GPU reconstructions...\n')
     mp.spawn(distributed_wrapper,
-                args=(func, model, dataset, device_ids, backend, timeout, pipe),
+                args=(func, device_ids, backend, timeout, pipe),
                 nprocs=len(device_ids),
                 join=True)
     print('Reconstructions complete...')
+    
