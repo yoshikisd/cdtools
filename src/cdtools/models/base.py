@@ -70,10 +70,15 @@ class CDIModel(t.nn.Module):
         # multi-GPU calculations are being performed. These flags help
         # trigger multi-GPU-specific function calls (i.e., all_reduce) and
         # prevent redundant plots/reports/saves during multi-GPU use.
-        self.rank = int(os.environ.get('RANK'))       # Rank of the subprocess running the GPU
-        self.world_size = int(os.environ.get('WORLD_SIZE'))   # Total number of GPUs being used.
-        self.multi_gpu_used = int(self.world_size) > 1                # Self explanatory
-        
+        rank = os.environ.get('RANK')
+        world_size = os.environ.get('WORLD_SIZE')
+
+        # Rank of the subprocess running the GPU (defauly rank 0)
+        self.rank = int(rank) if rank is not None else 0 
+        # Total number of GPUs being used.    
+        self.world_size = int(world_size) if world_size is not None else 1   
+        self.multi_gpu_used = int(self.world_size) > 1               
+
 
     def from_dataset(self, dataset):
         raise NotImplementedError()
