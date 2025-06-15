@@ -14,26 +14,24 @@ torchrun --nnodes=1 --nproc_per_node=4 single_to_multi_gpu.py
 """
 import os
 import datetime
-import torch as t
 import torch.distributed as dist
+import torch as t
+
 
 
 if __name__ == '__main__':
     # If this script is called by torchrun, several environment
-    # variables should be visible that are needed to initiate the 
-    # process group.
+    # variables are created that we need to store as variables
     rank = int(os.environ.get('RANK'))
     world_size = int(os.environ.get('WORLD_SIZE'))
-    os.environ['NCCL_P2P_DISABLE'] = str(int(True))
-    os.environ['CUDA_VISIBLE_DEVICE'] = str(rank)
 
-    timeout = datetime.timedelta(seconds=30)
+    os.environ['NCCL_P2P_DISABLE'] = str(int(True))
+    t.cuda.set_device(rank)
+    timeout = datetime.timedelta(seconds=300)
 
     # Start up the process group (needed so the different
     # subprocesses can talk with each other)
     dist.init_process_group(backend='nccl',
-                            rank=rank,
-                            world_size=world_size,
                             timeout=timeout)
     
     try:     

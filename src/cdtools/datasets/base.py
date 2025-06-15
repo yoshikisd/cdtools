@@ -131,6 +131,20 @@ class CDataset(torchdata.Dataset):
         ----------
         Accepts the same parameters as torch.Tensor.to
         """
+        # When running a single-GPU script with single_to_multi_gpu.py,
+        # each subprocess (running the single-GPU script on one of several
+        # GPUs) is assigned their own default GPU using `t.cuda.set_device(rank)`.
+        # This is done to allow the single GPU script to use `device='cuda'` and not
+        # `device=f'cuda:{rank}'` for ease of use.
+        #
+        # Say we set `t.cuda.set_device(3)` and use `device='cuda'` in the single GPU
+        # script. When `model.to(device=device)` is called, all torch parameters have
+        # `device='cuda:6'` automatically set. However, when `dataset.get_as` is called, 
+        # we must explicitly define here the GPU ID/rank the dataset will live on or 
+        # else its torch parameters will have `device='cuda'` (i.e., the device is 'cuda:0').
+        if ('device', 'cuda') in kwargs.items():
+            kwargs['device'] = f'cuda:{t.cuda.current_device()}'
+
         self.get_as_args = (args, kwargs)
 
     def __len__(self):

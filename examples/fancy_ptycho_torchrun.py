@@ -1,7 +1,10 @@
 import cdtools
 from matplotlib import pyplot as plt
+import os
+import torch as t
 
 filename = 'example_data/lab_ptycho_data.cxi'
+#filename = 'cdtools/examples/example_data/lab_ptycho_data.cxi'
 dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
 # FancyPtycho is the workhorse model
@@ -14,8 +17,8 @@ model = cdtools.models.FancyPtycho.from_dataset(
     units='mm', # Set the units for the live plots
     obj_view_crop=-50, # Expands the field of view in the object plot by 50 pix
 )
-
-device = f'cuda:{model.rank}'
+#t.cuda.set_device(5)
+device = 'cuda'
 model.to(device=device)
 dataset.get_as(device=device)
 
