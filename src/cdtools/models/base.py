@@ -593,9 +593,6 @@ class CDIModel(t.nn.Module):
         report : str
             A string with basic info on the latest iteration
         """
-        # FOR MULTI-GPU: Only run this method if it's called by the rank 0 GPU
-        if self.multi_gpu_used and self.rank != 0:
-            return
         if hasattr(self, 'latest_iteration_time'):
             epoch = len(self.loss_history)
             dt = self.latest_iteration_time
