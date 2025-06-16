@@ -212,6 +212,10 @@ class CDIModel(t.nn.Module):
         *args
             Accepts any additional args that model.save_results needs, for this model
         """
+        # FOR MULTI-GPU: Only run this method if it's called by the rank 0 GPU
+        if self.multi_gpu_used and self.rank != 0:
+            return
+        
         return nested_dict_to_h5(filename, self.save_results(*args))
     
 
@@ -232,6 +236,10 @@ class CDIModel(t.nn.Module):
         exception_filename : str
             Optional, a separate filename to use if an exception is raised during execution. Default is equal to filename
         """
+        # FOR MULTI-GPU: Only run this method if it's called by the rank 0 GPU
+        if self.multi_gpu_used and self.rank != 0:
+            return
+        
         try:
             yield
             self.save_to_h5(filename, *args)
@@ -257,6 +265,10 @@ class CDIModel(t.nn.Module):
         *args
             Accepts any additional args that model.save_results needs, for this model
         """
+        # FOR MULTI-GPU: Only run this method if it's called by the rank 0 GPU
+        if self.multi_gpu_used and self.rank != 0:
+            return
+        
         try:
             yield
         except:
@@ -581,6 +593,9 @@ class CDIModel(t.nn.Module):
         report : str
             A string with basic info on the latest iteration
         """
+        # FOR MULTI-GPU: Only run this method if it's called by the rank 0 GPU
+        if self.multi_gpu_used and self.rank != 0:
+            return
         if hasattr(self, 'latest_iteration_time'):
             epoch = len(self.loss_history)
             dt = self.latest_iteration_time
@@ -708,7 +723,10 @@ class CDIModel(t.nn.Module):
         extention : strategy
             Default is .eps, the file extension to save with.
         """
-
+        # FOR MULTI-GPU: Only run this method if it's called by the rank 0 GPU
+        if self.multi_gpu_used and self.rank != 0:
+            return
+        
         if hasattr(self, 'figs') and self.figs:
             figs = self.figs
         else:
