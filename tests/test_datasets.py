@@ -1,12 +1,16 @@
+import datetime
+import itertools
+import os
+from copy import deepcopy
+
+import h5py
+import numpy as np
+import pytest
+import torch as t
+
 from cdtools.datasets import CDataset, Ptycho2DDataset
 from cdtools.tools import data as cdtdata
-import numpy as np
-import torch as t
-import h5py
-import datetime
-from copy import deepcopy
-import pytest
-import itertools
+
 
 #
 # We start by testing the CDataset base class
@@ -218,6 +222,40 @@ def test_Ptycho2DDataset_from_cxi(test_ptycho_cxis):
             
         assert t.allclose(t.tensor(expected['data']),dataset.patterns)
         assert t.allclose(t.tensor(expected['translations']),dataset.translations)
+
+
+def test_Ptycho2DDataset_from_cxi_64bit(test_ptycho_cxis):
+    """Test that we can load a 64-bit cxi file. Should issue
+    a warning, but still load the data."""
+
+    # create test patterns and translations
+    np.random.seed(42)
+    patterns = np.random.rand(20, 256, 256).astype(np.float64)
+    translations = np.random.rand(20, 3).astype(np.float64)
+
+    dataset = Ptycho2DDataset(translations, patterns)
+    dataset.detector_geometry = {
+        'distance': 0.1,  # in meters
+        'basis': t.tensor([
+            [-0e-06, -13.5e-06 * 4],
+            [-13.5e-06 * 4, 0e-06],
+            [0e-06, 0e-06]
+        ]),
+        'corner': None
+    }
+    dataset.wavelength = 1.6891579427792915e-09  # in meters
+    # and save to a temp file
+    dataset.to_cxi('test_Ptycho2DDataset_from_cxi_64bit.cxi')
+
+    with pytest.warns(UserWarning, match='64-bit floats'):
+        dataset_64bit = Ptycho2DDataset.from_cxi('test_Ptycho2DDataset_from_cxi_64bit.cxi')
+
+    # Check that the data is loaded correctly
+    assert dataset_64bit.patterns.dtype == t.float32
+    assert dataset_64bit.translations.dtype == t.float32
+
+    # delete the created test file
+    os.remove('test_Ptycho2DDataset_from_cxi_64bit.cxi')
 
 
 def test_Ptycho2DDataset_to_cxi(test_ptycho_cxis, tmp_path):

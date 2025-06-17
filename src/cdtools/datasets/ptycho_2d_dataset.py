@@ -1,15 +1,16 @@
+import warnings
+from copy import copy, deepcopy
+import pathlib
+
+import h5py
 import numpy as np
 import torch as t
-from copy import copy
-import h5py
-import pathlib
+
 from cdtools.datasets import CDataset
 from cdtools.datasets.random_selection import random_selection
 from cdtools.tools import data as cdtdata
 from cdtools.tools import plotting
-from matplotlib import pyplot as plt
 from cdtools.tools import analysis
-from copy import deepcopy
 
 __all__ = ['Ptycho2DDataset']
 
@@ -124,9 +125,9 @@ class Ptycho2DDataset(CDataset):
         self.translations = self.translations.to(*args, **kwargs)
         self.patterns = self.patterns.to(*args, **kwargs)
 
-
     # It sucks that I can't reuse the base factory method here,
     # perhaps there is a way but I couldn't figure it out.
+
     @classmethod
     def from_cxi(cls, cxi_file, cut_zeros=True, load_patterns=True):
         """Generates a new Ptycho2DDataset from a .cxi file directly
@@ -148,7 +149,7 @@ class Ptycho2DDataset(CDataset):
         """
         # If a bare string is passed
         if isinstance(cxi_file, str) or isinstance(cxi_file, pathlib.Path):
-            with h5py.File(cxi_file,'r') as f:
+            with h5py.File(cxi_file, 'r') as f:
                 return cls.from_cxi(f, cut_zeros=cut_zeros, load_patterns=load_patterns)
 
         # Generate a base dataset
@@ -164,10 +165,15 @@ class Ptycho2DDataset(CDataset):
             patterns, axes = cdtdata.get_data(cxi_file, cut_zeros=cut_zeros)
             dataset.patterns = t.as_tensor(patterns)
             if dataset.patterns.dtype == t.float64:
-                raise NotImplementedError('64-bit floats are not supported and precision will not be retained in reconstructions! Please explicitly convert your data to 32-bit or submit a pull request')
-            
+                # If the data is 64-bit, we need to convert it to 32-bit
+                # because 64-bit floats are not supported in reconstructions
+                dataset.patterns = dataset.patterns.to(dtype=t.float32)
+                warnings.warn(
+                    "64-bit floats are not supported and precision will not be retained in reconstructions and were converted to t.float32! "
+                    "If you would like to have 64-bit support, please open an issue or submit a pull request."
+                )
             dataset.axes = axes
-            
+
             if dataset.mask is None:
                 dataset.mask = t.ones(dataset.patterns.shape[-2:]).to(dtype=t.bool)
 
@@ -176,9 +182,8 @@ class Ptycho2DDataset(CDataset):
             dataset.intensities = t.as_tensor(intensities, dtype=t.float32)
         except KeyError:
             dataset.intensities = None
-            
-        return dataset
 
+        return dataset
 
     def to_cxi(self, cxi_file):
         """Saves out a Ptycho2DDataset as a .cxi file
