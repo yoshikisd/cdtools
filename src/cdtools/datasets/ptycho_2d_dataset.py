@@ -1,15 +1,16 @@
+import warnings
+from copy import copy, deepcopy
+import pathlib
+
+import h5py
 import numpy as np
 import torch as t
-from copy import copy
-import h5py
-import pathlib
+
 from cdtools.datasets import CDataset
 from cdtools.datasets.random_selection import random_selection
 from cdtools.tools import data as cdtdata
 from cdtools.tools import plotting
-from matplotlib import pyplot as plt
 from cdtools.tools import analysis
-from copy import deepcopy
 
 __all__ = ['Ptycho2DDataset']
 
@@ -164,10 +165,12 @@ class Ptycho2DDataset(CDataset):
             patterns, axes = cdtdata.get_data(cxi_file, cut_zeros=cut_zeros)
             dataset.patterns = t.as_tensor(patterns)
             if dataset.patterns.dtype == t.float64:
-                raise NotImplementedError('64-bit floats are not supported and precision will not be retained in reconstructions! Please explicitly convert your data to 32-bit or submit a pull request')
-            
+                # If the data is 64-bit, we need to convert it to 32-bit
+                # because 64-bit floats are not supported in reconstructions
+                dataset.patterns = dataset.patterns.to(dtype=t.float32)
+                warnings.warn('64-bit floats are not supported and precision will not be retained in reconstructions and were converted to t.float32! Please explicitly convert your data to 32-bit or submit a pull request')
             dataset.axes = axes
-            
+
             if dataset.mask is None:
                 dataset.mask = t.ones(dataset.patterns.shape[-2:]).to(dtype=t.bool)
 
