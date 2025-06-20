@@ -157,6 +157,7 @@ def run_single_to_multi_gpu():
     
     # Perform the torchrun call of the wrapped function
     subprocess.run(['torchrun', # We set up the torchrun arguments first
+                    '--standalone', # Indicates that we're running a single machine, multiple GPU job.
                     f'--nnodes={args.nnodes}', 
                     f'--nproc_per_node={args.ngpus}', 
                     os.path.join(DISTRIBUTED_PATH,'single_to_multi_gpu.py'), # Make the call to the single-to-multi-gpu wrapper script
