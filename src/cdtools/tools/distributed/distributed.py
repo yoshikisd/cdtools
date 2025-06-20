@@ -32,6 +32,7 @@ import argparse
 from multiprocessing.connection import Connection
 from typing import Callable, List
 from pathlib import Path
+from ast import literal_eval
 
 DISTRIBUTED_PATH = os.path.dirname(os.path.abspath(__file__))
 
@@ -92,6 +93,14 @@ def run_single_to_multi_gpu():
     cdt-torchrun --nproc_per_node=4 s script_path=reconstruct.py
     ```
 
+    If you want to use specific GPU IDs for reconstructions, you need to set up
+    the environment variable `CDTOOLS_GPU_IDS` rather than `CUDA_VISIBLE_DEVICES`. 
+    If you wanted to use GPU IDs `1, 3, 4` for example, write:
+    
+    ```
+    CDTOOLS_GPU_IDS=1,3,4 cdt-torchrun --nnodes=1 --nproc_per_node=3 reconstruct.py
+    ```
+
     Arguments:
         script_path: str
             Path of the single-GPU script (either full or partial path).
@@ -141,12 +150,14 @@ def run_single_to_multi_gpu():
     # Get the arguments
     args = parser.parse_args()
 
+    # Set an environment variable for OMP_NUM_THREADS (sets number of threads)
+
     # Don't let the user die in anticipation
-    print(f'\n[CDTools]: Starting up multi-GPU reconstructions with {args.ngpus} GPUs.\n')
+    print(f'\n[INFO]: Starting up multi-GPU reconstructions with {args.ngpus} GPUs.\n')
     
     # Perform the torchrun call of the wrapped function
     subprocess.run(['torchrun', # We set up the torchrun arguments first
-                    '--nnodes=1', 
+                    f'--nnodes={args.nnodes}', 
                     f'--nproc_per_node={args.ngpus}', 
                     os.path.join(DISTRIBUTED_PATH,'single_to_multi_gpu.py'), # Make the call to the single-to-multi-gpu wrapper script
                     f'--backend={args.backend}',
@@ -155,7 +166,7 @@ def run_single_to_multi_gpu():
                     f'--script_path={args.script_path}'])
     
     # Let the user know the job is done
-    print(f'\n[CDTools]: Reconstructions complete.\n')
+    print(f'\n[INFO]: Reconstructions complete.\n')
 
 
 def wrap_single_gpu_script(script_path: str,
@@ -182,6 +193,14 @@ def wrap_single_gpu_script(script_path: str,
     torchrun --nnodes=1 --nproc_per_node=4 single_to_multi_gpu.py
     ```
 
+    If you want to use specific GPU IDs for reconstructions, you need to set up
+    the environment variable `CDTOOLS_GPU_IDS` rather than `CUDA_VISIBLE_DEVICES`. 
+    If you wanted to use GPU IDs `1, 3, 4` for example, write:
+    
+    ```
+    CDTOOLS_GPU_IDS=1,3,4 torchrun --nnodes=1 --nproc_per_node=3 single_to_multi_gpu.py
+    ```
+    
     Parameters:
         script_name: str
             The file path of the single-GPU script (either full or relative).
@@ -197,7 +216,9 @@ def wrap_single_gpu_script(script_path: str,
             Default is 30 seconds. After timeout has been reached, all subprocesses
             will be aborted and the process calling this method will crash. 
         nccl_p2p_disable: bool
-            Disable NCCL peer-2-peer communication
+            Disable NCCL peer-2-peer communication. If you find that all your GPUs
+            are at 100% useage but the program isn't doing anything, try enabling
+            this variable.
     """
     # Check if the script path actually exists
     if not os.path.exists(script_path):
@@ -216,17 +237,26 @@ def wrap_single_gpu_script(script_path: str,
     timeout = datetime.timedelta(seconds=timeout)
 
     # Enable/disable NVidia Collective Communications Library (NCCL)
-    # peer-to-peer communication. If you find that all your GPUs are at 100% use 
-    # but don't seem to be doing anything, try enabling this variable.
+    # peer-to-peer communication.
     os.environ['NCCL_P2P_DISABLE'] = str(int(nccl_p2p_disable))
 
     # If this script is called by torchrun, the GPU rank is visible as an 
     # environment variable.
     rank = int(os.environ.get('RANK'))
 
+    # Assign a GPU ID to the subprocess.
+    # If the CDTOOLS_GPU_IDS environment variable is defined, then assign based
+    # on the GPU IDS provided in that list. Otherwise, use the rank for the GPU ID.
+    gpu_ids = os.environ.get('CDTOOLS_GPU_IDS')
+    
+    if gpu_ids is None:
+        gpu_id = rank
+    else:
+        gpu_id = literal_eval(gpu_ids)[rank]
+
     # We need to prevent each subprocess from seeing GPUs other than the one it has 
-    # been assigned by torchrun.
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(rank)
+    # been assigned.
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
 
     # Start up the process group (needed so the different subprocesses can talk with 
     # each other)
