@@ -173,7 +173,7 @@ def wrap_single_gpu_script(script_path: str,
                            nccl_p2p_disable: bool = True):
     """
     Wraps single-GPU reconstruction scripts to be ran as a multi-GPU job via
-    torchrun calls.
+    torchrun calls. 
 
     This function is intended to be called in a script (say, single_to_multi_gpu.py) 
     with the following form:
@@ -199,6 +199,9 @@ def wrap_single_gpu_script(script_path: str,
     CDTOOLS_GPU_IDS=1,3,4 torchrun --nnodes=1 --nproc_per_node=3 single_to_multi_gpu.py
     ```
     
+    NOTE: For each subprocess `cdt-torchrun` creates, the environment variable
+          `CUDA_VISIBLE_DEVICES` will be (re)defined as the GPU rank.
+
     Parameters:
         script_name: str
             The file path of the single-GPU script (either full or relative).
@@ -219,29 +222,24 @@ def wrap_single_gpu_script(script_path: str,
             this variable.
     """
     ######################   Check if the script is safe to run  ######################
+    ###################################################################################
+
     # 1) Check if the file path actually exists
     if not os.path.exists(script_path):
-        raise FileNotFoundError(
-            f'Cannot open file: {os.path.join(os.getcwd(), script_path)}')
+        raise FileNotFoundError(f'Cannot open file: {os.path.join(os.getcwd(), script_path)}')
 
     # 2) Check if the file is a CDTools reconstruction script.
     with open(script_path, 'r') as f:
         source_code = f.read()
     if not ('import cdtools' in source_code or 'from cdtools' in source_code):
         raise ValueError('File is not a CDTools reconstruction script (the script must import cdtools modules).')
-    
-    # Kill the process if it hangs/pauses for a certain amount of time.
-    timeout = datetime.timedelta(seconds=timeout)
 
-    # Enable/disable NVidia Collective Communications Library (NCCL)
-    # peer-to-peer communication.
-    os.environ['NCCL_P2P_DISABLE'] = str(int(nccl_p2p_disable))
+    ##########   Force each subprocess to see only the GPU ID we assign it  ###########
+    ###################################################################################
 
-    # If this script is called by torchrun, the GPU rank is visible as an 
-    # environment variable.
+    # The GPU rank is visible as an environment variable through torchrun calls.
     rank = int(os.environ.get('RANK'))
 
-    # Assign a GPU ID to the subprocess.
     # If the CDTOOLS_GPU_IDS environment variable is defined, then assign based
     # on the GPU IDS provided in that list. Otherwise, use the rank for the GPU ID.
     gpu_ids = os.environ.get('CDTOOLS_GPU_IDS')
@@ -251,13 +249,17 @@ def wrap_single_gpu_script(script_path: str,
     else:
         gpu_id = literal_eval(gpu_ids)[rank]
 
-    # We need to prevent each subprocess from seeing GPUs other than the one it has 
-    # been assigned.
     os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
 
-    # Start up the process group (needed so the different subprocesses can talk with 
-    # each other)
-    dist.init_process_group(backend=backend, timeout=timeout)
+    ################################  Run the script  #################################
+    ###################################################################################
+    
+    # Enable/disable NCCL peer-to-peer communication. The boolean needs to be converted into
+    # a string for the environment variable.
+    os.environ['NCCL_P2P_DISABLE'] = str(int(nccl_p2p_disable))
+
+    # Start up the process group (lets the different subprocesses can talk with each other)
+    dist.init_process_group(backend=backend, timeout=datetime.timedelta(seconds=timeout))
       
     try:     
         # Run the single-GPU reconstruction script 
