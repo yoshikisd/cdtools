@@ -24,14 +24,11 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import datetime
 import os
-import sys
-import importlib
 import subprocess
-import inspect
 import argparse
+import runpy
 from multiprocessing.connection import Connection
 from typing import Callable, List
-from pathlib import Path
 from ast import literal_eval
 
 DISTRIBUTED_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -221,19 +218,18 @@ def wrap_single_gpu_script(script_path: str,
             are at 100% useage but the program isn't doing anything, try enabling
             this variable.
     """
-    # Check if the script path actually exists
+    ######################   Check if the script is safe to run  ######################
+    # 1) Check if the file path actually exists
     if not os.path.exists(script_path):
         raise FileNotFoundError(
             f'Cannot open file: {os.path.join(os.getcwd(), script_path)}')
 
-    # Make sure that the script_name doesn't contain `.py` and share
-    # the same name as any of the imported modules
-    script_name = Path(script_path).stem
-    if script_name in sys.modules:
-        raise NameError(
-            f'The file name {script_name} cannot share the same name as modules'
-             ' imported in CDTools. Please change the script file name.')
-
+    # 2) Check if the file is a CDTools reconstruction script.
+    with open(script_path, 'r') as f:
+        source_code = f.read()
+    if not ('import cdtools' in source_code or 'from cdtools' in source_code):
+        raise ValueError('File is not a CDTools reconstruction script (the script must import cdtools modules).')
+    
     # Kill the process if it hangs/pauses for a certain amount of time.
     timeout = datetime.timedelta(seconds=timeout)
 
@@ -261,29 +257,11 @@ def wrap_single_gpu_script(script_path: str,
 
     # Start up the process group (needed so the different subprocesses can talk with 
     # each other)
-    dist.init_process_group(backend=backend,
-                            timeout=timeout)
+    dist.init_process_group(backend=backend, timeout=timeout)
       
     try:     
-        # Run the single-GPU reconstruction script by importing it using either full 
-        # or partial paths to the script.
-
-        # We need to create a specification for a module's import-system-related state
-        spec = importlib.util.spec_from_file_location(script_name, script_path)
-
-        # Next, we need to import the module from spec
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[script_name] = module
-
-        # As a safeguard against opening something other than a reconstruction
-        # script, check if the script imports CDTools.
-        source_code = inspect.getsource(module)
-        if not ('import cdtools' in source_code or 'from cdtools' in source_code):
-            raise ValueError('Only CDTools reconstruction scripts can be used with this method.')
-
-        # Execute the script
-        spec.loader.exec_module(module)
-        #importlib.import_module(script_path)
+        # Run the single-GPU reconstruction script 
+        runpy.run_path(script_path, run_name='__main__')
 
     finally:
         # Kill the process group
