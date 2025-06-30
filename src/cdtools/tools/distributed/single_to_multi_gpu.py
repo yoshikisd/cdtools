@@ -38,6 +38,10 @@ def get_args():
                         default=1,
                         choices=[0,1],
                         help='Disable (1) or enable (0) NCCL peer-to-peer communication')
+    parser.add_argument('--seed',
+                        type=int,
+                        default=0,
+                        help='Sets the RNG seed for all devices')
     
     return parser.parse_args()
 
@@ -45,9 +49,9 @@ def get_args():
 if __name__ == '__main__':
     # Get args
     args = get_args()
-    
     # Pass arguments to dist.script_wrapper
     dist.wrap_single_gpu_script(script_path=args.script_path,
                                 backend=args.backend,
                                 timeout=args.timeout,
-                                nccl_p2p_disable=bool(args.nccl_p2p_disable))
+                                nccl_p2p_disable=bool(args.nccl_p2p_disable),
+                                seed=args.seed)

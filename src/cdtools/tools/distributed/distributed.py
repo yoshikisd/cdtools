@@ -20,6 +20,7 @@ distributed across each device; this process can be handled by using
 DistributedSampler with the DataLoader.
 """
 
+import torch as t
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import datetime
@@ -151,6 +152,9 @@ def run_single_to_multi_gpu():
 
     # Don't let the user die in anticipation
     print(f'\n[INFO]: Starting up multi-GPU reconstructions with {args.ngpus} GPUs.\n')
+
+    # Set a random seed that all participaring workers will use
+    seed = t.initial_seed()
     
     # Perform the torchrun call of the wrapped function
     subprocess.run(['torchrun', # We set up the torchrun arguments first
@@ -161,7 +165,8 @@ def run_single_to_multi_gpu():
                     f'--backend={args.backend}',
                     f'--timeout={args.timeout}',
                     f'--nccl_p2p_disable={args.nccl_p2p_disable}',
-                    f'--script_path={args.script_path}'])
+                    f'--script_path={args.script_path}',
+                    f'--seed={seed}'])
     
     # Let the user know the job is done
     print(f'\n[INFO]: Reconstructions complete.\n')
@@ -170,7 +175,8 @@ def run_single_to_multi_gpu():
 def wrap_single_gpu_script(script_path: str,
                            backend: str = 'nccl',
                            timeout: int = 30,
-                           nccl_p2p_disable: bool = True):
+                           nccl_p2p_disable: bool = True,
+                           seed: int = 0):
     """
     Wraps single-GPU reconstruction scripts to be ran as a multi-GPU job via
     torchrun calls. 
@@ -220,6 +226,10 @@ def wrap_single_gpu_script(script_path: str,
             Disable NCCL peer-2-peer communication. If you find that all your GPUs
             are at 100% useage but the program isn't doing anything, try enabling
             this variable.
+        seed: int
+            Seed for generating random numbers. This value must be identical across all
+            participating devices.
+            
     """
     ######################   Check if the script is safe to run  ######################
     ###################################################################################
@@ -260,6 +270,10 @@ def wrap_single_gpu_script(script_path: str,
 
     # Start up the process group (lets the different subprocesses can talk with each other)
     dist.init_process_group(backend=backend, timeout=datetime.timedelta(seconds=timeout))
+
+    # Force this subprocess to use a given RNG seed (should be identical across all subprocesses)
+    t.manual_seed(seed)
+    t.cuda.manual_seed_all(seed)
       
     try:     
         # Run the single-GPU reconstruction script 
@@ -268,7 +282,6 @@ def wrap_single_gpu_script(script_path: str,
     finally:
         # Kill the process group
         dist.destroy_process_group()   
-
 
 def _spawn_wrapper(rank: int, 
                   func: Callable[[int, int], None], 
