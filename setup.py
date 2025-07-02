@@ -12,7 +12,7 @@ setuptools.setup(
     description="Tools for coherent diffractive imaging and ptychography",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.mit.edu/scattering/CDTools.git",
+    url="https://github.com/cdtools-developers/cdtools",
     install_requires=[
         "numpy>=1.0",
         "scipy>=1.0",
