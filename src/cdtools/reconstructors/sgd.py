@@ -30,9 +30,6 @@ class SGD(Reconstructor):
 
     Important attributes:
     - **model** -- Always points to the core model used.
-    - **multi_gpu_used** -- Whether or not multi-GPU computation will be performed
-      using a distributed data approach. This attribute will be pulled from the
-      CDIModel (this flag is automatically set when using cdtools.tools.distributed.spawn).
     - **optimizer** -- This class by default uses `torch.optim.Adam` to perform
       optimizations.
     - **scheduler** -- A `torch.optim.lr_scheduler` that is defined during the `optimize` method.
@@ -48,6 +45,7 @@ class SGD(Reconstructor):
         
         # Define the optimizer for use in this subclass
         self.optimizer = t.optim.SGD(self.model.parameters())
+    
     
     def adjust_optimizer(self,
                          lr: int = 0.005,

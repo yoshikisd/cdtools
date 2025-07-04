@@ -44,9 +44,6 @@ class Reconstructor:
 
     Important attributes:
     - **model** -- Always points to the core model used.
-    - **multi_gpu_used** -- Whether or not multi-GPU computation will be performed
-      using a distributed data approach. This attribute will be pulled from the
-      CDIModel (this flag is automatically set when using cdtools.tools.distributed.spawn).
     - **optimizer** -- A `torch.optim.Optimizer` that must be defined when initializing the
       Reconstructor subclass.
     - **scheduler** -- A `torch.optim.lr_scheduler` that may be defined during the `optimize` method.
@@ -59,9 +56,6 @@ class Reconstructor:
                  subset: Union[int, List[int]] = None):
         # Store parameters as attributes of Reconstructor
         self.subset = subset
-        self.multi_gpu_used = model.multi_gpu_used
-        self.world_size = model.world_size
-        self.rank = model.rank
 
         # Initialize attributes that must be defined by the subclasses
         self.optimizer = None       # Defined in the __init__ of the subclass as a torch.optim.Optimizer
@@ -94,16 +88,16 @@ class Reconstructor:
             Optional, enable/disable shuffling of the dataset. This option
             is intended for diagnostic purposes and should be left as True.
         """
-        if self.multi_gpu_used:
+        if self.model.multi_gpu_used:
             # First, create a sampler to load subsets of dataset to the GPUs
             self.sampler = DistributedSampler(self.dataset,
-                                              num_replicas=self.world_size,
-                                              rank=self.rank,
+                                              num_replicas=self.model.world_size,
+                                              rank=self.model.rank,
                                               shuffle=shuffle,
                                               drop_last=False)
             # Now create the dataloader
             self.data_loader = torchdata.DataLoader(self.dataset,
-                                                    batch_size=batch_size//self.world_size,
+                                                    batch_size=batch_size//self.model.world_size,
                                                     num_workers=0, # Creating extra threads in children processes may cause problems. Leave this at 0.
                                                     drop_last=False,
                                                     pin_memory=False,
@@ -154,7 +148,7 @@ class Reconstructor:
         """
         # If we're using DistributedSampler (i.e., multi-GPU useage), we need to 
         # tell it which epoch we're on. Otherwise data shuffling will not work properly
-        if self.multi_gpu_used: 
+        if self.model.multi_gpu_used: 
             self.data_loader.sampler.set_epoch(self.model.epoch)
 
         # Initialize some tracking variables
@@ -203,7 +197,7 @@ class Reconstructor:
 
                     # For multi-GPU, average and sync the gradients + losses across all 
                     # participating GPUs with an all-reduce call. Also sum the losses.             
-                    if self.multi_gpu_used:
+                    if self.model.multi_gpu_used:
                         cdtdist.sync_and_avg_gradients(self.model)
                         dist.all_reduce(loss, op=dist.ReduceOp.SUM) 
 
@@ -218,7 +212,7 @@ class Reconstructor:
 
                     # For multi-GPU optimization, average and sync the gradients + 
                     # losses across all participating GPUs with an all-reduce call.
-                    if self.multi_gpu_used:
+                    if self.model.multi_gpu_used:
                         cdtdist.sync_and_avg_gradients(self.model)
                 
                 return total_loss
