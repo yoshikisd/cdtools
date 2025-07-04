@@ -25,7 +25,7 @@ if __name__ == '__main__':
     runs = 3
 
     # Define where the single-GPU script is located
-    script_path = 'fancy_ptycho_distributed.py'
+    script_path = 'fancy_ptycho_speed_test.py'
 
     # Define where the loss-vs-time data is being stored in
     output_dir = 'example_loss_data'
