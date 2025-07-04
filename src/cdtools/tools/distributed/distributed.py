@@ -31,6 +31,9 @@ import runpy
 from multiprocessing.connection import Connection
 from typing import Callable, List
 from ast import literal_eval
+from matplotlib import pyplot as plt
+import pickle
+import numpy as np
 
 DISTRIBUTED_PATH = os.path.dirname(os.path.abspath(__file__))
 
@@ -38,6 +41,7 @@ __all__ = ['sync_and_avg_gradients',
            'torchrunner',
            'run_single_to_multi_gpu',
            'wrap_single_gpu_script',
+           'run_speed_test',
            '_spawn_wrapper',
            'spawn']
 
@@ -282,6 +286,104 @@ def wrap_single_gpu_script(script_path: str,
     finally:
         # Kill the process group
         dist.destroy_process_group()   
+
+
+def run_speed_test(world_sizes: int, 
+                   runs: int,
+                   script_path: str,
+                   output_dir: str):
+    """
+    Executes a reconstruction script `n` x `m` times using `n` GPUs and `m` trials 
+    per GPU count using cdt-torchrun.
+
+    This function assumes that
+
+    Parameters:
+        world_sizes: list[int]
+            Number of GPUs to use. User can specify several GPU counts in a list.
+        runs: int
+            How many repeat reconstructions to perform
+        script_path: str
+            Path of the single-gpu reconstruction script.
+        output_dir: str
+            Directory of the loss-vs-time/epoch data generated for the speed test.
+    """
+    # Set stuff up for plots
+    fig, (ax1,ax2,ax3) = plt.subplots(1,3)
+
+    # Store the value of the single GPU time
+    time_1gpu = 0
+    std_1gpu = 0
+
+    for world_size in world_sizes:
+        # Get the GPU IDs to use
+        #dev_id = device_ids[0:world_size] 
+        #print(f'\nNumber of GPU(s): {world_size} | Using GPU IDs {*dev_id,}')
+
+        # Make a list to store the values
+        time_list = []
+        loss_hist_list = []
+
+        for i in range(runs):
+            print(f'Resetting the model...')
+            print(f'Starting run {i+1}/{runs} on {world_size} GPU(s)')
+
+            # The scripts running speed tests need to read the trial number
+            # they are on using an environment variable
+            os.environ['CDTOOLS_TRIAL_NUMBER'] = str(i)
+            
+            # Run cdt-torchrun
+            subprocess.run(['cdt-torchrun',
+                            f'--ngpus={world_size}',
+                            f'{script_path}'])
+
+            print(f'[INFO]: Reconstruction complete. Loading loss results...')
+            with open(os.path.join(output_dir, f'speed_test_nGPUs_{world_size}_TRIAL_{i}.pkl'), 'rb') as f:
+                results = pickle.load(f)
+            time_list.append(results['time history'])
+            loss_hist_list.append(results['loss history'])
+
+            
+        # Calculate the statistics
+        time_mean = np.array(time_list).mean(axis=0)/60
+        time_std = np.array(time_list).std(axis=0)/60
+        loss_mean = np.array(loss_hist_list).mean(axis=0)
+        loss_std = np.array(loss_hist_list).std(axis=0)
+
+        # If a single GPU is used, store the time
+        if world_size == 1:
+            time_1gpu = time_mean[-1]
+            std_1gpu = time_std[-1]
+
+        # Calculate the speed-up relative to using a single GPU
+        speed_up_mean = time_1gpu / time_mean[-1] 
+        speed_up_std = speed_up_mean * \
+            np.sqrt((std_1gpu/time_1gpu)**2 + (time_std[-1]/time_mean[-1])**2)
+
+        # Add another plot
+        ax1.errorbar(time_mean, loss_mean, yerr=loss_std, xerr=time_std,
+                    label=f'{world_size} GPUs')
+        ax2.errorbar(np.arange(0,loss_mean.shape[0]), loss_mean, yerr=loss_std,
+                    label=f'{world_size} GPUs')
+        ax3.errorbar(world_size, speed_up_mean, yerr=speed_up_std, fmt='o')
+        
+    # Plot
+    fig.suptitle(f'Multi-GPU performance test | {runs} runs performed')
+    ax1.set_yscale('log')
+    ax1.set_xscale('linear')
+    ax2.set_yscale('log')
+    ax2.set_xscale('linear')
+    ax3.set_yscale('linear')
+    ax3.set_xscale('linear')
+    ax1.legend()
+    ax2.legend()
+    ax1.set_xlabel('Time (min)')
+    ax1.set_ylabel('Loss')
+    ax2.set_xlabel('Epochs')
+    ax3.set_xlabel('Number of GPUs')
+    ax3.set_ylabel('Speed-up relative to single GPU')
+    plt.show()
+
 
 def _spawn_wrapper(rank: int, 
                   func: Callable[[int, int], None], 
