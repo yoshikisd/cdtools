@@ -1,6 +1,10 @@
 import pytest
 import cdtools
+import torch as t
 from matplotlib import pyplot as plt
+
+# Force all test reconstructions to use the same RNG speed for reproducibility.
+t.manual_seed(0)
 
 @pytest.mark.slow
 def test_simple_ptycho(lab_ptycho_cxi, reconstruction_device, show_plot):
