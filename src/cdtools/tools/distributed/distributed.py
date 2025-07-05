@@ -58,25 +58,6 @@ def sync_and_avg_gradients(model):
             param.grad.data /= model.world_size
 
 
-def torchrunner(script_name: str,
-                n_gpus: int = 4):
-    """
-    Executes a torchrun command in a python script or jupyter notebook.
-
-    Parameters:
-        script_name: str
-            The file name of the target script
-        n_gpus: int
-            Number of GPUs to distribute the job over
-    """
-
-    # Perform the torchrun call of the wrapped function
-    subprocess.run(['torchrun', 
-                    '--nnodes=1', 
-                    f'--nproc_per_node={n_gpus}', 
-                    f'{script_name}'])
-
-
 def run_single_to_multi_gpu():
     """
     Runs a single-GPU reconstruction script as a multi-GPU job via torchrun.
