@@ -1,6 +1,10 @@
 import pytest
 import cdtools
 from matplotlib import pyplot as plt
+import torch as t
+
+# Force all reconstructions to use the same RNG seed
+t.manual_seed(0)
 
 @pytest.mark.slow
 def test_simple_ptycho(lab_ptycho_cxi, reconstruction_device, show_plot):
