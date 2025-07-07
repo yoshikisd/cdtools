@@ -5,6 +5,8 @@ import torch as t
 import cdtools
 from matplotlib import pyplot as plt
 
+# Force all reconstructions to use the same RNG seed
+t.manual_seed(0)
 
 def test_center_probe(lab_ptycho_cxi):
     dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(lab_ptycho_cxi)
