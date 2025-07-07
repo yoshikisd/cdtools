@@ -35,12 +35,9 @@ import numpy as np
 DISTRIBUTED_PATH = os.path.dirname(os.path.abspath(__file__))
 
 __all__ = ['sync_and_avg_gradients', 
-           'torchrunner',
            'run_single_to_multi_gpu',
            'wrap_single_gpu_script',
-           'run_speed_test',
-           '_spawn_wrapper',
-           'spawn']
+           'run_speed_test']
 
 
 def sync_and_avg_gradients(model):
