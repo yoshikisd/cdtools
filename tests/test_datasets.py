@@ -396,7 +396,7 @@ def test_Ptycho2DDataset_downsample(test_ptycho_cxis):
         if dataset.background is not None:
             assert t.allclose(
                 copied_dataset.background,
-                dataset.background[::2, 1::2] + dataset.background[1::2, 1::2]
+                dataset.background[::2, ::2] + dataset.background[1::2, ::2] + dataset.background[::2, 1::2] + dataset.background[1::2, 1::2]
             )
 
         # And then we just test the shape for a few factors, and check that
