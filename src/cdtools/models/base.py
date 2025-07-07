@@ -404,23 +404,21 @@ class CDIModel(t.nn.Module):
         
         """
         # We want to have model.Adam_optimize call AND store cdtools.reconstructors.Adam
-        # to be able to perform reconstructions without creating a new
-        # optimizer each time we update the hyperparameters.
+        # to perform reconstructions without creating a new reconstructor each time we 
+        # update the hyperparameters.
         # 
         # The only way to do this is to make the Adam reconstructor an attribute
         # of the model. But since the Adam reconstructor also depends on CDIModel,
         # this seems to give rise to a circular import error unless
         # we import cdtools.reconstructors within this method:
-        from cdtools.reconstructors import Adam
-
-        # Next, we want to create an Optimizer.Adam if one does not already exist.
-        if not hasattr(self, 'optimizer'):
-            self.optimizer = Adam(model=self, 
+        if not hasattr(self, 'reconstructor'):
+            from cdtools.reconstructors import Adam
+            self.reconstructor = Adam(model=self, 
                                   dataset=dataset, 
                                   subset=subset)
         
         # Run some reconstructions
-        return self.optimizer.optimize(iterations=iterations,
+        return self.reconstructor.optimize(iterations=iterations,
                                        batch_size=batch_size,
                                        lr=lr,
                                        betas=betas,
@@ -481,16 +479,14 @@ class CDIModel(t.nn.Module):
         # 
         # Since the LBFGS reconstructor also depends on CDIModel, a circular import error 
         # arises unless we import cdtools.reconstructors within this method:
-        from cdtools.reconstructors import LBFGS
-
-        # Next, we want to create an Optimizer.Adam if one does not already exist.
-        if not hasattr(self, 'optimizer'):
-            self.optimizer = LBFGS(model=self, 
+        if not hasattr(self, 'reconstructor'):
+            from cdtools.reconstructors import LBFGS
+            self.reconstructor = LBFGS(model=self, 
                                    dataset=dataset, 
                                    subset=subset)
         
         # Run some reconstructions
-        return self.optimizer.optimize(iterations=iterations,
+        return self.reconstructor.optimize(iterations=iterations,
                                        lr=lr,
                                        history_size=history_size,
                                        regularization_factor=regularization_factor,
@@ -557,23 +553,14 @@ class CDIModel(t.nn.Module):
         # 
         # Since the SGD reconstructor also depends on CDIModel, a circular import error 
         # arises unless we import cdtools.reconstructors within this method:
-        from cdtools.reconstructors import SGD
-        
-        # Next, we want to create an Optimizer.Adam if one does not already exist.
-        if not hasattr(self, 'optimizer'):
-            self.optimizer = SGD(model=self, 
+        if not hasattr(self, 'reconstructor'):
+            from cdtools.reconstructors import SGD
+            self.reconstructor = SGD(model=self, 
                                  dataset=dataset, 
                                  subset=subset)
-
-        # Define the optimizer
-        optimizer = t.optim.SGD(self.parameters(),
-                                lr = lr, momentum=momentum,
-                                dampening=dampening,
-                                weight_decay=weight_decay,
-                                nesterov=nesterov)
     
         # Run some reconstructions
-        return self.optimizer.optimize(iterations=iterations,
+        return self.reconstructor.optimize(iterations=iterations,
                                        batch_size=batch_size,
                                        lr=lr,
                                        momentum=momentum,
