@@ -60,112 +60,6 @@ def sync_and_avg_gradients(model):
             param.grad.data /= model.world_size
 
 
-def run_single_to_multi_gpu():
-    """
-    Runs a single-GPU reconstruction script as a single-node multi-GPU job via torchrun.
-    
-    This function can be executed as a python console script as `cdt-torchrun` and
-    serves as a wrapper over a `torchrun` call to `cdtools.tools.distributed.single_to_multi_gpu`.
-    
-    In the simplest case, a single-GPU script can be ran as a multi-GPU job using
-    the following `cdt-torchrun` call in the command line
-    ```
-    cdt-torchrun --ngpus=<number of GPUs> YOUR_RECONSTRUCTION_SCRIPT.py
-    ```
-    
-    which is equivalent to the following `torchrun` call
-    ```
-    torchrun 
-        --standalone 
-        --nnodes=1 
-        --nproc_per_node=<number of GPUs> 
-        -m cdtools.tools.distributed.single_to_multi_gpu
-        --backend='nccl'
-        --timeout=30
-        --nccl_p2p_disable=1
-        YOUR_RECONSTRUCTION_SCRIPT.py
-    ```
-    
-    With a single node (--nnodes=1), `cdt-torchrun` will launch a given number of subprocesses 
-    equivalent to the number of GPUs specified. This number must be less than or equal to the
-    actual number of GPUs available on your node.
-
-    If you want to use specific GPU IDs for reconstructions, you need to set up
-    the environment variable `CDTOOLS_GPU_IDS` rather than `CUDA_VISIBLE_DEVICES`. 
-    If you wanted to use GPU IDs `1, 3, 4` for example, write:
-    
-    ```
-    CDTOOLS_GPU_IDS=1,3,4 cdt-torchrun --ngpus=3 YOUR_RECONSTRUCTION_SCRIPT.py
-    ```
-
-    If additional `torchrun` arguments need to be passed, you may need to make a direct
-    `torchrun` call rather than use `cdt-torchrun`. You may also submit an issue/PR.
-
-    NOTE: `cdt-torchrun` has only been tested using the 'nccl' backend, NCCL peer-to-peer communication
-          disabled, and using 1 node. 
-
-    Arguments:
-        script_path: str
-            Path of the single-GPU script (either full or partial path).
-        --ngpus: int
-            Number of GPUs to use.
-        --nnodes: int
-            Optional, number of nodes. Default 1; more than 1 nodes has not been tested.
-        --backend: str
-            Optional, communication backend for distributed computing (either `nccl` or `gloo`).
-            Default is `nccl`
-        --timeout: int
-            Optional, time in seconds before the distributed process is killed. 
-            Default is 30 seconds.
-        --nccl_p2p_disable: int
-            Optional, disable (1) or enable (0) NCCL peer-to-peer communication. Default
-            is 1.
-        
-    """
-    # Define the arguments we need to pass to dist.script_wrapper
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--ngpus',
-                        type=int,
-                        help='Number of GPUs to use (called --nproc_per_node in torchrun)')
-    parser.add_argument('--nnodes', 
-                        type=str, 
-                        default=1,
-                        help='Number of nodes participating in distributive computing.')
-    parser.add_argument('--backend', 
-                        type=str, 
-                        default='nccl',
-                        choices=['nccl', 'gloo'],
-                        help='Communication backend (nccl or gloo)')
-    parser.add_argument('--timeout', 
-                        type=int, 
-                        default=30,
-                        help='Time before process is killed in seconds')
-    parser.add_argument('--nccl_p2p_disable', 
-                        type=int, 
-                        default=1,
-                        choices=[0,1],
-                        help='Disable (1) or enable (0) NCCL peer-to-peer communication')
-    parser.add_argument('script_path', 
-                        type=str, 
-                        help='Single GPU script file name (with or without .py extension)')
-    
-    # Get the arguments
-    args = parser.parse_args()
-    
-    # Perform the torchrun call of the wrapped function
-    subprocess.run(['torchrun', # We set up the torchrun arguments first
-                    '--standalone', # Indicates that we're running a single machine, multiple GPU job.
-                    f'--nnodes={args.nnodes}', 
-                    f'--nproc_per_node={args.ngpus}', 
-                    '-m',
-                    'cdtools.tools.distributed.single_to_multi_gpu', 
-                    f'--backend={args.backend}',
-                    f'--timeout={args.timeout}',
-                    f'--nccl_p2p_disable={args.nccl_p2p_disable}',
-                    f'{args.script_path}'])
-    
-    
 def run_single_gpu_script(script_path: str,
                           backend: str = 'nccl',
                           timeout: int = 30,
@@ -299,6 +193,112 @@ def run_single_gpu_script(script_path: str,
         if rank == 0:
             print(f'[INFO]: Process group terminated. Multi-GPU job complete.')
 
+
+def run_single_to_multi_gpu():
+    """
+    Runs a single-GPU reconstruction script as a single-node multi-GPU job via torchrun.
+    
+    This function can be executed as a python console script as `cdt-torchrun` and
+    serves as a wrapper over a `torchrun` call to `cdtools.tools.distributed.single_to_multi_gpu`.
+    
+    In the simplest case, a single-GPU script can be ran as a multi-GPU job using
+    the following `cdt-torchrun` call in the command line
+    ```
+    cdt-torchrun --ngpus=<number of GPUs> YOUR_RECONSTRUCTION_SCRIPT.py
+    ```
+    
+    which is equivalent to the following `torchrun` call
+    ```
+    torchrun 
+        --standalone 
+        --nnodes=1 
+        --nproc_per_node=<number of GPUs> 
+        -m cdtools.tools.distributed.single_to_multi_gpu
+        --backend='nccl'
+        --timeout=30
+        --nccl_p2p_disable=1
+        YOUR_RECONSTRUCTION_SCRIPT.py
+    ```
+    
+    With a single node (--nnodes=1), `cdt-torchrun` will launch a given number of subprocesses 
+    equivalent to the number of GPUs specified. This number must be less than or equal to the
+    actual number of GPUs available on your node.
+
+    If you want to use specific GPU IDs for reconstructions, you need to set up
+    the environment variable `CDTOOLS_GPU_IDS` rather than `CUDA_VISIBLE_DEVICES`. 
+    If you wanted to use GPU IDs `1, 3, 4` for example, write:
+    
+    ```
+    CDTOOLS_GPU_IDS=1,3,4 cdt-torchrun --ngpus=3 YOUR_RECONSTRUCTION_SCRIPT.py
+    ```
+
+    If additional `torchrun` arguments need to be passed, you may need to make a direct
+    `torchrun` call rather than use `cdt-torchrun`. You may also submit an issue/PR.
+
+    NOTE: `cdt-torchrun` has only been tested using the 'nccl' backend, NCCL peer-to-peer communication
+          disabled, and using 1 node. 
+
+    Arguments:
+        script_path: str
+            Path of the single-GPU script (either full or partial path).
+        --ngpus: int
+            Number of GPUs to use.
+        --nnodes: int
+            Optional, number of nodes. Default 1; more than 1 nodes has not been tested.
+        --backend: str
+            Optional, communication backend for distributed computing (either `nccl` or `gloo`).
+            Default is `nccl`
+        --timeout: int
+            Optional, time in seconds before the distributed process is killed. 
+            Default is 30 seconds.
+        --nccl_p2p_disable: int
+            Optional, disable (1) or enable (0) NCCL peer-to-peer communication. Default
+            is 1.
+        
+    """
+    # Define the arguments we need to pass to dist.script_wrapper
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--ngpus',
+                        type=int,
+                        help='Number of GPUs to use (called --nproc_per_node in torchrun)')
+    parser.add_argument('--nnodes', 
+                        type=str, 
+                        default=1,
+                        help='Number of nodes participating in distributive computing.')
+    parser.add_argument('--backend', 
+                        type=str, 
+                        default='nccl',
+                        choices=['nccl', 'gloo'],
+                        help='Communication backend (nccl or gloo)')
+    parser.add_argument('--timeout', 
+                        type=int, 
+                        default=30,
+                        help='Time before process is killed in seconds')
+    parser.add_argument('--nccl_p2p_disable', 
+                        type=int, 
+                        default=1,
+                        choices=[0,1],
+                        help='Disable (1) or enable (0) NCCL peer-to-peer communication')
+    parser.add_argument('script_path', 
+                        type=str, 
+                        help='Single GPU script file name (with or without .py extension)')
+    
+    # Get the arguments
+    args = parser.parse_args()
+    
+    # Perform the torchrun call of the wrapped function
+    subprocess.run(['torchrun', # We set up the torchrun arguments first
+                    '--standalone', # Indicates that we're running a single machine, multiple GPU job.
+                    f'--nnodes={args.nnodes}', 
+                    f'--nproc_per_node={args.ngpus}', 
+                    '-m',
+                    'cdtools.tools.distributed.single_to_multi_gpu', 
+                    f'--backend={args.backend}',
+                    f'--timeout={args.timeout}',
+                    f'--nccl_p2p_disable={args.nccl_p2p_disable}',
+                    f'{args.script_path}'])
+    
 
 def report_speed_test(func: Callable):
     """
