@@ -29,17 +29,11 @@ loss
 """
 
 import torch as t
-from torch.utils import data as torchdata
-from torch.utils.data.distributed import DistributedSampler
-import torch.distributed as dist
 from matplotlib import pyplot as plt
 from matplotlib.widgets import Slider
 from matplotlib import ticker
 import numpy as np
-import threading
-import queue
 import time
-from scipy import io
 from contextlib import contextmanager
 from cdtools.tools.data import nested_dict_to_h5, h5_to_nested_dict, nested_dict_to_numpy, nested_dict_to_torch
 from cdtools.datasets import CDataset
