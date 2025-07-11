@@ -8,11 +8,6 @@ import os
 # We need to know which trial number this script is running
 TRIAL_NUMBER = int(os.environ.get('CDTOOLS_TRIAL_NUMBER'))
 
-# Create a list to keep track of when each module report was printed
-t_list = []
-# Start counting time
-t_start = time.time()
-
 filename = 'example_data/lab_ptycho_data.cxi'
 dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(filename)
 
@@ -34,17 +29,14 @@ dataset.get_as(device=device)
 for loss in model.Adam_optimize(50, dataset, lr=0.02, batch_size=40):
     if model.rank == 0:
         print(model.report())
-        t_list.append(time.time() - t_start)
 
 for loss in model.Adam_optimize(25, dataset,  lr=0.005, batch_size=40):
     if model.rank == 0:
         print(model.report())
-        t_list.append(time.time() - t_start)
 
 for loss in model.Adam_optimize(25, dataset,  lr=0.001, batch_size=40):
     if model.rank == 0:
         print(model.report())
-        t_list.append(time.time() - t_start)
 
 # This orthogonalizes the recovered probe modes
 model.tidy_probes()
@@ -55,7 +47,7 @@ if model.rank == 0:
     file_name = f'speed_test_nGPUs_{model.world_size}_TRIAL_{TRIAL_NUMBER}'
     # Grab the loss and time history
     loss_history = model.loss_history
-    time_history = t_list
+    time_history = model.loss_times
     # Store quantities in a dictionary
     dict = {'loss history':loss_history,
             'time history':time_history,

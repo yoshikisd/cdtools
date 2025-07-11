@@ -227,6 +227,7 @@ class Reconstructor:
             self.scheduler.step(loss)
 
         self.model.loss_history.append(loss)
+        self.model.loss_times.append(time.time() - self.model.INITIAL_TIME)
         self.model.epoch = len(self.model.loss_history)
         self.model.latest_iteration_time = time.time() - t0
         self.model.training_history += self.model.report() + '\n'

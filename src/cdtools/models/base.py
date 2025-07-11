@@ -77,7 +77,12 @@ class CDIModel(t.nn.Module):
         self.rank = int(rank) if rank is not None else 0 
         # Total number of GPUs being used.    
         self.world_size = int(world_size) if world_size is not None else 1   
-        self.multi_gpu_used = int(self.world_size) > 1               
+        self.multi_gpu_used = int(self.world_size) > 1     
+
+        # Keep track of the time each loss history point was taken relative to
+        # the initialization of this model.
+        self.INITIAL_TIME = time.time()
+        self.loss_times = []        
 
 
     def from_dataset(self, dataset):
