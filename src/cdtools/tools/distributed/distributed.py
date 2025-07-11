@@ -25,6 +25,7 @@ import pickle
 import numpy as np
 from typing import Callable
 from pathlib import Path
+from cdtools.models import CDIModel
 
 DISTRIBUTED_PATH = os.path.dirname(os.path.abspath(__file__))
 MIN_INT64 = np.iinfo(np.int64).min
@@ -37,7 +38,7 @@ __all__ = ['sync_and_avg_gradients',
            'run_speed_test']
 
 
-def sync_and_avg_gradients(model):
+def sync_and_avg_gradients(model: CDIModel):
     """
     Synchronizes the average of the model parameter gradients across all
     participating GPUs.
