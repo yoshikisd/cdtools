@@ -7,17 +7,9 @@ using different parts of the dataset. After the parameter gradients
 are calculated (`loss.backwards()`) on each GPU, the gradients need to be
 synchronized and averaged across all participating GPUs. 
 
-The functions in this module assist with both gradient synchronization and
-setting up conditions necessary to perform distributive computing. Some
-functions in this module require parts of the user-written
-reconstruction script to be first wrapped in a function (as shown in 
-examples/fancy_ptycho_multi_gpu_ddp.py). The functions in this module
-are designed to wrap around/call these user-defined functions, enabling
-reconstructions to be performed across several GPUs.
-
-NOTE: These methods however do not define how the Dataset is
-distributed across each device; this process can be handled by using
-DistributedSampler with the DataLoader.
+The functions in this module assist with gradient synchronization,
+setting up conditions necessary to perform distributive computing, and
+executing multi-GPU jobs. 
 """
 
 import torch as t
