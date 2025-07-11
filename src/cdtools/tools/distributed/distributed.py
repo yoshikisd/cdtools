@@ -33,10 +33,12 @@ import pickle
 import numpy as np
 
 DISTRIBUTED_PATH = os.path.dirname(os.path.abspath(__file__))
+MIN_INT64 = np.iinfo(np.int64).min
+MAX_INT64 = np.iinfo(np.int64).max
 
 __all__ = ['sync_and_avg_gradients', 
            'run_single_to_multi_gpu',
-           'wrap_single_gpu_script',
+           'run_single_gpu_script',
            'run_speed_test']
 
 
@@ -120,42 +122,35 @@ def run_single_to_multi_gpu():
                         default=1,
                         choices=[0,1],
                         help='Disable (1) or enable (0) NCCL peer-to-peer communication')
+    parser.add_argument('--seed',
+                        type=int,
+                        default=None,
+                        help='Sets the RNG seed for all devices')
     parser.add_argument('script_path', 
                         type=str, 
                         help='Single GPU script file name (with or without .py extension)')
     
     # Get the arguments
     args = parser.parse_args()
-
-    # Set an environment variable for OMP_NUM_THREADS (sets number of threads)
-
-    # Don't let the user die in anticipation
-    print(f'\n[INFO]: Starting up multi-GPU reconstructions with {args.ngpus} GPUs.\n')
-
-    # Set a random seed that all participaring workers will use
-    seed = t.initial_seed()
     
     # Perform the torchrun call of the wrapped function
     subprocess.run(['torchrun', # We set up the torchrun arguments first
                     '--standalone', # Indicates that we're running a single machine, multiple GPU job.
                     f'--nnodes={args.nnodes}', 
                     f'--nproc_per_node={args.ngpus}', 
-                    os.path.join(DISTRIBUTED_PATH,'single_to_multi_gpu.py'), # Make the call to the single-to-multi-gpu wrapper script
+                    '-m',
+                    'cdtools.tools.distributed.single_to_multi_gpu', # Make the call to the single-to-multi-gpu wrapper script
                     f'--backend={args.backend}',
                     f'--timeout={args.timeout}',
                     f'--nccl_p2p_disable={args.nccl_p2p_disable}',
-                    f'--script_path={args.script_path}',
-                    f'--seed={seed}'])
+                    f'{args.script_path}'])
     
-    # Let the user know the job is done
-    print(f'\n[INFO]: Reconstructions complete.\n')
-
-
-def wrap_single_gpu_script(script_path: str,
+    
+def run_single_gpu_script(script_path: str,
                            backend: str = 'nccl',
                            timeout: int = 30,
                            nccl_p2p_disable: bool = True,
-                           seed: int = 0):
+                           seed: int = None):
     """
     Wraps single-GPU reconstruction scripts to be ran as a multi-GPU job via
     torchrun calls. 
@@ -206,28 +201,24 @@ def wrap_single_gpu_script(script_path: str,
             are at 100% useage but the program isn't doing anything, try enabling
             this variable.
         seed: int
-            Seed for generating random numbers. This value must be identical across all
-            participating devices.
+            Seed for generating random numbers.
             
     """
-    ######################   Check if the script is safe to run  ######################
-    ###################################################################################
-
-    # 1) Check if the file path actually exists
+    
+    # Check if the file path actually exists before starting the process group
     if not os.path.exists(script_path):
         raise FileNotFoundError(f'Cannot open file: {os.path.join(os.getcwd(), script_path)}')
-
-    # 2) Check if the file is a CDTools reconstruction script.
-    with open(script_path, 'r') as f:
-        source_code = f.read()
-    if not ('import cdtools' in source_code or 'from cdtools' in source_code):
-        raise ValueError('File is not a CDTools reconstruction script (the script must import cdtools modules).')
-
+    
+    # Enable/disable NCCL peer-to-peer communication. The boolean needs to be converted into
+    # a string for the environment variable.
+    os.environ['NCCL_P2P_DISABLE'] = str(int(nccl_p2p_disable))
+    
     ##########   Force each subprocess to see only the GPU ID we assign it  ###########
     ###################################################################################
 
-    # The GPU rank is visible as an environment variable through torchrun calls.
+    # The GPU rank and world_size is visible as an environment variable through torchrun calls.
     rank = int(os.environ.get('RANK'))
+    world_size = int(os.environ.get('WORLD_SIZE'))
 
     # If the CDTOOLS_GPU_IDS environment variable is defined, then assign based
     # on the GPU IDS provided in that list. Otherwise, use the rank for the GPU ID.
@@ -242,25 +233,34 @@ def wrap_single_gpu_script(script_path: str,
 
     ################################  Run the script  #################################
     ###################################################################################
-    
-    # Enable/disable NCCL peer-to-peer communication. The boolean needs to be converted into
-    # a string for the environment variable.
-    os.environ['NCCL_P2P_DISABLE'] = str(int(nccl_p2p_disable))
+
+    if rank == 0:
+        print(f'\n[INFO]: Starting up multi-GPU reconstructions with {world_size} GPUs.')
 
     # Start up the process group (lets the different subprocesses can talk with each other)
     dist.init_process_group(backend=backend, timeout=datetime.timedelta(seconds=timeout))
 
-    # Force this subprocess to use a given RNG seed (should be identical across all subprocesses)
-    t.manual_seed(seed)
-    t.cuda.manual_seed_all(seed)
-      
     try:     
+        # Force all subprocesses to either use the pre-specified or Rank 0's RNG seed
+        if seed is None:
+            seed_local = t.tensor(np.random.randint(MIN_INT64, MAX_INT64), device='cuda', dtype=t.int64)
+            dist.broadcast(seed_local, 0)
+            seed = seed_local.item()
+
+        t.manual_seed(seed)
+
         # Run the single-GPU reconstruction script 
-        runpy.run_path(script_path, run_name='__main__')
+        script_variables = runpy.run_path(script_path, run_name='__main__')
+
+        # Let the user know the job is done
+        if rank == 0:
+            print(f'[INFO]: Reconstructions complete. Terminating process group.')
 
     finally:
         # Kill the process group
         dist.destroy_process_group()   
+        if rank == 0:
+            print(f'[INFO]: Process group terminated. Multi-GPU job complete.')
 
 
 def run_speed_test(world_sizes: int, 

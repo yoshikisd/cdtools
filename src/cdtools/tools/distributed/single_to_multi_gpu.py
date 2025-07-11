@@ -21,9 +21,6 @@ import argparse
 def get_args():
     # Define the arguments we need to pass to dist.script_wrapper
     parser = argparse.ArgumentParser()
-    parser.add_argument('--script_path', 
-                        type=str, 
-                        help='Single GPU script file name (with or without .py extension)')
     parser.add_argument('--backend', 
                         type=str, 
                         default='nccl',
@@ -40,18 +37,25 @@ def get_args():
                         help='Disable (1) or enable (0) NCCL peer-to-peer communication')
     parser.add_argument('--seed',
                         type=int,
-                        default=0,
+                        default=None,
                         help='Sets the RNG seed for all devices')
+    parser.add_argument('script_path', 
+                        type=str, 
+                        help='Single GPU script file name (with or without .py extension)')
     
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+def main():
     # Get args
     args = get_args()
     # Pass arguments to dist.script_wrapper
-    dist.wrap_single_gpu_script(script_path=args.script_path,
+    dist.run_single_gpu_script(script_path=args.script_path,
                                 backend=args.backend,
                                 timeout=args.timeout,
                                 nccl_p2p_disable=bool(args.nccl_p2p_disable),
                                 seed=args.seed)
+
+
+if __name__ == '__main__':
+    main()
