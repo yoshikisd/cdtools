@@ -49,17 +49,15 @@ def pytest_collection_modifyitems(config, items):
     # Skip the slow and/or multigpu tests if --runslow and/or --multigpu 
     # is given in cli.
 
-    if config.getoption("--runslow") or config.getoption("--runmultigpu"):
+    skip_slow = pytest.mark.skip(reason="need --runslow option to run")
+    skip_multigpu = pytest.mark.skip(reason='need --runmultigpu option to run')
 
-        skip_slow = pytest.mark.skip(reason="need --runslow option to run")
-        skip_multigpu = pytest.mark.skip(reason='need --runmultigpu option to run')
-
-        for item in items:
-            if "slow" in item.keywords and not config.getoption("--runslow"):
-                item.add_marker(skip_slow)
-            
-            if "multigpu" in item.keywords and not config.getoption("--runmultigpu"):
-                item.add_marker(skip_multigpu)
+    for item in items:
+        if "slow" in item.keywords and not config.getoption("--runslow"):
+            item.add_marker(skip_slow)
+        
+        if "multigpu" in item.keywords and not config.getoption("--runmultigpu"):
+            item.add_marker(skip_multigpu)
 
 
 @pytest.fixture
@@ -423,7 +421,3 @@ def example_nested_dicts(pytestconfig):
 def multigpu_script_1(pytestconfig):
     return str(pytestconfig.rootpath) + \
         '/tests/multi_gpu/multi_gpu_script_quality.py'
-
-@pytest.fixture
-def mkl_threading_layer(request):
-    return request.config.getoption("--mkl_threading_layer")
