@@ -11,7 +11,6 @@ The functions in this module assist with gradient synchronization,
 setting up conditions necessary to perform distributive computing, and
 executing multi-GPU jobs. 
 """
-
 import torch as t
 import torch.distributed as dist
 import datetime
@@ -22,14 +21,14 @@ import runpy
 from ast import literal_eval
 from matplotlib import pyplot as plt
 import pickle
-import numpy as np
-from typing import Callable
+import random
+from typing import Callable, Tuple, List
 from pathlib import Path
 from cdtools.models import CDIModel
 
 DISTRIBUTED_PATH = os.path.dirname(os.path.abspath(__file__))
-MIN_INT64 = np.iinfo(np.int64).min
-MAX_INT64 = np.iinfo(np.int64).max
+MIN_INT64 = t.iinfo(t.int64).min
+MAX_INT64 = t.iinfo(t.int64).max
 
 __all__ = ['sync_and_avg_gradients', 
            'run_single_to_multi_gpu',
@@ -41,7 +40,7 @@ __all__ = ['sync_and_avg_gradients',
 def sync_and_avg_gradients(model: CDIModel):
     """
     Synchronizes the average of the model parameter gradients across all
-    participating GPUs.
+    participating GPUs using all_reduce.
 
     Parameters:
         model: CDIModel
@@ -62,7 +61,7 @@ def run_single_gpu_script(script_path: str,
     Wraps single-GPU reconstruction scripts to be ran as a multi-GPU job via
     torchrun calls. 
 
-    `cdtools.tools.distributed.run_single_gpu_script` is intended to be called in a script
+    `run_single_gpu_script` is intended to be called in a script
     (e.g., cdtools.tools.distributed.single_to_multi_gpu) with the following form:
 
     ```
@@ -83,11 +82,11 @@ def run_single_gpu_script(script_path: str,
     ```
 
     `torchrun` will spawn a number of subprocesses equal to the number of GPUs specified 
-    (--nproc_per_node). On each subprocess, `cdtools.tools.distributed.run_single_gpu_script`
+    (--nproc_per_node). On each subprocess, `run_single_gpu_script`
     will set up process groups (lets each GPU communicate with each other) and environment
     variables necessary for multi-GPU jobs. The single-GPU script will then be ran by
     each subprocess, where gradient synchronization will be faciliated by
-    `cdtools.tools.distributed.sync_and_avg_gradients` calls from `cdtools.Reconstructors`
+    `sync_and_avg_gradients` calls from `cdtools.Reconstructors`
     while data shuffling/loading is handled by `cdtools.Reconstructor.setup_dataloader`.
 
     
@@ -118,7 +117,7 @@ def run_single_gpu_script(script_path: str,
             will be aborted and the process calling this method will crash. 
         nccl_p2p_disable: bool
             Disable NCCL peer-2-peer communication. If you find that all your GPUs
-            are at 100% useage but the program isn't doing anything, try enabling
+            are at 100% usege but the program isn't doing anything, try enabling
             this variable.
         seed: int
             Seed for generating random numbers.
@@ -140,6 +139,8 @@ def run_single_gpu_script(script_path: str,
     # but there are two ways to avoid this empirically:
     #   1) Force each subprocesses' CUDA_VISIBLE_DEVICE to be their assigned GPU ids.
     #   2) Within the reconstruction script, change `device='cuda'` to `device=f'cuda{model.rank}'`
+    #
+    # Option 1 is chosen here to use single-GPU reconstruction scripts AS-IS for multi-GPU jobs.
 
     # The GPU rank and world_size is visible as an environment variable through torchrun calls.
     rank = int(os.environ.get('RANK'))
@@ -167,7 +168,7 @@ def run_single_gpu_script(script_path: str,
     try:     
         # Force all subprocesses to either use the pre-specified or Rank 0's RNG seed
         if seed is None:
-            seed_local = t.tensor(np.random.randint(MIN_INT64, MAX_INT64), device='cuda', dtype=t.int64)
+            seed_local = t.tensor(random.randint(MIN_INT64, MAX_INT64), device='cuda', dtype=t.int64)
             dist.broadcast(seed_local, 0)
             seed = seed_local.item()
 
@@ -314,12 +315,8 @@ def report_speed_test(func: Callable):
         # Figure out how to name the save file and where to save it to
         # These environment variables are provided by run_speed_test
         trial_number = int(os.environ.get('CDTOOLS_TRIAL_NUMBER'))
-        save_dir = os.environ.get('CDTOOLS_SPEED_TEST_RESULT_DIR')
+        output_dir = os.environ.get('CDTOOLS_SPEED_TEST_RESULTS_DIR')
         file_prefix = os.environ.get('CDTOOLS_SPEED_TEST_PREFIX')
-
-        # Check if the save path is valid
-        # Make sure the directory exists; or else create it
-        Path(save_dir).mkdir(parents=False, exist_ok=True)
 
         # Run the script
         model = func()
@@ -338,7 +335,7 @@ def report_speed_test(func: Callable):
                     'trial':trial_number}
             
             # Save the quantities
-            with open (os.path.join(save_dir, file_name), 'wb') as save_file:
+            with open (os.path.join(output_dir, file_name), 'wb') as save_file:
                 pickle.dump(dict, save_file)
             
             print(f'[INFO]: Saved results to: {file_name}') 
@@ -349,10 +346,21 @@ def run_speed_test(world_sizes: int,
                    runs: int,
                    script_path: str,
                    output_dir: str,
-                   file_prefix: str = 'speed_test'):
+                   file_prefix: str = 'speed_test',
+                   show_plot: bool = True,
+                   delete_output_files: bool = False,
+                   nnodes: int = 1,
+                   backend: str = 'nccl',
+                   timeout: int = 30,
+                   nccl_p2p_disable: bool = True,
+                   seed: int = None
+                   ) -> Tuple[List[float], 
+                              List[float], 
+                              List[float], 
+                              List[float]]:
     """
-    Executes a reconstruction script `n` x `m` times using `n` GPUs and `m` trials 
-    per GPU count using cdt-torchrun.
+    Executes a reconstruction script using `n` GPUs and `m` trials per GPU count using 
+    `torchrun` and `cdtools.tools.distributed.single_to_multi_gpu`.
 
     If the directory specified by `output_dir` does not exist,
     one will be created in the current directory.
@@ -360,6 +368,7 @@ def run_speed_test(world_sizes: int,
     Parameters:
         world_sizes: list[int]
             Number of GPUs to use. User can specify several GPU counts in a list.
+            But the first entry must be 1 (single-GPU).
         runs: int
             How many repeat reconstructions to perform
         script_path: str
@@ -368,13 +377,62 @@ def run_speed_test(world_sizes: int,
             Directory of the loss-vs-time/epoch data generated for the speed test.
         file_prefix: str
             Prefix of the speed test result file names
+        show_plot: bool
+            Show loss-versus-epoch/time and speed-up-versus-GPU count curves
+        delete_output_files: bool
+            Removes the results files produced by `report_speed_test` from
+            the output_dir after each trail run.
+        nnodes: int
+            Number of nodes to use. This module has only been tested with 1 node.
+        backend: str
+            Communication backend for distributive computing. NVidia Collective
+            Communications Library ('nccl') is the default and only tested option.
+            See https://docs.pytorch.org/docs/stable/distributed.html for other
+            backends supported by pytorch (but have not been tested in this package).
+        timeout: int
+            Timeout for operations to be executed in seconds. All processes will be
+            aborted after the timeout has been exceeded.
+        nccl_p2p_disable: bool
+            Sets the `NCCL_P2P_DISABLE` environment variable to enable/disable
+            nccl peer-to-peer communication. If you find that all your GPUs
+            are at 100% usage but the program isn't doing anything, try enabling
+            this variable.
+        seed: int
+            Seed for generating random numbers. Default is None (seed is randomly
+            generated).
+
+    Returns:
+        final_loss_mean_list: List[float]
+            Mean final loss value over `runs` iterations for each `world_size`
+            value specified.
+        final_loss_std_list: List[float]
+            Standard deviation of the final loss value over `runs` iterations
+            for each `world_size`.
+        speed_up_mean_list: List[float]
+            Mean runtime speed-up over `runs` iterations for each `world_size` 
+            value specified. Speed-up is defined as the `runtime_nGPUs / runtime_1_GPU`.
+        speed_up_std_list: List[float]
+            Standard deviation of the runtime speed-up over `runs` iterations
+            for each `world_size`.
     """
+    
+    # Make sure the directory exists; or else create it
+    Path(output_dir).mkdir(parents=False, exist_ok=True)
+
     # Set stuff up for plots
-    fig, (ax1,ax2,ax3) = plt.subplots(1,3)
+    if show_plot:
+        fig, (ax1,ax2,ax3) = plt.subplots(1,3)
 
     # Store the value of the single GPU time
     time_1gpu = 0
     std_1gpu = 0
+
+    # Store values of the different speed-up factors and final losses
+    # as a function of GPU count
+    speed_up_mean_list = []
+    speed_up_std_list = []
+    final_loss_mean_list = []
+    final_loss_std_list = []
 
     for world_size in world_sizes:
         # Make a list to store the values
@@ -386,33 +444,57 @@ def run_speed_test(world_sizes: int,
             print(f'[INFO]: Starting run {i+1}/{runs} on {world_size} GPU(s)')
 
             # The scripts running speed tests need to read the trial number
-            # they are on using an environment variable
-            os.environ['CDTOOLS_TRIAL_NUMBER'] = str(i)
-            os.environ['CDTOOLS_SPEED_TEST_RESULT_DIR'] = output_dir
-            os.environ['CDTOOLS_SPEED_TEST_PREFIX'] = file_prefix
+            # they are on using. We send this information using environment 
+            # variables sent to the child processes spawned by subprocess.run
+            child_env = os.environ.copy()
+            child_env['CDTOOLS_TRIAL_NUMBER'] = str(i)
+            child_env['CDTOOLS_SPEED_TEST_RESULTS_DIR'] = output_dir
+            child_env['CDTOOLS_SPEED_TEST_PREFIX'] = file_prefix
+
+            # Set up the terminal commands
+            cmd = ['torchrun', # We set up the torchrun arguments first
+                   '--standalone', # Indicates that we're running a single machine, multiple GPU job.
+                   f'--nnodes={nnodes}', 
+                   f'--nproc_per_node={world_size}', 
+                   '-m',
+                   'cdtools.tools.distributed.single_to_multi_gpu', 
+                   f'--backend={backend}',
+                   f'--timeout={timeout}',
+                   f'--nccl_p2p_disable={int(nccl_p2p_disable)}']
             
-            # Run cdt-torchrun
+            if seed is not None:
+                    cmd.append(f'--seed={seed}')
+
+            cmd.append(f'{script_path}')
+            
+            # Run the single/multi-GPU job
             try:
-                subprocess.run(['cdt-torchrun',
-                                f'--ngpus={world_size}',
-                                f'{script_path}'],
-                                check=True)
+                subprocess.run(cmd, check=True, env=child_env)
+
             except subprocess.CalledProcessError as e:
-                print(e)
+                raise e
 
-            print(f'[INFO]: Reconstruction complete. Loading loss results...')
+            # Load the loss results
+            print('[INFO]: Reconstruction complete. Loading loss results...')
+            
+            save_path = os.path.join(output_dir, f'{file_prefix}_nGPUs_{world_size}_TRIAL_{i}.pkl')
 
-            with open(os.path.join(output_dir, f'{file_prefix}_nGPUs_{world_size}_TRIAL_{i}.pkl'), 'rb') as f:
+            with open(save_path, 'rb') as f:
                 results = pickle.load(f)
             time_list.append(results['time history'])
             loss_hist_list.append(results['loss history'])
 
+            print('[INFO]: Loss results loaded.')
+
+            if delete_output_files:
+                print(f'[INFO]: Removing {save_path}')
+                os.remove(save_path)
             
         # Calculate the statistics
-        time_mean = np.array(time_list).mean(axis=0)/60
-        time_std = np.array(time_list).std(axis=0)/60
-        loss_mean = np.array(loss_hist_list).mean(axis=0)
-        loss_std = np.array(loss_hist_list).std(axis=0)
+        time_mean = t.tensor(time_list).mean(dim=0)/60
+        time_std = t.tensor(time_list).std(dim=0)/60
+        loss_mean = t.tensor(loss_hist_list).mean(dim=0)
+        loss_std = t.tensor(loss_hist_list).std(dim=0)
 
         # If a single GPU is used, store the time
         if world_size == 1:
@@ -422,29 +504,40 @@ def run_speed_test(world_sizes: int,
         # Calculate the speed-up relative to using a single GPU
         speed_up_mean = time_1gpu / time_mean[-1] 
         speed_up_std = speed_up_mean * \
-            np.sqrt((std_1gpu/time_1gpu)**2 + (time_std[-1]/time_mean[-1])**2)
+            t.sqrt((std_1gpu/time_1gpu)**2 + (time_std[-1]/time_mean[-1])**2)
+        
+        # Store the final lossess and speed-ups
+        final_loss_mean_list.append(loss_mean[-1].item())
+        final_loss_std_list.append(loss_std[-1].item())
+        speed_up_mean_list.append(speed_up_mean.item())
+        speed_up_std_list.append(speed_up_std.item())
 
         # Add another plot
-        ax1.errorbar(time_mean, loss_mean, yerr=loss_std, xerr=time_std,
-                    label=f'{world_size} GPUs')
-        ax2.errorbar(np.arange(0,loss_mean.shape[0]), loss_mean, yerr=loss_std,
-                    label=f'{world_size} GPUs')
-        ax3.errorbar(world_size, speed_up_mean, yerr=speed_up_std, fmt='o')
+        if show_plot:
+            ax1.errorbar(time_mean, loss_mean, yerr=loss_std, xerr=time_std,
+                        label=f'{world_size} GPUs')
+            ax2.errorbar(t.arange(0,loss_mean.shape[0]), loss_mean, yerr=loss_std,
+                        label=f'{world_size} GPUs')
+            ax3.errorbar(world_size, speed_up_mean, yerr=speed_up_std, fmt='o')
         
     # Plot
-    fig.suptitle(f'Multi-GPU performance test | {runs} runs performed')
-    ax1.set_yscale('log')
-    ax1.set_xscale('linear')
-    ax2.set_yscale('log')
-    ax2.set_xscale('linear')
-    ax3.set_yscale('linear')
-    ax3.set_xscale('linear')
-    ax1.legend()
-    ax2.legend()
-    ax1.set_xlabel('Time (min)')
-    ax1.set_ylabel('Loss')
-    ax2.set_xlabel('Epochs')
-    ax3.set_xlabel('Number of GPUs')
-    ax3.set_ylabel('Speed-up relative to single GPU')
-    plt.show()
+    if show_plot:
+        fig.suptitle(f'Multi-GPU performance test | {runs} runs performed')
+        ax1.set_yscale('log')
+        ax1.set_xscale('linear')
+        ax2.set_yscale('log')
+        ax2.set_xscale('linear')
+        ax3.set_yscale('linear')
+        ax3.set_xscale('linear')
+        ax1.legend()
+        ax2.legend()
+        ax1.set_xlabel('Time (min)')
+        ax1.set_ylabel('Loss')
+        ax2.set_xlabel('Epochs')
+        ax3.set_xlabel('Number of GPUs')
+        ax3.set_ylabel('Speed-up relative to single GPU')
+        plt.show()
+    
     print(f'[INFO]: Multi-GPU speed test completed.')
+
+    return final_loss_mean_list, final_loss_std_list, speed_up_mean_list, speed_up_std_list

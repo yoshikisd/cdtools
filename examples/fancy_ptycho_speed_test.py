@@ -20,7 +20,7 @@ def main():
     model.to(device=device)
     dataset.get_as(device=device)
 
-
+    # Remove or comment out plotting statements
     for loss in model.Adam_optimize(50, dataset, lr=0.02, batch_size=40):
         if model.rank == 0:
             print(model.report())
