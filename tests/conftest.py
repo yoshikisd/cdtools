@@ -393,6 +393,18 @@ def lab_ptycho_cxi(pytestconfig):
 
 
 @pytest.fixture(scope='module')
+def optical_data_ss_cxi(pytestconfig):
+    return str(pytestconfig.rootpath) + \
+        '/examples/example_data/Optical_Data_ss.cxi'
+
+
+@pytest.fixture(scope='module')
+def optical_ptycho_incoherent_pickle(pytestconfig):
+    return str(pytestconfig.rootpath) + \
+        '/examples/example_data/Optical_ptycho_incoherent.pickle'
+
+
+@pytest.fixture(scope='module')
 def example_nested_dicts(pytestconfig):
     example_tensor = t.as_tensor(np.array([1, 4.5, 7]))
     example_array = np.ones([10, 20, 30])

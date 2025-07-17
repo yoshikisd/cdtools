@@ -2,8 +2,9 @@ import pytest
 import cdtools
 import torch as t
 import numpy as np
+import pickle
+from matplotlib import pyplot as plt
 from copy import deepcopy
-
 
 @pytest.mark.slow
 def test_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
@@ -139,3 +140,94 @@ def test_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
     #         assertion error, something changed to make the final quality
     #         worse!
     assert loss_model < 0.0001
+
+
+@pytest.mark.slow
+def test_LBFGS_RPI(optical_data_ss_cxi,
+                   optical_ptycho_incoherent_pickle,
+                   reconstruction_device,
+                   show_plot):
+    """
+    This test checks out several things with the transmission RPI dataset
+        1) Calls to Reconstructor.adjust_optimizer is updating the
+           hyperparameters
+        2) Ensure `recon.model` points to the original `model`
+        3) Reconstructions performed by `LBFGS.optimize` and
+           `model.LBFGS_optimize` calls produce identical results.
+        4) The quality of the reconstruction remains below a specified
+           threshold.
+        5) Ensure that the RPI model works fine and dandy with the
+           Reconstructors.
+    """
+    with open(optical_ptycho_incoherent_pickle, 'rb') as f:
+        ptycho_results = pickle.load(f)
+
+    probe = ptycho_results['probe']
+    background = ptycho_results['background']
+
+    dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(optical_data_ss_cxi)
+    model = cdtools.models.RPI.from_dataset(dataset, probe, [500, 500],
+                                            background=background, n_modes=2,
+                                            initialization='random')
+
+    # Prepare two sets of models for the comparative reconstruction
+    model_recon = deepcopy(model)
+
+    model.to(device=reconstruction_device)
+    model_recon.to(device=reconstruction_device)
+    dataset.get_as(device=reconstruction_device)
+
+    # ******* Reconstructions with cdtools.reconstructors.LBFGS.optimize ******
+    print('Running reconstruction using cdtools.reconstructors.LBFGS.' +
+          'optimize on provided reconstruction_device,', reconstruction_device)
+
+    recon = cdtools.reconstructors.LBFGS(model=model_recon, dataset=dataset)
+    t.manual_seed(0)
+
+    # Run a reconstruction
+    reg_factor_tup = ([0.05, 0.05], [0.001, 0.1])
+    epoch_tup = (30, 50)
+    for i, iterations in enumerate(epoch_tup):
+        for loss in recon.optimize(iterations,
+                                   lr=0.4,
+                                   regularization_factor=reg_factor_tup[i]):
+            if show_plot and i == 0:
+                model_recon.inspect(dataset)
+            print(model_recon.report())
+
+        # Check hyperparameter update (or lack thereof)
+        assert recon.optimizer.param_groups[0]['lr'] == 0.4
+
+    if show_plot:
+        model_recon.inspect(dataset)
+        model_recon.compare(dataset)
+        plt.show()
+
+    # Check model pointing
+    assert id(model_recon) == id(recon.model)
+
+    # ******* Reconstructions with cdtools.reconstructors.LBFGS.optimize ******
+    print('Running reconstruction using CDIModel.LBFGS_optimize.' +
+          'optimize on provided reconstruction_device,', reconstruction_device)
+    t.manual_seed(0)
+    for i, iterations in enumerate(epoch_tup):
+        for loss in model.LBFGS_optimize(iterations,
+                                         dataset,
+                                         lr=0.4,
+                                         regularization_factor=reg_factor_tup[i]): # noqa
+            if show_plot and i == 0:
+                model.inspect(dataset)
+            print(model.report())
+
+    if show_plot:
+        model.inspect(dataset)
+        model.compare(dataset)
+        plt.show()
+
+    # Check loss equivalency between the two reconstructions
+    assert np.allclose(model.loss_history[-1], model_recon.loss_history[-1])
+
+    # The final loss when testing this was 2.28607e-3. Based on this, we set
+    # a threshold of 2.3e-3 for the tested loss. If this value has been
+    # exceeded, the reconstructions have gotten worse.
+    assert model.loss_history[-1] < 0.0023
