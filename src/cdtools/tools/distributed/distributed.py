@@ -412,10 +412,6 @@ def report_speed_test(func: Callable):
                           'time history': time_history,
                           'nGPUs': model.world_size,
                           'trial': trial_number}
-            print(type(loss_history[0]))
-            print(type(time_history[0]))
-            print(type(model.world_size))
-            print(type(trial_number))
             # Save the quantities
             with open(os.path.join(output_dir, file_name), 'wb') as save_file:
                 pickle.dump(study_dict, save_file)
