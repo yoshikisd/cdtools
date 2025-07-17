@@ -1,39 +1,46 @@
-'''This is a testing script to study how the reconstruction speed
-and convergence rate scales with the number of GPUs utilized.
+from cdtools.tools.distributed import run_speed_test
 
-The test is set up so that you can run n-trials for each number of GPUs
-you want to study and plot statistics of loss-versus-time as a function
-of GPU counts. 
+# Define the number of GPUs to use for the test. We always need to include
+# a single GPU in the test.
+#
+# Here, we will run trials with 1 and 2 GPUs.
+world_sizes = [1, 2]
 
-This test is based on fancy_ptycho_multi_gpu_ddp.py and fancy_ptycho.py.
+# We will run 3 trials per GPU to collect statistics on loss-versus-epoch/time
+# data as well as runtime speedup.
+runs = 3
 
-'''
+# We will perform a speed test on a reconstruction script modified to run
+# a speed test (see fancy_ptycho_speed_test.py)
+script_path = 'fancy_ptycho_speed_test.py'
 
-import cdtools.tools.distributed as dist
+# When we run the modified script with the speed test, a pickle dump file
+# will be generated after each trial. The file contains data about loss-vs-time
+# measured for the trial with one or several GPUs used.
+output_dir = 'example_loss_data'
 
-# This will execute the multi_gpu_reconstruct upon running this file
-if __name__ == '__main__':
-    # Define the number of GPUs to use.
-    world_sizes = [1,2]
-    
-    # How many reconstruction runs to perform for statistics
-    runs = 3
+# Define the file name prefix. The file will have the following name:
+# `<file_prefix>_nGPUs_<world_size>_TRIAL_<run number>.pkl`
+file_prefix = 'speed_test'
 
-    # Define where the single-GPU script is located
-    script_path = 'fancy_ptycho_speed_test.py']
+# We can plot several curves showing what the loss-versus/epoch curves look
+# like for each GPU count. The plot will also show the relative runtime
+# speed-up relative to the single-GPU runtime.
+show_plot = True
 
-    # Define where the loss-vs-time data is being stored in
-    output_dir = 'example_loss_data4'
+# We can also delete the pickle dump files after each trial run has been
+# completed and stored by `run_speed_test`
+delete_output_file = True
 
-    # Define what prefix you want on the file
-    file_prefix = 'speed_test'
-    
-    # Run the test
-    results = dist.run_speed_test(world_sizes=world_sizes, 
-                                  runs=runs, 
-                                  script_path=script_path, 
-                                  output_dir=output_dir, 
-                                  file_prefix=file_prefix,
-                                  show_plot=True,
-                                  delete_output_files=True)
-    
+# Run the test. This speed test will return several lists containing the
+# means and standard deviations of the final recorded losses and runtime
+# speed ups calculated over several trial runs. Each entry index maps to
+# the GPU count specified by `world_sizes`.
+final_loss_mean, final_loss_std, speed_up_mean, speed_up_std = \
+    run_speed_test(world_sizes=world_sizes,
+                   runs=runs,
+                   script_path=script_path,
+                   output_dir=output_dir,
+                   file_prefix=file_prefix,
+                   show_plot=show_plot,
+                   delete_output_files=delete_output_file)
