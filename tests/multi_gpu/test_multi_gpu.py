@@ -65,8 +65,8 @@ def test_plotting_and_saving(lab_ptycho_cxi,
     # Check if plots have been saved
     if show_plot:
         print('Plots generated: ' +
-              f'{sum([file.startswith('RANK_0_test_plot')
-                      for file in filelist])}')
+              f"{sum([file.startswith('RANK_0_test_plot')
+                      for file in filelist])}")
         assert any([file.startswith('RANK_0_test_plot') for file in filelist])
     else:
         print('--plot not enabled. Checks on plotting and figure saving' +
