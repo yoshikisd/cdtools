@@ -236,6 +236,16 @@ class Reconstructor:
         if self.scheduler is not None:
             self.scheduler.step(loss)
 
+            # Broadcast the learning rate based on Rank 0 for multi-GPU
+            if self.model.multi_gpu_used:
+                for param_group in self.optimizer.param_groups:
+                    # Make sure we broadcase over whatever device type
+                    # we're using. Only tested over cuda.
+                    lr_tensor = t.tensor(param_group['lr'],
+                                         device=self.model.obj.device)
+                    dist.broadcast(lr_tensor, src=0)
+                    param_group['lr'] = lr_tensor.item()
+
         self.model.loss_history.append(loss)
         self.model.loss_times.append(time.time() - self.model.INITIAL_TIME)
         self.model.epoch = len(self.model.loss_history)
