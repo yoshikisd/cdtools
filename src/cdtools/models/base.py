@@ -212,10 +212,8 @@ class CDIModel(t.nn.Module):
             Accepts any additional args that model.save_results needs, for this model
         """
         # FOR MULTI-GPU: Only run this method if it's called by the rank 0 GPU
-        if self.multi_gpu_used and self.rank != 0:
-            return
-        
-        return nested_dict_to_h5(filename, self.save_results(*args))
+        if not (self.multi_gpu_used and self.rank != 0):
+            return nested_dict_to_h5(filename, self.save_results(*args))
     
 
     @contextmanager
@@ -235,18 +233,19 @@ class CDIModel(t.nn.Module):
         exception_filename : str
             Optional, a separate filename to use if an exception is raised during execution. Default is equal to filename
         """
-        # FOR MULTI-GPU: Only run this method if it's called by the rank 0 GPU
-        if self.multi_gpu_used and self.rank != 0:
-            return
-        
         try:
             yield
-            self.save_to_h5(filename, *args)
-        except:
-            if exception_filename is None:
-                exception_filename = filename
-            self.save_to_h5(exception_filename, *args)
-            raise
+
+            # Only let the Rank 0 GPU handle saving in multi-GPU
+            if not (self.multi_gpu_used and self.rank != 0):
+                self.save_to_h5(filename, *args)
+
+        except Exception as e:
+            if not (self.multi_gpu_used and self.rank != 0):
+                if exception_filename is None:
+                    exception_filename = filename
+                self.save_to_h5(exception_filename, *args)
+            raise e
 
     @contextmanager
     def save_on_exception(self, filename, *args):
@@ -265,16 +264,14 @@ class CDIModel(t.nn.Module):
             Accepts any additional args that model.save_results needs, for this model
         """
         # FOR MULTI-GPU: Only run this method if it's called by the rank 0 GPU
-        if self.multi_gpu_used and self.rank != 0:
-            return
-        
         try:
             yield
-        except:
-            self.save_to_h5(filename, *args)
-            print('Intermediate results saved under name:')
-            print(filename, flush=True)
-            raise
+        except Exception as e:
+            if not (self.multi_gpu_used and self.rank != 0):
+                self.save_to_h5(filename, *args)
+                print('Intermediate results saved under name:')
+                print(filename, flush=True)
+            raise e
 
 
     def use_checkpoints(self, job_id, checkpoint_file_stem):
@@ -296,6 +293,10 @@ class CDIModel(t.nn.Module):
             return False
 
     def save_checkpoint(self, *args, checkpoint_file=None):
+        # FOR MULTI-GPU: Only run this method if it's called by the rank 0 GPU
+        if self.multi_gpu_used and self.rank != 0:
+            return
+        
         checkpoint = self.save_results(*args)
         if (hasattr(self, 'current_optimizer')
             and self.current_optimizer is not None):
