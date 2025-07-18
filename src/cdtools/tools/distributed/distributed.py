@@ -657,7 +657,6 @@ def run_speed_test(world_sizes: List[int],
         ax2.set_xlabel('Epochs')
         ax3.set_xlabel('Number of GPUs')
         ax3.set_ylabel('Speed-up relative to single GPU')
-        plt.show()
 
     print('[INFO]: Multi-GPU speed test completed.')
 

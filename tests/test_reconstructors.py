@@ -84,7 +84,6 @@ def test_Adam_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
     if show_plot:
         model_recon.inspect(dataset)
         model_recon.compare(dataset)
-        plt.show()
 
     # ******* Reconstructions with cdtools.CDIModel.Adam_optimize *******
     print('Running reconstruction using CDIModel.Adam_optimize on provided' +
@@ -105,7 +104,6 @@ def test_Adam_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
     if show_plot:
         model.inspect(dataset)
         model.compare(dataset)
-        plt.show()
 
     # Ensure equivalency between the model reconstructions
     assert np.allclose(model_recon.loss_history[-1], model.loss_history[-1])
@@ -176,7 +174,6 @@ def test_LBFGS_RPI(optical_data_ss_cxi,
     if show_plot:
         model_recon.inspect(dataset)
         model_recon.compare(dataset)
-        plt.show()
 
     # Check model pointing
     assert id(model_recon) == id(recon.model)
@@ -197,7 +194,6 @@ def test_LBFGS_RPI(optical_data_ss_cxi,
     if show_plot:
         model.inspect(dataset)
         model.compare(dataset)
-        plt.show()
 
     # Check loss equivalency between the two reconstructions
     assert np.allclose(model.loss_history[-1], model_recon.loss_history[-1])
@@ -286,7 +282,6 @@ def test_SGD_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
     if show_plot:
         model_recon.inspect(dataset)
         model_recon.compare(dataset)
-        plt.show()
 
     # ******* Reconstructions with cdtools.CDIModel.SGD_optimize *******
     print('Running reconstruction using CDIModel.SGD_optimize on provided' +
@@ -306,7 +301,6 @@ def test_SGD_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
     if show_plot:
         model.inspect(dataset)
         model.compare(dataset)
-        plt.show()
 
     # Ensure equivalency between the model reconstructions
     assert np.allclose(model_recon.loss_history[-1], model.loss_history[-1])

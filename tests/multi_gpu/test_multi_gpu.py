@@ -1,11 +1,88 @@
 import cdtools.tools.distributed as dist
 import pytest
 import os
+import subprocess
 
 """
 This file contains several tests that are relevant to running multi-GPU
 operations in CDTools.
 """
+
+
+@pytest.mark.multigpu
+def test_plotting_and_saving(lab_ptycho_cxi,
+                             multigpu_script_2,
+                             tmp_path,
+                             show_plot):
+    """
+    Run a multi-GPU test on a script that executes several plotting and
+    file-saving methods from CDIModel and ensure they run without failure.
+
+    Also, make sure that only 1 GPU is generating the plots.
+
+    If this test fails, one of three things happened:
+        1) Either something failed while multigpu_script_2 was called
+        2) Somehow, something aside from Rank 0 saved results
+        3) multigpu_script_2 was not able to save all the data files
+           we asked it to save.
+    """
+    # Pass the cxi directory to the reconstruction script
+    # Define a temporary directory
+
+    # Run the test script, which generates several files that either have
+    # the prefix
+    cmd = ['torchrun',
+           '--standalone',
+           '--nnodes=1',
+           '--nproc_per_node=2',
+           '-m',
+           'cdtools.tools.distributed.single_to_multi_gpu',
+           '--backend=nccl',
+           '--timeout=30',
+           '--nccl_p2p_disable=1',
+           multigpu_script_2]
+
+    child_env = os.environ.copy()
+    child_env['CDTOOLS_TESTING_DATA_PATH'] = lab_ptycho_cxi
+    child_env['CDTOOLS_TESTING_TMP_PATH'] = str(tmp_path)
+    child_env['CDTOOLS_TESTING_SHOW_PLOT'] = str(int(show_plot))
+
+    try:
+        subprocess.run(cmd, check=True, env=child_env)
+    except subprocess.CalledProcessError:
+        # The called script is designed to throw an exception.
+        # TODO: Figure out how to distinguish between the engineered error
+        # in the script versus any other error.
+        pass
+
+    # Check if all the generated file names only have the prefix 'RANK_0'
+    filelist = [f for f in os.listdir(tmp_path)
+                if os.path.isfile(os.path.join(tmp_path, f))]
+
+    assert all([file.startswith('RANK_0') for file in filelist])
+    print('All files have the RANK_0 prefix.')
+
+    # Check if plots have been saved
+    if show_plot:
+        print('Plots generated: ' +
+              f'{sum([file.startswith('RANK_0_test_plot')
+                      for file in filelist])}')
+        assert any([file.startswith('RANK_0_test_plot') for file in filelist])
+    else:
+        print('--plot not enabled. Checks on plotting and figure saving' +
+              ' will not be conducted.')
+
+    # Check if we have all five data files saved
+    file_output_suffix = ('test_save_checkpoint.pt',
+                          'test_save_on_exit.h5',
+                          'test_save_on_except.h5',
+                          'test_save_to.h5',
+                          'test_to_cxi.h5')
+
+    print(f'{sum([file.endswith(file_output_suffix) for file in filelist])}'
+          + ' out of 5 data files have been generated.')
+    assert sum([file.endswith(file_output_suffix) for file in filelist]) \
+        == len(file_output_suffix)
 
 
 @pytest.mark.multigpu
@@ -33,7 +110,7 @@ def test_reconstruction_quality(lab_ptycho_cxi,
     file_prefix = 'speed_test'
 
     # Define a temporary directory
-    temp_dir = str(tmp_path / "reconstruction")
+    temp_dir = str(tmp_path)
 
     results = dist.run_speed_test(world_sizes=world_sizes,
                                   runs=runs,

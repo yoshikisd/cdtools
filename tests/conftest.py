@@ -433,3 +433,9 @@ def example_nested_dicts(pytestconfig):
 def multigpu_script_1(pytestconfig):
     return str(pytestconfig.rootpath) + \
         '/tests/multi_gpu/multi_gpu_script_quality.py'
+
+
+@pytest.fixture(scope='module')
+def multigpu_script_2(pytestconfig):
+    return str(pytestconfig.rootpath) + \
+        '/tests/multi_gpu/multi_gpu_script_plot_and_save.py'
