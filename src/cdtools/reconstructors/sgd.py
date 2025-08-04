@@ -1,4 +1,4 @@
-"""This module contains the SGD Reconstructor subclass for performing
+"""This module contains the SGDReconstructor subclass for performing
 optimization ('reconstructions') on ptychographic/CDI models using
 stochastic gradient descent.
 
@@ -12,13 +12,13 @@ from cdtools.models import CDIModel
 from typing import List, Union
 from cdtools.reconstructors import Reconstructor
 
-__all__ = ['SGD']
+__all__ = ['SGDReconstructor']
 
 
-class SGD(Reconstructor):
+class SGDReconstructor(Reconstructor):
     """
-    The Adam Reconstructor subclass handles the optimization ('reconstruction')
-    of ptychographic models and datasets using the Adam optimizer.
+    The SGDReconstructor subclass handles the optimization ('reconstruction')
+    of ptychographic models and datasets using the SGD optimizer.
 
     Parameters
     ----------
@@ -151,7 +151,7 @@ class SGD(Reconstructor):
                               nesterov=nesterov)
 
         # 4) This is analagous to making a call to CDIModel.AD_optimize
-        return super(SGD, self).optimize(iterations,
-                                         regularization_factor,
-                                         thread,
-                                         calculation_width)
+        return super(SGDReconstructor, self).optimize(iterations,
+                                                      regularization_factor,
+                                                      thread,
+                                                      calculation_width)

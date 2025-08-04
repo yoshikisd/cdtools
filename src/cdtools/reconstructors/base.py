@@ -178,7 +178,7 @@ class Reconstructor:
                     loss.backward()
 
                     # Normalize the accumulating total loss
-                    total_loss += loss.detach() 
+                    total_loss += loss.detach()
 
                 # If we have a regularizer, we can calculate it separately,
                 # and the gradients will add to the minibatch gradient

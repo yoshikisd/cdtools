@@ -1,4 +1,4 @@
-"""This module contains the LBFGS Reconstructor subclass for performing
+"""This module contains the LBFGSReconstructor subclass for performing
 optimization ('reconstructions') on ptychographic/CDI models using
 the LBFGS optimizer.
 
@@ -12,12 +12,12 @@ from cdtools.models import CDIModel
 from typing import List, Union
 from cdtools.reconstructors import Reconstructor
 
-__all__ = ['LBFGS']
+__all__ = ['LBFGSReconstructor']
 
 
-class LBFGS(Reconstructor):
+class LBFGSReconstructor(Reconstructor):
     """
-    The LBFGS Reconstructor subclass handles the optimization
+    The LBFGSReconstructor subclass handles the optimization
     ('reconstruction') of ptychographic models and datasets using the LBFGS
     optimizer.
 
@@ -128,7 +128,7 @@ class LBFGS(Reconstructor):
                               line_search_fn=line_search_fn)
 
         # 4) This is analagous to making a call to CDIModel.AD_optimize
-        return super(LBFGS, self).optimize(iterations,
-                                           regularization_factor,
-                                           thread,
-                                           calculation_width)
+        return super(LBFGSReconstructor, self).optimize(iterations,
+                                                        regularization_factor,
+                                                        thread,
+                                                        calculation_width)

@@ -1,4 +1,4 @@
-"""This module contains the Adam Reconstructor subclass for performing
+"""This module contains the AdamReconstructor subclass for performing
 optimization ('reconstructions') on ptychographic/CDI models using
 the Adam optimizer.
 
@@ -12,10 +12,10 @@ from cdtools.models import CDIModel
 from typing import Tuple, List, Union
 from cdtools.reconstructors import Reconstructor
 
-__all__ = ['Adam']
+__all__ = ['AdamReconstructor']
 
 
-class Adam(Reconstructor):
+class AdamReconstructor(Reconstructor):
     """
     The Adam Reconstructor subclass handles the optimization ('reconstruction')
     of ptychographic models and datasets using the Adam optimizer.
@@ -154,7 +154,7 @@ class Adam(Reconstructor):
             self.scheduler = None
 
         # 5) This is analagous to making a call to CDIModel.AD_optimize
-        return super(Adam, self).optimize(iterations,
-                                          regularization_factor,
-                                          thread,
-                                          calculation_width)
+        return super(AdamReconstructor, self).optimize(iterations,
+                                                       regularization_factor,
+                                                       thread,
+                                                       calculation_width)

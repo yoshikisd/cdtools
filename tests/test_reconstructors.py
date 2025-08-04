@@ -24,7 +24,7 @@ def test_Adam_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
     """
 
     print('\nTesting performance on the standard gold balls dataset ' +
-          'with reconstructors.Adam')
+          'with reconstructors.AdamReconstructor')
 
     dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(gold_ball_cxi)
     pad = 10
@@ -48,11 +48,12 @@ def test_Adam_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
     model_recon.to(device=reconstruction_device)
     dataset.get_as(device=reconstruction_device)
 
-    # ******* Reconstructions with cdtools.reconstructors.Adam.optimize *******
-    print('Running reconstruction using cdtools.reconstructors.Adam.optimize' +
+    # ******* Reconstructions with AdamReconstructor.optimize *******
+    print('Running reconstruction using AdamReconstructor.optimize' +
           ' on provided reconstruction_device,', reconstruction_device)
 
-    recon = cdtools.reconstructors.Adam(model=model_recon, dataset=dataset)
+    recon = cdtools.reconstructors.AdamReconstructor(model=model_recon,
+                                                     dataset=dataset)
     t.manual_seed(0)
 
     # Run a reconstruction
@@ -85,7 +86,7 @@ def test_Adam_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
         model_recon.inspect(dataset)
         model_recon.compare(dataset)
 
-    # ******* Reconstructions with cdtools.CDIModel.Adam_optimize *******
+    # ******* Reconstructions with CDIModel.Adam_optimize *******
     print('Running reconstruction using CDIModel.Adam_optimize on provided' +
           ' reconstruction_device,', reconstruction_device)
     t.manual_seed(0)
@@ -150,11 +151,12 @@ def test_LBFGS_RPI(optical_data_ss_cxi,
     model_recon.to(device=reconstruction_device)
     dataset.get_as(device=reconstruction_device)
 
-    # ******* Reconstructions with cdtools.reconstructors.LBFGS.optimize ******
-    print('Running reconstruction using cdtools.reconstructors.LBFGS.' +
+    # ******* Reconstructions with LBFGSReconstructor.optimize ******
+    print('Running reconstruction using LBFGSReconstructor.' +
           'optimize on provided reconstruction_device,', reconstruction_device)
 
-    recon = cdtools.reconstructors.LBFGS(model=model_recon, dataset=dataset)
+    recon = cdtools.reconstructors.LBFGSReconstructor(model=model_recon,
+                                                      dataset=dataset)
     t.manual_seed(0)
 
     # Run a reconstruction
@@ -178,7 +180,7 @@ def test_LBFGS_RPI(optical_data_ss_cxi,
     # Check model pointing
     assert id(model_recon) == id(recon.model)
 
-    # ******* Reconstructions with cdtools.reconstructors.LBFGS.optimize ******
+    # ******* Reconstructions with CDIModel.LBFGS_optimize ******
     print('Running reconstruction using CDIModel.LBFGS_optimize.' +
           'optimize on provided reconstruction_device,', reconstruction_device)
     t.manual_seed(0)
@@ -223,7 +225,7 @@ def test_SGD_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
     to do some kind of comparative assessment.
     """
     print('\nTesting performance on the standard gold balls dataset ' +
-          'with reconstructors.SGD')
+          'with reconstructors.SGDReconstructor')
 
     dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(gold_ball_cxi)
     pad = 10
@@ -247,11 +249,12 @@ def test_SGD_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
     model_recon.to(device=reconstruction_device)
     dataset.get_as(device=reconstruction_device)
 
-    # ******* Reconstructions with cdtools.reconstructors.SGD.optimize *******
-    print('Running reconstruction using cdtools.reconstructors.SGD.optimize' +
+    # ******* Reconstructions with SGDReconstructor.optimize *******
+    print('Running reconstruction using SGDReconstructor.optimize' +
           ' on provided reconstruction_device,', reconstruction_device)
 
-    recon = cdtools.reconstructors.SGD(model=model_recon, dataset=dataset)
+    recon = cdtools.reconstructors.SGDReconstructor(model=model_recon,
+                                                    dataset=dataset)
     t.manual_seed(0)
 
     # Run a reconstruction
