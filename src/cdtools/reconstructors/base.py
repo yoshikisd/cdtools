@@ -8,15 +8,20 @@ the 'training' of a model given some dataset and optimizer.
 The subclasses of Reconstructor are required to implement
 their own data loaders and optimizer adjusters
 """
+from __future__ import annotations
+from typing import TYPE_CHECKING
 
 import torch as t
 from torch.utils import data as td
 import threading
 import queue
 import time
-from cdtools.datasets import CDataset
-from cdtools.models import CDIModel
 from typing import List, Union
+
+if TYPE_CHECKING:
+    from cdtools.models import CDIModel
+    from cdtools.datasets import CDataset
+    
 
 __all__ = ['Reconstructor']
 

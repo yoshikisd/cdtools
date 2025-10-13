@@ -40,6 +40,7 @@ import time
 from scipy import io
 from contextlib import contextmanager
 from cdtools.tools.data import nested_dict_to_h5, h5_to_nested_dict, nested_dict_to_numpy, nested_dict_to_torch
+from cdtools.reconstructors import AdamReconstructor, LBFGSReconstructor, SGDReconstructor
 from cdtools.datasets import CDataset
 from typing import List, Union, Tuple
 import os
@@ -378,13 +379,7 @@ class CDIModel(t.nn.Module):
         # cdtools.reconstructors.AdamReconstructor to perform reconstructions
         # without creating a new reconstructor each time we update the
         # hyperparameters.
-        #
-        # The only way to do this is to make the Adam reconstructor an
-        # attribute of the model. But since the Adam reconstructor also
-        # depends on CDIModel, this seems to give rise to a circular import
-        # error unless we import cdtools.reconstructors within this method:
         if not hasattr(self, 'reconstructor'):
-            from cdtools.reconstructors import AdamReconstructor
             self.reconstructor = AdamReconstructor(model=self,
                                                    dataset=dataset,
                                                    subset=subset)
@@ -449,12 +444,7 @@ class CDIModel(t.nn.Module):
         # cdtools.reconstructors.LBFGSReconstructor as an attribute to run
         # reconstructions without generating new reconstructors each time
         # CDIModel.LBFGS_optimize is called.
-        #
-        # Since the LBFGS reconstructor also depends on CDIModel, a circular
-        # import error arises unless we import cdtools.reconstructors within
-        # this method:
         if not hasattr(self, 'reconstructor'):
-            from cdtools.reconstructors import LBFGSReconstructor
             self.reconstructor = LBFGSReconstructor(model=self,
                                                     dataset=dataset,
                                                     subset=subset)
@@ -524,12 +514,7 @@ class CDIModel(t.nn.Module):
         # cdtools.reconstructors.SGDReconstructor as an attribute to run
         # reconstructions without generating new reconstructors each time
         # CDIModel.SGD_optimize is called.
-        #
-        # Since the SGD reconstructor also depends on CDIModel, a circular
-        # import error arises unless we import cdtools.reconstructors within
-        # this method:
         if not hasattr(self, 'reconstructor'):
-            from cdtools.reconstructors import SGDReconstructor
             self.reconstructor = SGDReconstructor(model=self, 
                                                   dataset=dataset, 
                                                   subset=subset)

@@ -6,11 +6,17 @@ The Reconstructor class is designed to resemble so-called
 'Trainer' classes that (in the language of the AI/ML folks) handles
 the 'training' of a model given some dataset and optimizer.
 """
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 import torch as t
-from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
-from cdtools.models import CDIModel
 from typing import List, Union
 from cdtools.reconstructors import Reconstructor
+
+if TYPE_CHECKING:
+    from cdtools.models import CDIModel
+    from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
+
 
 __all__ = ['LBFGSReconstructor']
 
