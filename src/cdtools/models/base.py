@@ -375,25 +375,24 @@ class CDIModel(t.nn.Module):
             only the calculation speed. 
         
         """
-        # We want to have model.Adam_optimize call AND store
-        # cdtools.reconstructors.AdamReconstructor to perform reconstructions
-        # without creating a new reconstructor each time we update the
-        # hyperparameters.
-        if not hasattr(self, 'reconstructor'):
-            self.reconstructor = AdamReconstructor(model=self,
-                                                   dataset=dataset,
-                                                   subset=subset)
+        reconstructor = AdamReconstructor(
+            model=self,
+            dataset=dataset,
+            subset=subset,
+        )
         
         # Run some reconstructions
-        return self.reconstructor.optimize(iterations=iterations,
-                                           batch_size=batch_size,
-                                           lr=lr,
-                                           betas=betas,
-                                           schedule=schedule,
-                                           amsgrad=amsgrad,
-                                           regularization_factor=regularization_factor, # noqa
-                                           thread=thread,
-                                           calculation_width=calculation_width)
+        return reconstructor.optimize(
+            iterations=iterations,
+            batch_size=batch_size,
+            lr=lr,
+            betas=betas,
+            schedule=schedule,
+            amsgrad=amsgrad,
+            regularization_factor=regularization_factor, # noqa
+            thread=thread,
+            calculation_width=calculation_width,
+        )
 
     def LBFGS_optimize(self,
                        iterations: int,
@@ -440,24 +439,23 @@ class CDIModel(t.nn.Module):
             round of gradient accumulation. Does not affect the result, only
             the calculation speed.
         """
-        # We want to have model.LBFGS_optimize store
-        # cdtools.reconstructors.LBFGSReconstructor as an attribute to run
-        # reconstructions without generating new reconstructors each time
-        # CDIModel.LBFGS_optimize is called.
-        if not hasattr(self, 'reconstructor'):
-            self.reconstructor = LBFGSReconstructor(model=self,
-                                                    dataset=dataset,
-                                                    subset=subset)
+        reconstructor = LBFGSReconstructor(
+            model=self,
+            dataset=dataset,
+            subset=subset,
+        )
         
         # Run some reconstructions
-        return self.reconstructor.optimize(iterations=iterations,
-                                           lr=lr,
-                                           history_size=history_size,
-                                           regularization_factor=regularization_factor, # noqa
-                                           thread=thread,
-                                           calculation_width=calculation_width,
-                                           line_search_fn=line_search_fn)
-
+        return reconstructor.optimize(
+            iterations=iterations,
+            lr=lr,
+            history_size=history_size,
+            regularization_factor=regularization_factor, # noqa
+            thread=thread,
+            calculation_width=calculation_width,
+            line_search_fn=line_search_fn,
+        )
+    
     def SGD_optimize(self, 
                      iterations: int,
                      dataset: CDataset,
@@ -510,26 +508,25 @@ class CDIModel(t.nn.Module):
             round of gradient accumulation.
 
         """
-        # We want to have model.SGD_optimize store
-        # cdtools.reconstructors.SGDReconstructor as an attribute to run
-        # reconstructions without generating new reconstructors each time
-        # CDIModel.SGD_optimize is called.
-        if not hasattr(self, 'reconstructor'):
-            self.reconstructor = SGDReconstructor(model=self, 
-                                                  dataset=dataset, 
-                                                  subset=subset)
+        reconstructor = SGDReconstructor(
+            model=self, 
+            dataset=dataset, 
+            subset=subset,
+        )
 
         # Run some reconstructions
-        return self.reconstructor.optimize(iterations=iterations,
-                                           batch_size=batch_size,
-                                           lr=lr,
-                                           momentum=momentum,
-                                           dampening=dampening,
-                                           weight_decay=weight_decay,
-                                           nesterov=nesterov,
-                                           regularization_factor=regularization_factor, # noqa
-                                           thread=thread,
-                                           calculation_width=calculation_width)
+        return reconstructor.optimize(
+            iterations=iterations,
+            batch_size=batch_size,
+            lr=lr,
+            momentum=momentum,
+            dampening=dampening,
+            weight_decay=weight_decay,
+            nesterov=nesterov,
+            regularization_factor=regularization_factor, # noqa
+            thread=thread,
+            calculation_width=calculation_width,
+        )
 
 
     def report(self):
