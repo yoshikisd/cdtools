@@ -19,15 +19,11 @@ device = 'cuda'
 model.to(device=device)
 dataset.get_as(device=device)
 
-# Now, to do the reconstruction we will use the more flexible pattern of
-# creating an explicit reconstructor. This is what is used behind the
-# scenes by the convenience functions model.<algorithm>_optimize. For a long
-# reconstruction script with multiple steps, it is better to create the
-# reconstructor explicitly.
-#
-# The reconstructor will store the model and dataset and create an appropriate
-# optimizer. This allows the optimizer to persist, along with e.g. estimates
-# of the moments of individual parameters between loops
+# For this script, we use a slightly different pattern where we explicitly
+# create a `Reconstructor` class to orchestrate the reconstruction. The
+# reconstructor will store the model and dataset and create an appropriate
+# optimizer. This allows the optimizer to persist between loops, along with
+# e.g. estimates of the moments of individual parameters
 recon = cdtools.reconstructors.AdamReconstructor(model, dataset)
 
 # The learning rate parameter sets the alpha for Adam.

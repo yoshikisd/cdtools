@@ -45,14 +45,16 @@ class Reconstructor:
     subset : list(int) or int
         Optional, a pattern index or list of pattern indices to use
 
-    Important attributes:
-    - **model** -- Always points to the core model used.
-    - **optimizer** -- A `torch.optim.Optimizer` that must be defined when
-        initializing the Reconstructor subclass.
-    - **scheduler** -- A `torch.optim.lr_scheduler` that may be defined during
-        the `optimize` method.
-    - **data_loader** -- A torch.utils.data.DataLoader that is defined by
-        calling the `setup_dataloader` method.
+    Attributes
+    ----------
+    model : CDIModel
+        Points to the core model used.
+    optimizer : torch.optim.Optimizer
+        Must be defined when initializing the Reconstructor subclass.
+    scheduler : torch.optim.lr_scheduler, optional
+        May be defined during the ``optimize`` method.
+    data_loader : torch.utils.data.DataLoader
+        Defined by calling the ``setup_dataloader`` method.
     """
     def __init__(self,
                  model: CDIModel,
