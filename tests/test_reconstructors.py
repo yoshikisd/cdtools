@@ -91,7 +91,8 @@ def test_Adam_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
           ' reconstruction_device,', reconstruction_device)
     t.manual_seed(0)
 
-    for i, iterations in enumerate(epoch_tup):
+    # We only need to test the first loop to ensure it's identical
+    for i, iterations in enumerate(epoch_tup[:1]):
         for loss in model.Adam_optimize(iterations,
                                         dataset,
                                         lr=lr_tup[i],
@@ -106,14 +107,15 @@ def test_Adam_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
         model.inspect(dataset)
         model.compare(dataset)
 
-    # Ensure equivalency between the model reconstructions
-    assert np.allclose(model_recon.loss_history[-1], model.loss_history[-1])
+    # Ensure equivalency between the model reconstructions during the first
+    # pass, where they should be identical
+    assert np.allclose(model_recon.loss_history[:epoch_tup[0]], model.loss_history[:epoch_tup[0]])
 
     # Ensure reconstructions have reached a certain loss tolerance. This just
     # comes from running a reconstruction when it was working well and
     # choosing a rough value. If it triggers this assertion error, something
     # changed to make the final quality worse!
-    assert model.loss_history[-1] < 0.0001
+    assert model_recon.loss_history[-1] < 0.0001
 
 
 @pytest.mark.slow
@@ -184,7 +186,7 @@ def test_LBFGS_RPI(optical_data_ss_cxi,
     print('Running reconstruction using CDIModel.LBFGS_optimize.' +
           'optimize on provided reconstruction_device,', reconstruction_device)
     t.manual_seed(0)
-    for i, iterations in enumerate(epoch_tup):
+    for i, iterations in enumerate(epoch_tup[:1]):
         for loss in model.LBFGS_optimize(iterations,
                                          dataset,
                                          lr=0.4,
@@ -198,12 +200,12 @@ def test_LBFGS_RPI(optical_data_ss_cxi,
         model.compare(dataset)
 
     # Check loss equivalency between the two reconstructions
-    assert np.allclose(model.loss_history[-1], model_recon.loss_history[-1])
+    assert np.allclose(model.loss_history[:epoch_tup[0]], model_recon.loss_history[:epoch_tup[0]])
 
     # The final loss when testing this was 2.28607e-3. Based on this, we set
     # a threshold of 2.3e-3 for the tested loss. If this value has been
     # exceeded, the reconstructions have gotten worse.
-    assert model.loss_history[-1] < 0.0023
+    assert model_recon.loss_history[-1] < 0.0023
 
 
 @pytest.mark.slow
