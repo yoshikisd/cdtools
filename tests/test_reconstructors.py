@@ -16,7 +16,8 @@ def test_Adam_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
         2) We are only using the single-GPU dataloading method
         3) Ensure `recon.model` points to the original `model`
         4) Reconstructions performed by `Adam.optimize` and
-           `model.Adam_optimize` calls produce identical results.
+           `model.Adam_optimize` calls produce identical results when
+           run over one round of optimization.
         5) The quality of the reconstruction remains below a specified
            threshold.
         5) Ensure that the FancyPtycho model works fine and dandy with the
@@ -129,7 +130,8 @@ def test_LBFGS_RPI(optical_data_ss_cxi,
            hyperparameters
         2) Ensure `recon.model` points to the original `model`
         3) Reconstructions performed by `LBFGS.optimize` and
-           `model.LBFGS_optimize` calls produce identical results.
+           `model.LBFGS_optimize` calls produce identical results when
+           run over one round of reconstruction.
         4) The quality of the reconstruction remains below a specified
            threshold.
         5) Ensure that the RPI model works fine and dandy with the
@@ -216,7 +218,8 @@ def test_SGD_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
            hyperparameters
         3) Ensure `recon.model` points to the original `model`
         4) Reconstructions performed by `SGD.optimize` and
-           `model.SGD_optimize` calls produce identical results.
+           `model.SGD_optimize` calls produce identical results
+           when run over one round of reconstruction.
         5) The quality of the reconstruction remains below a specified
            threshold.
         5) Ensure that the FancyPtycho model works fine and dandy with the
