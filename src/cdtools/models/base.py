@@ -40,6 +40,7 @@ import time
 from scipy import io
 from contextlib import contextmanager
 from cdtools.tools.data import nested_dict_to_h5, h5_to_nested_dict, nested_dict_to_numpy, nested_dict_to_torch
+from cdtools.reconstructors import AdamReconstructor, LBFGSReconstructor, SGDReconstructor
 from cdtools.datasets import CDataset
 from typing import List, Union, Tuple
 import os
@@ -374,31 +375,24 @@ class CDIModel(t.nn.Module):
             only the calculation speed. 
         
         """
-        # We want to have model.Adam_optimize call AND store
-        # cdtools.reconstructors.AdamReconstructor to perform reconstructions
-        # without creating a new reconstructor each time we update the
-        # hyperparameters.
-        #
-        # The only way to do this is to make the Adam reconstructor an
-        # attribute of the model. But since the Adam reconstructor also
-        # depends on CDIModel, this seems to give rise to a circular import
-        # error unless we import cdtools.reconstructors within this method:
-        if not hasattr(self, 'reconstructor'):
-            from cdtools.reconstructors import AdamReconstructor
-            self.reconstructor = AdamReconstructor(model=self,
-                                                   dataset=dataset,
-                                                   subset=subset)
+        reconstructor = AdamReconstructor(
+            model=self,
+            dataset=dataset,
+            subset=subset,
+        )
         
         # Run some reconstructions
-        return self.reconstructor.optimize(iterations=iterations,
-                                           batch_size=batch_size,
-                                           lr=lr,
-                                           betas=betas,
-                                           schedule=schedule,
-                                           amsgrad=amsgrad,
-                                           regularization_factor=regularization_factor, # noqa
-                                           thread=thread,
-                                           calculation_width=calculation_width)
+        return reconstructor.optimize(
+            iterations=iterations,
+            batch_size=batch_size,
+            lr=lr,
+            betas=betas,
+            schedule=schedule,
+            amsgrad=amsgrad,
+            regularization_factor=regularization_factor, # noqa
+            thread=thread,
+            calculation_width=calculation_width,
+        )
 
     def LBFGS_optimize(self,
                        iterations: int,
@@ -445,29 +439,23 @@ class CDIModel(t.nn.Module):
             round of gradient accumulation. Does not affect the result, only
             the calculation speed.
         """
-        # We want to have model.LBFGS_optimize store
-        # cdtools.reconstructors.LBFGSReconstructor as an attribute to run
-        # reconstructions without generating new reconstructors each time
-        # CDIModel.LBFGS_optimize is called.
-        #
-        # Since the LBFGS reconstructor also depends on CDIModel, a circular
-        # import error arises unless we import cdtools.reconstructors within
-        # this method:
-        if not hasattr(self, 'reconstructor'):
-            from cdtools.reconstructors import LBFGSReconstructor
-            self.reconstructor = LBFGSReconstructor(model=self,
-                                                    dataset=dataset,
-                                                    subset=subset)
+        reconstructor = LBFGSReconstructor(
+            model=self,
+            dataset=dataset,
+            subset=subset,
+        )
         
         # Run some reconstructions
-        return self.reconstructor.optimize(iterations=iterations,
-                                           lr=lr,
-                                           history_size=history_size,
-                                           regularization_factor=regularization_factor, # noqa
-                                           thread=thread,
-                                           calculation_width=calculation_width,
-                                           line_search_fn=line_search_fn)
-
+        return reconstructor.optimize(
+            iterations=iterations,
+            lr=lr,
+            history_size=history_size,
+            regularization_factor=regularization_factor, # noqa
+            thread=thread,
+            calculation_width=calculation_width,
+            line_search_fn=line_search_fn,
+        )
+    
     def SGD_optimize(self, 
                      iterations: int,
                      dataset: CDataset,
@@ -520,31 +508,25 @@ class CDIModel(t.nn.Module):
             round of gradient accumulation.
 
         """
-        # We want to have model.SGD_optimize store
-        # cdtools.reconstructors.SGDReconstructor as an attribute to run
-        # reconstructions without generating new reconstructors each time
-        # CDIModel.SGD_optimize is called.
-        #
-        # Since the SGD reconstructor also depends on CDIModel, a circular
-        # import error arises unless we import cdtools.reconstructors within
-        # this method:
-        if not hasattr(self, 'reconstructor'):
-            from cdtools.reconstructors import SGDReconstructor
-            self.reconstructor = SGDReconstructor(model=self, 
-                                                  dataset=dataset, 
-                                                  subset=subset)
+        reconstructor = SGDReconstructor(
+            model=self, 
+            dataset=dataset, 
+            subset=subset,
+        )
 
         # Run some reconstructions
-        return self.reconstructor.optimize(iterations=iterations,
-                                           batch_size=batch_size,
-                                           lr=lr,
-                                           momentum=momentum,
-                                           dampening=dampening,
-                                           weight_decay=weight_decay,
-                                           nesterov=nesterov,
-                                           regularization_factor=regularization_factor, # noqa
-                                           thread=thread,
-                                           calculation_width=calculation_width)
+        return reconstructor.optimize(
+            iterations=iterations,
+            batch_size=batch_size,
+            lr=lr,
+            momentum=momentum,
+            dampening=dampening,
+            weight_decay=weight_decay,
+            nesterov=nesterov,
+            regularization_factor=regularization_factor, # noqa
+            thread=thread,
+            calculation_width=calculation_width,
+        )
 
 
     def report(self):

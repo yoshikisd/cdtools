@@ -6,11 +6,17 @@ The Reconstructor class is designed to resemble so-called
 'Trainer' classes that (in the language of the AI/ML folks) handles
 the 'training' of a model given some dataset and optimizer.
 """
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 import torch as t
-from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
-from cdtools.models import CDIModel
 from typing import List, Union
 from cdtools.reconstructors import Reconstructor
+
+if TYPE_CHECKING:
+    from cdtools.models import CDIModel
+    from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
+    
 
 __all__ = ['SGDReconstructor']
 
@@ -43,11 +49,17 @@ class SGDReconstructor(Reconstructor):
                  dataset: Ptycho2DDataset,
                  subset: List[int] = None):
 
-        super().__init__(model, dataset, subset)
-
         # Define the optimizer for use in this subclass
-        self.optimizer = t.optim.SGD(self.model.parameters())
+        optimizer = t.optim.SGD(model.parameters())
 
+        super().__init__(
+            model,
+            dataset,
+            optimizer,
+            subset=subset,
+        )
+
+        
     def adjust_optimizer(self,
                          lr: int = 0.005,
                          momentum: float = 0,
@@ -82,7 +94,7 @@ class SGDReconstructor(Reconstructor):
 
     def optimize(self,
                  iterations: int,
-                 batch_size: int = None,
+                 batch_size: int = 15,
                  lr: float = 2e-7,
                  momentum: float = 0,
                  dampening: float = 0,
@@ -133,25 +145,20 @@ class SGDReconstructor(Reconstructor):
             Optional, enable/disable shuffling of the dataset. This option
             is intended for diagnostic purposes and should be left as True.
         """
-        # 1) The subset statement is contained in Reconstructor.__init__
 
-        # 2) Set up / re-initialize the data laoder
-        if batch_size is not None:
-            self.setup_dataloader(batch_size=batch_size, shuffle=shuffle)
-        else:
-            # Use default torch dataloader parameters
-            self.setup_dataloader(batch_size=1, shuffle=False)
-
-        # 3) The optimizer is created in self.__init__, but the
-        #    hyperparameters need to be set up with self.adjust_optimizer
+        # The optimizer is created in self.__init__, but the
+        # hyperparameters need to be set up with self.adjust_optimizer
         self.adjust_optimizer(lr=lr,
                               momentum=momentum,
                               dampening=dampening,
                               weight_decay=weight_decay,
                               nesterov=nesterov)
 
-        # 4) This is analagous to making a call to CDIModel.AD_optimize
-        return super(SGDReconstructor, self).optimize(iterations,
-                                                      regularization_factor,
-                                                      thread,
-                                                      calculation_width)
+        # Now, we run the optimize routine defined in the base class
+        return super(SGDReconstructor, self).optimize(
+            iterations,
+            batch_size=batch_size,
+            regularization_factor=regularization_factor,
+            thread=thread,
+            calculation_width=calculation_width,
+        )

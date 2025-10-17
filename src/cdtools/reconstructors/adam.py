@@ -6,11 +6,16 @@ The Reconstructor class is designed to resemble so-called
 'Trainer' classes that (in the language of the AI/ML folks) handles
 the 'training' of a model given some dataset and optimizer.
 """
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 import torch as t
-from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
-from cdtools.models import CDIModel
 from typing import Tuple, List, Union
 from cdtools.reconstructors import Reconstructor
+
+if TYPE_CHECKING:
+    from cdtools.models import CDIModel
+    from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
 
 __all__ = ['AdamReconstructor']
 
@@ -46,10 +51,12 @@ class AdamReconstructor(Reconstructor):
                  dataset: Ptycho2DDataset,
                  subset: List[int] = None):
 
-        super().__init__(model, dataset, subset)
-
         # Define the optimizer for use in this subclass
-        self.optimizer = t.optim.Adam(self.model.parameters())
+        optimizer = t.optim.Adam(model.parameters())
+
+        super().__init__(model, dataset, optimizer, subset=subset)
+
+
 
     def adjust_optimizer(self,
                          lr: int = 0.005,
@@ -74,11 +81,13 @@ class AdamReconstructor(Reconstructor):
             param_group['betas'] = betas
             param_group['amsgrad'] = amsgrad
 
+        
     def optimize(self,
                  iterations: int,
                  batch_size: int = 15,
                  lr: float = 0.005,
                  betas: Tuple[float] = (0.9, 0.999),
+                 custom_data_loader: t.utils.data.DataLoader = None,
                  schedule: bool = False,
                  amsgrad: bool = False,
                  regularization_factor: Union[float, List[float]] = None,
@@ -94,6 +103,12 @@ class AdamReconstructor(Reconstructor):
         (formerly `CDIModel.AD_optimize`) to run a round of reconstruction
         once the dataloader and optimizer hyperparameters have been
         set up.
+        
+        The `batch_size` parameter sets the batch size for the default
+        dataloader. If a custom data loader is desired, it can be passed
+        in to the `custom_data_loader` argument, which will override the
+        `batch_size` and `shuffle` parameters
+
 
         Parameters
         ----------
@@ -110,6 +125,9 @@ class AdamReconstructor(Reconstructor):
         schedule : bool
             Optional, create a learning rate scheduler
             (torch.optim.lr_scheduler._LRScheduler).
+        custom_data_loader : t.utils.data.DataLoader
+            Optional, a custom DataLoader to use. If set, will override
+            batch_size.
         amsgrad : bool
             Optional, whether to use the AMSGrad variant of this algorithm.
         regularization_factor : float or list(float)
@@ -133,18 +151,13 @@ class AdamReconstructor(Reconstructor):
             f'{regularization_factor}, and schedule = {schedule}.\n'
         )
 
-        # 1) The subset statement is contained in Reconstructor.__init__
-
-        # 2) Set up / re-initialize the data laoder
-        self.setup_dataloader(batch_size=batch_size, shuffle=shuffle)
-
-        # 3) The optimizer is created in self.__init__, but the
-        #    hyperparameters need to be set up with self.adjust_optimizer
+        # The optimizer is created in self.__init__, but the
+        # hyperparameters need to be set up with self.adjust_optimizer
         self.adjust_optimizer(lr=lr,
                               betas=betas,
                               amsgrad=amsgrad)
 
-        # 4) Set up the scheduler
+        # Set up the scheduler
         if schedule:
             self.scheduler = \
                 t.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
@@ -153,8 +166,13 @@ class AdamReconstructor(Reconstructor):
         else:
             self.scheduler = None
 
-        # 5) This is analagous to making a call to CDIModel.AD_optimize
-        return super(AdamReconstructor, self).optimize(iterations,
-                                                       regularization_factor,
-                                                       thread,
-                                                       calculation_width)
+        # Now, we run the optimize routine defined in the base class
+        return super(AdamReconstructor, self).optimize(
+            iterations,
+            batch_size=batch_size,
+            custom_data_loader=custom_data_loader,
+            regularization_factor=regularization_factor,
+            thread=thread,
+            calculation_width=calculation_width,
+            shuffle=shuffle,
+        )

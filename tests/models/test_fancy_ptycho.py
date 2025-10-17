@@ -56,8 +56,8 @@ def test_lab_ptycho(lab_ptycho_cxi, reconstruction_device, show_plot):
         dataset,
         n_modes=3,
         oversampling=2,
-        exponentiate_obj=True,
         dm_rank=2,
+        exponentiate_obj=True,
         probe_support_radius=120,
         propagation_distance=5e-3,
         units='mm',
@@ -70,12 +70,17 @@ def test_lab_ptycho(lab_ptycho_cxi, reconstruction_device, show_plot):
     model.to(device=reconstruction_device)
     dataset.get_as(device=reconstruction_device)
 
-    for loss in model.Adam_optimize(70, dataset, lr=0.02, batch_size=10):
+    for loss in model.Adam_optimize(50, dataset, lr=0.02, batch_size=10):
         print(model.report())
         if show_plot and model.epoch % 10 == 0:
             model.inspect(dataset)
 
     for loss in model.Adam_optimize(50, dataset, lr=0.005, batch_size=50):
+        print(model.report())
+        if show_plot and model.epoch % 10 == 0:
+            model.inspect(dataset)
+            
+    for loss in model.Adam_optimize(25, dataset, lr=0.001, batch_size=50):
         print(model.report())
         if show_plot and model.epoch % 10 == 0:
             model.inspect(dataset)
