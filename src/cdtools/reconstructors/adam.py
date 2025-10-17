@@ -87,7 +87,7 @@ class AdamReconstructor(Reconstructor):
                  batch_size: int = 15,
                  lr: float = 0.005,
                  betas: Tuple[float] = (0.9, 0.999),
-                 custom_data_loader = None,
+                 custom_data_loader: t.utils.data.DataLoader = None,
                  schedule: bool = False,
                  amsgrad: bool = False,
                  regularization_factor: Union[float, List[float]] = None,

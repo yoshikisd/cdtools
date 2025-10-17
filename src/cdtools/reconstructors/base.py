@@ -232,7 +232,7 @@ class Reconstructor:
     def optimize(self,
                  iterations: int,
                  batch_size: int = 1,
-                 custom_data_loader = None,
+                 custom_data_loader: torch.utils.data.DataLoader = None,
                  regularization_factor: Union[float, List[float]] = None,
                  thread: bool = True,
                  calculation_width: int = 10,
