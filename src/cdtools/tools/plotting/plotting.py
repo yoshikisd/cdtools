@@ -578,7 +578,11 @@ def plot_translations(translations, fig=None, units='$\\mu$m', lines=True, inver
              linewidth=linewidth)
     
     if invert_xaxis:
-        plt.gca().invert_xaxis()
+        ax = plt.gca()
+        x_min, x_max = ax.get_xlim()
+        # Protect against flipping twice if plotting on top of existing graph
+        if x_min <= x_max:
+            ax.invert_xaxis()
         
     plt.xlabel('X (' + units + ')')
     plt.ylabel('Y (' + units + ')')
