@@ -16,7 +16,8 @@ def test_Adam_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
         2) We are only using the single-GPU dataloading method
         3) Ensure `recon.model` points to the original `model`
         4) Reconstructions performed by `Adam.optimize` and
-           `model.Adam_optimize` calls produce identical results.
+           `model.Adam_optimize` calls produce identical results when
+           run over one round of optimization.
         5) The quality of the reconstruction remains below a specified
            threshold.
         5) Ensure that the FancyPtycho model works fine and dandy with the
@@ -24,7 +25,7 @@ def test_Adam_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
     """
 
     print('\nTesting performance on the standard gold balls dataset ' +
-          'with reconstructors.Adam')
+          'with reconstructors.AdamReconstructor')
 
     dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(gold_ball_cxi)
     pad = 10
@@ -48,11 +49,12 @@ def test_Adam_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
     model_recon.to(device=reconstruction_device)
     dataset.get_as(device=reconstruction_device)
 
-    # ******* Reconstructions with cdtools.reconstructors.Adam.optimize *******
-    print('Running reconstruction using cdtools.reconstructors.Adam.optimize' +
+    # ******* Reconstructions with AdamReconstructor.optimize *******
+    print('Running reconstruction using AdamReconstructor.optimize' +
           ' on provided reconstruction_device,', reconstruction_device)
 
-    recon = cdtools.reconstructors.Adam(model=model_recon, dataset=dataset)
+    recon = cdtools.reconstructors.AdamReconstructor(model=model_recon,
+                                                     dataset=dataset)
     t.manual_seed(0)
 
     # Run a reconstruction
@@ -85,12 +87,13 @@ def test_Adam_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
         model_recon.inspect(dataset)
         model_recon.compare(dataset)
 
-    # ******* Reconstructions with cdtools.CDIModel.Adam_optimize *******
+    # ******* Reconstructions with CDIModel.Adam_optimize *******
     print('Running reconstruction using CDIModel.Adam_optimize on provided' +
           ' reconstruction_device,', reconstruction_device)
     t.manual_seed(0)
 
-    for i, iterations in enumerate(epoch_tup):
+    # We only need to test the first loop to ensure it's identical
+    for i, iterations in enumerate(epoch_tup[:1]):
         for loss in model.Adam_optimize(iterations,
                                         dataset,
                                         lr=lr_tup[i],
@@ -105,14 +108,15 @@ def test_Adam_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
         model.inspect(dataset)
         model.compare(dataset)
 
-    # Ensure equivalency between the model reconstructions
-    assert np.allclose(model_recon.loss_history[-1], model.loss_history[-1])
+    # Ensure equivalency between the model reconstructions during the first
+    # pass, where they should be identical
+    assert np.allclose(model_recon.loss_history[:epoch_tup[0]], model.loss_history[:epoch_tup[0]])
 
     # Ensure reconstructions have reached a certain loss tolerance. This just
     # comes from running a reconstruction when it was working well and
     # choosing a rough value. If it triggers this assertion error, something
     # changed to make the final quality worse!
-    assert model.loss_history[-1] < 0.0001
+    assert model_recon.loss_history[-1] < 0.0001
 
 
 @pytest.mark.slow
@@ -126,7 +130,8 @@ def test_LBFGS_RPI(optical_data_ss_cxi,
            hyperparameters
         2) Ensure `recon.model` points to the original `model`
         3) Reconstructions performed by `LBFGS.optimize` and
-           `model.LBFGS_optimize` calls produce identical results.
+           `model.LBFGS_optimize` calls produce identical results when
+           run over one round of reconstruction.
         4) The quality of the reconstruction remains below a specified
            threshold.
         5) Ensure that the RPI model works fine and dandy with the
@@ -150,11 +155,12 @@ def test_LBFGS_RPI(optical_data_ss_cxi,
     model_recon.to(device=reconstruction_device)
     dataset.get_as(device=reconstruction_device)
 
-    # ******* Reconstructions with cdtools.reconstructors.LBFGS.optimize ******
-    print('Running reconstruction using cdtools.reconstructors.LBFGS.' +
+    # ******* Reconstructions with LBFGSReconstructor.optimize ******
+    print('Running reconstruction using LBFGSReconstructor.' +
           'optimize on provided reconstruction_device,', reconstruction_device)
 
-    recon = cdtools.reconstructors.LBFGS(model=model_recon, dataset=dataset)
+    recon = cdtools.reconstructors.LBFGSReconstructor(model=model_recon,
+                                                      dataset=dataset)
     t.manual_seed(0)
 
     # Run a reconstruction
@@ -178,11 +184,11 @@ def test_LBFGS_RPI(optical_data_ss_cxi,
     # Check model pointing
     assert id(model_recon) == id(recon.model)
 
-    # ******* Reconstructions with cdtools.reconstructors.LBFGS.optimize ******
+    # ******* Reconstructions with CDIModel.LBFGS_optimize ******
     print('Running reconstruction using CDIModel.LBFGS_optimize.' +
           'optimize on provided reconstruction_device,', reconstruction_device)
     t.manual_seed(0)
-    for i, iterations in enumerate(epoch_tup):
+    for i, iterations in enumerate(epoch_tup[:1]):
         for loss in model.LBFGS_optimize(iterations,
                                          dataset,
                                          lr=0.4,
@@ -196,12 +202,12 @@ def test_LBFGS_RPI(optical_data_ss_cxi,
         model.compare(dataset)
 
     # Check loss equivalency between the two reconstructions
-    assert np.allclose(model.loss_history[-1], model_recon.loss_history[-1])
+    assert np.allclose(model.loss_history[:epoch_tup[0]], model_recon.loss_history[:epoch_tup[0]])
 
     # The final loss when testing this was 2.28607e-3. Based on this, we set
     # a threshold of 2.3e-3 for the tested loss. If this value has been
     # exceeded, the reconstructions have gotten worse.
-    assert model.loss_history[-1] < 0.0023
+    assert model_recon.loss_history[-1] < 0.0023
 
 
 @pytest.mark.slow
@@ -212,7 +218,8 @@ def test_SGD_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
            hyperparameters
         3) Ensure `recon.model` points to the original `model`
         4) Reconstructions performed by `SGD.optimize` and
-           `model.SGD_optimize` calls produce identical results.
+           `model.SGD_optimize` calls produce identical results
+           when run over one round of reconstruction.
         5) The quality of the reconstruction remains below a specified
            threshold.
         5) Ensure that the FancyPtycho model works fine and dandy with the
@@ -223,7 +230,7 @@ def test_SGD_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
     to do some kind of comparative assessment.
     """
     print('\nTesting performance on the standard gold balls dataset ' +
-          'with reconstructors.SGD')
+          'with reconstructors.SGDReconstructor')
 
     dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(gold_ball_cxi)
     pad = 10
@@ -247,11 +254,12 @@ def test_SGD_gold_balls(gold_ball_cxi, reconstruction_device, show_plot):
     model_recon.to(device=reconstruction_device)
     dataset.get_as(device=reconstruction_device)
 
-    # ******* Reconstructions with cdtools.reconstructors.SGD.optimize *******
-    print('Running reconstruction using cdtools.reconstructors.SGD.optimize' +
+    # ******* Reconstructions with SGDReconstructor.optimize *******
+    print('Running reconstruction using SGDReconstructor.optimize' +
           ' on provided reconstruction_device,', reconstruction_device)
 
-    recon = cdtools.reconstructors.SGD(model=model_recon, dataset=dataset)
+    recon = cdtools.reconstructors.SGDReconstructor(model=model_recon,
+                                                    dataset=dataset)
     t.manual_seed(0)
 
     # Run a reconstruction

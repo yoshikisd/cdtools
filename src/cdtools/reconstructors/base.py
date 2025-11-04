@@ -9,17 +9,23 @@ The subclasses of Reconstructor are required to implement
 their own data loaders and optimizer adjusters
 """
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 import torch as t
+import torch.distributed as dist
 from torch.utils import data as td
 from torch.utils.data.distributed import DistributedSampler
-import torch.distributed as dist
 import threading
 import queue
 import time
-from cdtools.datasets import CDataset
-from cdtools.models import CDIModel
-import cdtools.tools.distributed as cdtdist
 from typing import List, Union
+import cdtools.tools.distributed as cdtdist
+
+if TYPE_CHECKING:
+    from cdtools.models import CDIModel
+    from cdtools.datasets import CDataset
+    
 
 __all__ = ['Reconstructor']
 
@@ -38,46 +44,51 @@ class Reconstructor:
         Model for CDI/ptychography reconstruction
     dataset: CDataset
         The dataset to reconstruct against
+    optimizer: torch.optim.Optimizer
+        The optimizer to use for the reconstruction
     subset : list(int) or int
         Optional, a pattern index or list of pattern indices to use
 
-    Important attributes:
-    - **model** -- Always points to the core model used.
-    - **optimizer** -- A `torch.optim.Optimizer` that must be defined when
-        initializing the Reconstructor subclass.
-    - **scheduler** -- A `torch.optim.lr_scheduler` that may be defined during
-        the `optimize` method.
-    - **data_loader** -- A torch.utils.data.DataLoader that is defined by
-        calling the `setup_dataloader` method.
+    Attributes
+    ----------
+    model : CDIModel
+        Points to the core model used.
+    optimizer : torch.optim.Optimizer
+        Must be defined when initializing the Reconstructor subclass.
+    scheduler : torch.optim.lr_scheduler, optional
+        May be defined during the ``optimize`` method.
+    data_loader : torch.utils.data.DataLoader
+        Defined by calling the ``setup_dataloader`` method.
     """
     def __init__(self,
                  model: CDIModel,
                  dataset: CDataset,
+                 optimizer: t.optim.Optimizer,
                  subset: Union[int, List[int]] = None):
+        
         # Store parameters as attributes of Reconstructor
-        self.subset = subset
-
-        # Initialize attributes that must be defined by the subclasses
-        self.optimizer = None
-        self.scheduler = None
-        self.data_loader = None
-
-        # Store the original model
         self.model = model
+        self.optimizer = optimizer
 
-        # Store the dataset
+        # Store the dataset, clipping it to a subset if needed
         if subset is not None:
             # if subset is just one pattern, turn into a list for convenience
             if isinstance(subset, int):
                 subset = [subset]
             dataset = td.Subset(dataset, subset)
+
         self.dataset = dataset
+
+        # Initialize attributes that must be defined by the subclasses
+        self.scheduler = None
+        self.data_loader = None
+
 
     def setup_dataloader(self,
                          batch_size: int = None,
                          shuffle: bool = True):
         """
-        Sets up / re-initializes the dataloader.
+        Sets up or re-initializes the dataloader.
 
         Parameters
         ----------
@@ -121,13 +132,14 @@ class Reconstructor:
         """
         raise NotImplementedError()
 
-    def _run_epoch(self,
+    
+    def run_epoch(self,
                    stop_event: threading.Event = None,
                    regularization_factor: Union[float, List[float]] = None,
                    calculation_width: int = 10):
         """
         Runs one full epoch of the reconstruction. Intended to be called
-        by Optimizer.optimize.
+        by Reconstructor.optimize.
 
         Parameters
         ----------
@@ -148,12 +160,25 @@ class Reconstructor:
             The summed loss over the latest epoch, divided by the total
             diffraction pattern intensity
         """
+
+        # Setting this as an explicit catch makes me feel more comfortable
+        # exposing it as a public method. This way a user won't be confused
+        # if they try to use this directly
+        if self.data_loader is None:
+            raise RuntimeError(
+                'No data loader was defined. Please run '
+                'Reconstructor.setup_dataloader() before running '
+                'Reconstructor.run_epoch(), or use Reconstructor.optimize(), '
+                'which does it automatically.'
+            )
+
         # If we're using DistributedSampler (i.e., multi-GPU useage), we need
         # to tell it which epoch we're on. Otherwise data shuffling will not
         # work properly
         if self.model.multi_gpu_used:
             self.data_loader.sampler.set_epoch(self.model.epoch)
-
+        
+        
         # Initialize some tracking variables
         normalization = 0
         loss = 0
@@ -192,7 +217,7 @@ class Reconstructor:
                     sim_patterns = self.model.forward(*inp)
 
                     # Calculate the loss
-                    if hasattr(self, 'mask'):
+                    if hasattr(self.model, 'mask'):
                         loss = self.model.loss(pats,
                                                sim_patterns,
                                                mask=self.model.mask)
@@ -255,9 +280,12 @@ class Reconstructor:
 
     def optimize(self,
                  iterations: int,
+                 batch_size: int = 1,
+                 custom_data_loader: torch.utils.data.DataLoader = None,
                  regularization_factor: Union[float, List[float]] = None,
                  thread: bool = True,
-                 calculation_width: int = 10):
+                 calculation_width: int = 10,
+                 shuffle=True):
         """
         Runs a round of reconstruction using the provided optimizer
 
@@ -276,10 +304,25 @@ class Reconstructor:
         the plots. This behavior can be turned off by setting the keyword
         argument 'thread' to False.
 
+        The `batch_size` parameter sets the batch size for the default
+        dataloader. If a custom data loader is desired, it can be passed
+        in to the `custom_data_loader` argument, which will override the
+        `batch_size` and `shuffle` parameters
+
+        Please see `AdamReconstructor.optimize()` for an example of how to
+        override this function when designing a subclass
+
         Parameters
         ----------
         iterations : int
             How many epochs of the algorithm to run.
+        batch_size : int
+            Optional, the batch size to use. Default is 1. This is typically
+            overridden by subclasses with an appropriate default for the
+            specific optimizer.
+        custom_data_loader : torch.utils.data.DataLoader
+            Optional, a custom DataLoader to use. Will override batch_size
+            if set.
         regularization_factor : float or list(float)
             Optional, if the model has a regularizer defined, the set of
             parameters to pass the regularizer method.
@@ -290,6 +333,10 @@ class Reconstructor:
             Default 10, how many translations to pass through at once for each
             round of gradient accumulation. This does not affect the result,
             but may affect the calculation speed.
+        shuffle : bool
+            Optional, enable/disable shuffling of the dataset. This option
+            is intended for diagnostic purposes and should be left as True.
+
 
         Yields
         ------
@@ -297,6 +344,11 @@ class Reconstructor:
             The summed loss over the latest epoch, divided by the total
             diffraction pattern intensity.
         """
+
+        if custom_data_loader is None:
+            self.setup_dataloader(batch_size=batch_size, shuffle=shuffle)
+        else:
+            self.data_loader = custom_data_loader
 
         # We store the current optimizer as a model parameter so that
         # it can be saved and loaded for checkpointing
@@ -313,8 +365,10 @@ class Reconstructor:
                         yield float('nan')
                     continue
 
-                yield self._run_epoch(regularization_factor=regularization_factor, # noqa
-                                      calculation_width=calculation_width)
+                yield self.run_epoch(
+                    regularization_factor=regularization_factor, # noqa
+                    calculation_width=calculation_width,
+                )
 
         # But if we do want to thread, it's annoying:
         else:
@@ -325,9 +379,12 @@ class Reconstructor:
             def target():
                 try:
                     result_queue.put(
-                        self._run_epoch(stop_event=stop_event,
-                                        regularization_factor=regularization_factor, # noqa
-                                        calculation_width=calculation_width))
+                        self.run_epoch(
+                            stop_event=stop_event,
+                            regularization_factor=regularization_factor, # noqa
+                            calculation_width=calculation_width,
+                        )
+                    )
                 except Exception as e:
                     # If something bad happens, put the exception into the
                     # result queue

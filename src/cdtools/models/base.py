@@ -36,6 +36,7 @@ import numpy as np
 import time
 from contextlib import contextmanager
 from cdtools.tools.data import nested_dict_to_h5, h5_to_nested_dict, nested_dict_to_numpy, nested_dict_to_torch
+from cdtools.reconstructors import AdamReconstructor, LBFGSReconstructor, SGDReconstructor
 from cdtools.datasets import CDataset
 from typing import List, Union, Tuple
 import os
@@ -347,7 +348,6 @@ class CDIModel(t.nn.Module):
 
         self.current_checkpoint_id += 1
 
-    
     def Adam_optimize(
             self,
             iterations: int,
@@ -364,7 +364,7 @@ class CDIModel(t.nn.Module):
     ):
         """
         Runs a round of reconstruction using the Adam optimizer from
-        cdtools.reconstructors.Adam.
+        cdtools.reconstructors.AdamReconstructor.
 
         This is generally accepted to be the most robust algorithm for use
         with ptychography. Like all the other optimization routines,
@@ -403,45 +403,38 @@ class CDIModel(t.nn.Module):
             only the calculation speed. 
         
         """
-        # We want to have model.Adam_optimize call AND store cdtools.reconstructors.Adam
-        # to perform reconstructions without creating a new reconstructor each time we 
-        # update the hyperparameters.
-        # 
-        # The only way to do this is to make the Adam reconstructor an attribute
-        # of the model. But since the Adam reconstructor also depends on CDIModel,
-        # this seems to give rise to a circular import error unless
-        # we import cdtools.reconstructors within this method:
-        if not hasattr(self, 'reconstructor'):
-            from cdtools.reconstructors import Adam
-            self.reconstructor = Adam(model=self, 
-                                  dataset=dataset, 
-                                  subset=subset)
+        reconstructor = AdamReconstructor(
+            model=self,
+            dataset=dataset,
+            subset=subset,
+        )
         
         # Run some reconstructions
-        return self.reconstructor.optimize(iterations=iterations,
-                                       batch_size=batch_size,
-                                       lr=lr,
-                                       betas=betas,
-                                       schedule=schedule,
-                                       amsgrad=amsgrad,
-                                       regularization_factor=regularization_factor,
-                                       thread=thread,
-                                       calculation_width=calculation_width)
+        return reconstructor.optimize(
+            iterations=iterations,
+            batch_size=batch_size,
+            lr=lr,
+            betas=betas,
+            schedule=schedule,
+            amsgrad=amsgrad,
+            regularization_factor=regularization_factor, # noqa
+            thread=thread,
+            calculation_width=calculation_width,
+        )
 
-
-    def LBFGS_optimize(self, 
-                       iterations: int, 
+    def LBFGS_optimize(self,
+                       iterations: int,
                        dataset: CDataset,
                        lr: float = 0.1,
-                       history_size: int = 2, 
+                       history_size: int = 2,
                        subset: Union[int, List[int]] = None,
-                       regularization_factor: Union[float, List[float]] =None, 
+                       regularization_factor: Union[float, List[float]] =None,
                        thread: bool = True,
-                       calculation_width: int = 10, 
+                       calculation_width: int = 10,
                        line_search_fn: str = None):
         """
         Runs a round of reconstruction using the L-BFGS optimizer from
-        cdtools.reconstructors.LBFGS.
+        cdtools.reconstructors.LBFGSReconstructor.
 
         This algorithm is often less stable that Adam, however in certain
         situations or geometries it can be shockingly efficient. Like all
@@ -464,53 +457,49 @@ class CDIModel(t.nn.Module):
         subset : list(int) or int
             Optional, a pattern index or list of pattern indices to use.
         regularization_factor : float or list(float)
-            Optional, if the model has a regularizer defined, the set of parameters 
-            to pass the regularizer method.
+            Optional, if the model has a regularizer defined, the set of
+            parameters to pass the regularizer method.
         thread : bool
-            Default True, whether to run the computation in a separate thread to allow 
-            interaction with plots during computation.
+            Default True, whether to run the computation in a separate thread
+            to allow interaction with plots during computation.
         calculation_width : int
-            Default 10, how many translations to pass through at once for each round of 
-            gradient accumulation. Does not affect the result, only the calculation speed 
+            Default 10, how many translations to pass through at once for each
+            round of gradient accumulation. Does not affect the result, only
+            the calculation speed.
         """
-        # We want to have model.LBFGS_optimize store cdtools.reconstructors.LBFGS
-        # as an attribute to run reconstructions without generating new reconstructors
-        # each time CDIModel.LBFGS_optimize is called.
-        # 
-        # Since the LBFGS reconstructor also depends on CDIModel, a circular import error 
-        # arises unless we import cdtools.reconstructors within this method:
-        if not hasattr(self, 'reconstructor'):
-            from cdtools.reconstructors import LBFGS
-            self.reconstructor = LBFGS(model=self, 
-                                   dataset=dataset, 
-                                   subset=subset)
+        reconstructor = LBFGSReconstructor(
+            model=self,
+            dataset=dataset,
+            subset=subset,
+        )
         
         # Run some reconstructions
-        return self.reconstructor.optimize(iterations=iterations,
-                                       lr=lr,
-                                       history_size=history_size,
-                                       regularization_factor=regularization_factor,
-                                       thread=thread,
-                                       calculation_width=calculation_width,
-                                       line_search_fn = line_search_fn)
-
-
+        return reconstructor.optimize(
+            iterations=iterations,
+            lr=lr,
+            history_size=history_size,
+            regularization_factor=regularization_factor, # noqa
+            thread=thread,
+            calculation_width=calculation_width,
+            line_search_fn=line_search_fn,
+        )
+    
     def SGD_optimize(self, 
-                     iterations: int, 
-                     dataset: CDataset, 
+                     iterations: int,
+                     dataset: CDataset,
                      batch_size: int = None,
-                     lr: float = 2e-7, 
-                     momentum: float = 0, 
-                     dampening: float = 0, 
+                     lr: float = 2e-7,
+                     momentum: float = 0,
+                     dampening: float = 0,
                      weight_decay: float = 0,
-                     nesterov: bool = False, 
-                     subset: Union[int, List[int]] = None, 
+                     nesterov: bool = False,
+                     subset: Union[int, List[int]] = None,
                      regularization_factor: Union[float, List[float]] = None,
-                     thread: bool = True, 
+                     thread: bool = True,
                      calculation_width: int = 10):
         """
         Runs a round of reconstruction using the SGD optimizer from
-        cdtools.reconstructors.SGD.
+        cdtools.reconstructors.SGDReconstructor.
 
         This algorithm is often less stable that Adam, but it is simpler
         and is the basic workhorse of gradience descent.
@@ -547,29 +536,25 @@ class CDIModel(t.nn.Module):
             round of gradient accumulation.
 
         """
-        # We want to have model.SGD_optimize store cdtools.reconstructors.SGD
-        # as an attribute to run reconstructions without generating new reconstructors
-        # each time CDIModel.SGD_optimize is called.
-        # 
-        # Since the SGD reconstructor also depends on CDIModel, a circular import error 
-        # arises unless we import cdtools.reconstructors within this method:
-        if not hasattr(self, 'reconstructor'):
-            from cdtools.reconstructors import SGD
-            self.reconstructor = SGD(model=self, 
-                                 dataset=dataset, 
-                                 subset=subset)
-    
+        reconstructor = SGDReconstructor(
+            model=self, 
+            dataset=dataset, 
+            subset=subset,
+        )
+
         # Run some reconstructions
-        return self.reconstructor.optimize(iterations=iterations,
-                                       batch_size=batch_size,
-                                       lr=lr,
-                                       momentum=momentum,
-                                       dampening=dampening,
-                                       weight_decay=weight_decay,
-                                       nesterov=nesterov,
-                                       regularization_factor=regularization_factor,
-                                       thread=thread,
-                                       calculation_width=calculation_width)
+        return reconstructor.optimize(
+            iterations=iterations,
+            batch_size=batch_size,
+            lr=lr,
+            momentum=momentum,
+            dampening=dampening,
+            weight_decay=weight_decay,
+            nesterov=nesterov,
+            regularization_factor=regularization_factor, # noqa
+            thread=thread,
+            calculation_width=calculation_width,
+        )
 
 
     def report(self):

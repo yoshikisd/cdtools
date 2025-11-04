@@ -1,4 +1,4 @@
-"""This module contains the LBFGS Reconstructor subclass for performing
+"""This module contains the LBFGSReconstructor subclass for performing
 optimization ('reconstructions') on ptychographic/CDI models using
 the LBFGS optimizer.
 
@@ -6,18 +6,24 @@ The Reconstructor class is designed to resemble so-called
 'Trainer' classes that (in the language of the AI/ML folks) handles
 the 'training' of a model given some dataset and optimizer.
 """
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 import torch as t
-from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
-from cdtools.models import CDIModel
 from typing import List, Union
 from cdtools.reconstructors import Reconstructor
 
-__all__ = ['LBFGS']
+if TYPE_CHECKING:
+    from cdtools.models import CDIModel
+    from cdtools.datasets.ptycho_2d_dataset import Ptycho2DDataset
 
 
-class LBFGS(Reconstructor):
+__all__ = ['LBFGSReconstructor']
+
+
+class LBFGSReconstructor(Reconstructor):
     """
-    The LBFGS Reconstructor subclass handles the optimization
+    The LBFGSReconstructor subclass handles the optimization
     ('reconstruction') of ptychographic models and datasets using the LBFGS
     optimizer.
 
@@ -47,10 +53,16 @@ class LBFGS(Reconstructor):
                  dataset: Ptycho2DDataset,
                  subset: List[int] = None):
 
-        super().__init__(model, dataset, subset)
-
         # Define the optimizer for use in this subclass
-        self.optimizer = t.optim.LBFGS(self.model.parameters())
+        optimizer = t.optim.LBFGS(model.parameters())
+        
+        super().__init__(
+            model,
+            dataset,
+            optimizer,
+            subset=subset,
+        )
+
 
     def adjust_optimizer(self,
                          lr: int = 0.005,
@@ -115,20 +127,17 @@ class LBFGS(Reconstructor):
             round of gradient accumulation. Does not affect the result, only
             the calculation speed.
         """
-        # 1) The subset statement is contained in Reconstructor.__init__
 
-        # 2) Set up / re-initialize the data loader. For LBFGS, we load
-        #    all the data at once.
-        self.setup_dataloader(batch_size=len(self.dataset))
-
-        # 3) The optimizer is created in self.__init__, but the
-        #    hyperparameters need to be set up with self.adjust_optimizer
+        # The optimizer is created in self.__init__, but the
+        # hyperparameters need to be set up with self.adjust_optimizer
         self.adjust_optimizer(lr=lr,
                               history_size=history_size,
                               line_search_fn=line_search_fn)
 
-        # 4) This is analagous to making a call to CDIModel.AD_optimize
-        return super(LBFGS, self).optimize(iterations,
-                                           regularization_factor,
-                                           thread,
-                                           calculation_width)
+        # Now, we run the optimize routine defined in the base class
+        return super(LBFGSReconstructor, self).optimize(
+            iterations,
+            batch_size=len(self.dataset),
+            regularization_factor=regularization_factor,
+            thread=thread,
+            calculation_width=calculation_width)
