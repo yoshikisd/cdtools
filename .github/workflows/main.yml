@@ -35,7 +35,8 @@ jobs:
           uv pip install ."[tests]"
 
       - name: Run tests
-        run: python -m pytest
+        run: |
+          uv run pytest
 
   build-docs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
