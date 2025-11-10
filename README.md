@@ -26,11 +26,56 @@ model.compare(dataset) # See how the simulated and measured patterns compare
 plt.show()
 ```
 
+# Installation
+
+CDTools can be installed in several ways depending on your needs. For most users, installation from pypi is recommended. For developers or those who want the latest features, installation from source is available.
+
+## Installation from pypi
+
 CDTools can be installed via pip as the [cdtools-py](https://pypi.org/project/cdtools-py/) package on [PyPI](https://pypi.org/):
 
 ```bash
 $ pip install cdtools-py
 ```
+
+or using [uv](https://github.com/astral-sh/uv):
+
+```bash
+$ uv pip install cdtools-py
+```
+
+## Installation from Source
+
+For development or to access the latest features, CDTools can be installed directly from source:
+
+
+```bash
+$ git clone https://github.com/cdtools-developers/cdtools.git
+$ cd cdtools
+$ pip install -e .
+```
+
+
+or using [uv](https://github.com/astral-sh/uv):
+
+```bash
+$ git clone https://github.com/cdtools-developers/cdtools.git
+$ cd cdtools
+$ uv pip install -e .
+```
+
+## Installing for Contributors (with tests and docs dependencies)
+
+If you want to run the test suite or build the documentation, install with the extra dependencies:
+
+```bash
+$ pip install -e ."[tests,docs]"
+```
+or with uv:
+```bash
+$ uv pip install -e ."[tests,docs]"
+```
+
 
 Further documentation is found [here](https://cdtools-developers.github.io/cdtools/).
 
