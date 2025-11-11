@@ -1,7 +1,7 @@
 Installation
 ============
 
-CDTools supports python >=3.8 and can be installed via pip as the the `cdtools-py`_ package on `PyPI`_. If you plan to contribute to the code or need a custom environment, installation from source is also possible.
+CDTools supports python >=3.9 and can be installed via pip as the the `cdtools-py`_ package on `PyPI`_. If you plan to contribute to the code or need a custom environment, installation from source is also possible.
 
 .. _`cdtools-py`: https://pypi.org/project/cdtools-py/
 .. _`PyPI`: https://pypi.org/
@@ -80,7 +80,7 @@ or using uv:
 
    $ uv pip install -e ."[tests,docs]"
 
-CDTools is reguarly tested with the latest versions of these packages and with python 3.8 through 3.12.
+CDTools is reguarly tested with the latest versions of these packages and with python 3.9 through 3.14.
 
 
 Required dependencies (see pyproject.toml for all details):

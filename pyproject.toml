@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "cdtools-py"
 description = "Tools for coherent diffractive imaging and ptychography"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license = { file = "LICENSE.txt" }
 authors = [
 	{ name = "Abe Levitan", email = "abraham.levitan@psi.ch" },
