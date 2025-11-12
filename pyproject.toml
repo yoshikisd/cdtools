@@ -10,6 +10,8 @@ requires-python = ">=3.9"
 license = { file = "LICENSE.txt" }
 authors = [
 	{ name = "Abe Levitan", email = "abraham.levitan@psi.ch" },
+	{ name = "Dayne Y. Sasaki" },
+	{ name = "Damian Guenzing" },
 	{ name = "Madelyn Cain" },
 	{ name = "Anastasiia Kutakh" }
 ]

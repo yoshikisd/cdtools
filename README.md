@@ -26,6 +26,8 @@ model.compare(dataset) # See how the simulated and measured patterns compare
 plt.show()
 ```
 
+Further documentation is found [here](https://cdtools-developers.github.io/cdtools/).
+
 # Installation
 
 CDTools can be installed in several ways depending on your needs. For most users, installation from pypi is recommended. For developers or those who want the latest features, installation from source is available.
@@ -75,10 +77,6 @@ or with uv:
 ```bash
 $ uv pip install -e ."[tests,docs]"
 ```
-
-
-Further documentation is found [here](https://cdtools-developers.github.io/cdtools/).
-
 
 CDTools was developed in the [photon scattering lab](https://scattering.mit.edu/) at MIT, and further development took place within the [computational x-ray imaging group](https://www.psi.ch/en/cxi) at PSI. The code is distributed under an MIT (a.k.a. Expat) license. If you would like to publish any work that uses CDTools, please contact [Abe Levitan](mailto:abraham.levitan@psi.ch).
 
