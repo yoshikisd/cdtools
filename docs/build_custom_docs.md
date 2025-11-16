@@ -9,13 +9,18 @@ https://cdtools-developers.github.io/cdtools/installation.html#option-2-installa
 
 ## Installation of Dependencies
 
-First, ensure you have all necessary dependencies installed. You can do this using [`uv`](https://github.com/astral-sh/uv):
+First, ensure you have all necessary dependencies installed. You can do this using [`uv`](https://github.com/astral-sh/uv) or `pip`:
+
 
 ```sh
 uv pip install ."[docs]"
+# or, if you prefer pip:
+pip install ."[docs]"
 ```
 
 This will install your project along with the extra dependencies required for building the documentation.
+
+**Note:** `uv` is a fast Python package installer and resolver, serving as a drop-in replacement for `pip` with improved performance. You can use either `pip` or `uv` as shown above.
 
 
 ## Checkout the version or commit
