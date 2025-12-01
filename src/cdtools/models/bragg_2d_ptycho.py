@@ -258,7 +258,7 @@ class Bragg2DPtycho(CDIModel):
             obj_padding=200,
             obj_view_crop=None,
             units='um',
-            surface_normal=np.array([0., 0., 1.])
+            surface_normal=None
     ):
         wavelength = dataset.wavelength
         det_basis = dataset.detector_geometry['basis']
@@ -280,20 +280,35 @@ class Bragg2DPtycho(CDIModel):
                         oversampling=oversampling)
         
         # Now we define the surface normal
-        if scattering_mode in {'t', 'transmission'}:
-            surface_normal = np.array([0.,0.,1.])
-        elif scattering_mode in {'r', 'reflection'}:
-            outgoing_dir = np.cross(det_basis[:,0], det_basis[:,1])
-            outgoing_dir /= np.linalg.norm(outgoing_dir)
-            surface_normal = outgoing_dir + np.array([0.,0.,1.])
-            surface_normal /= np.linalg.norm(outgoing_dir)
-        else:
-            # If the scattering_mode has not been defined, we grab
-            # this from the cxi file if its present.
-            if hasattr(dataset, 'sample_info') and \
+        # The surface normal definition is based on the following heirarchy:
+        #   manual surface_normal definition > scattering_mode
+        #   > dataset.sample_info['orientation'] > transmission geometry
+
+        # Guard against any surface_normal entries that are not numpy vectors
+        if surface_normal is not None and \
+                not isinstance(surface_normal, np.ndarray) or \
+                (isinstance(surface_normal, np.ndarray)
+                 and not surface_normal.shape == (3,)):
+            raise RuntimeError(
+                'surface_normal needs to be a numpy vector with 3 elements.'
+            )
+
+        if surface_normal is None:
+            if scattering_mode in {'t', 'transmission'}:
+                surface_normal = np.array([0.,0.,1.])
+            elif scattering_mode in {'r', 'reflection'}:
+                outgoing_dir = np.cross(det_basis[:,0], det_basis[:,1])
+                outgoing_dir /= np.linalg.norm(outgoing_dir)
+                surface_normal = outgoing_dir + np.array([0.,0.,1.])
+                surface_normal /= np.linalg.norm(outgoing_dir)
+            elif hasattr(dataset, 'sample_info') and \
                     dataset.sample_info is not None and \
                     'orientation' in dataset.sample_info:
+                # If the scattering_mode has not been defined, we grab
+                # this from the cxi file if its present.
                 surface_normal = dataset.sample_info['orientation'][2]
+            else:
+                surface_normal = np.array([0., 0., 1.])
 
         # and we use that to generate the probe basis
 
